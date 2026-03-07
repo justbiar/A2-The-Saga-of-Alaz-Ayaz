@@ -1,0 +1,2187 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>A2 — Alaz & Ayaz</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-deep:      #03020c;
+      --fire:         #ff5520;
+      --fire-glow:    rgba(255, 70, 0, 0.55);
+      --ice:          #38aaff;
+      --ice-glow:     rgba(40, 140, 255, 0.5);
+      --gold:         #ffc94d;
+      --gold-dim:     rgba(255, 185, 50, 0.35);
+      --purple:       #9b5fe6;
+      --glass:        rgba(255, 255, 255, 0.035);
+      --glass-hover:  rgba(255, 255, 255, 0.065);
+      --glass-border: rgba(255, 255, 255, 0.09);
+    }
+
+    @keyframes shimmerSlide {
+      0%   { transform: translateX(-120%) skewX(-15deg); }
+      100% { transform: translateX(320%)  skewX(-15deg); }
+    }
+    @keyframes breathePulse {
+      0%, 100% { opacity: 0.55; transform: scale(1);    }
+      50%      { opacity: 0.95; transform: scale(1.12); }
+    }
+    @keyframes gridDrift {
+      from { background-position: 0 0; }
+      to   { background-position: 80px 80px; }
+    }
+    @keyframes orbitSpin {
+      from { transform: translate(-50%, -50%) rotate(0deg);   }
+      to   { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0);    }
+    }
+    @keyframes diamondSpin {
+      from { transform: rotate(45deg); }
+      to   { transform: rotate(405deg); }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0);   }
+      50%      { transform: translateY(-7px); }
+    }
+
+    body {
+      overflow: hidden;
+      background: var(--bg-deep);
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    #renderCanvas {
+      width: 100vw; height: 100vh;
+      touch-action: none; outline: none; display: block;
+    }
+
+    /* ═══════════════════════════════════════════
+       TOP HUD — tek şerit, tüm kritik bilgi
+    ═══════════════════════════════════════════ */
+    #top-hud {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 300;
+      height: 60px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 12px;
+      padding: 0 18px;
+      background: rgba(3, 2, 12, 0.78);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      pointer-events: none;
+    }
+
+    /* Sol blok — Ateş üssü */
+    .hud-base {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .hud-base.fire { flex-direction: row; }
+    .hud-base.ice  { flex-direction: row-reverse; }
+
+    .base-icon {
+      font-size: 22px;
+      flex-shrink: 0;
+      filter: drop-shadow(0 0 6px currentColor);
+    }
+
+    .base-info { flex: 1; }
+
+    .base-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+
+    .hud-base.fire .base-label { color: #ff7030; }
+    .hud-base.ice  .base-label { color: #50b8ff; text-align: right; }
+
+    .base-bar-track {
+      width: 100%;
+      height: 8px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .base-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.4s ease;
+      position: absolute;
+    }
+
+    .hud-base.fire .base-bar-fill {
+      left: 0;
+      background: linear-gradient(90deg, #aa2200, #ff5520);
+      box-shadow: 0 0 8px rgba(255,80,20,0.6);
+    }
+
+    .hud-base.ice .base-bar-fill {
+      right: 0;
+      background: linear-gradient(90deg, #50b8ff, #0066cc);
+      box-shadow: 0 0 8px rgba(40,140,255,0.6);
+    }
+
+    .base-hp-num {
+      font-size: 9px;
+      color: rgba(255,255,255,0.45);
+      margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hud-base.ice .base-hp-num { text-align: right; }
+
+    /* Orta blok — tur + mana */
+    #hud-center {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      min-width: 220px;
+    }
+
+    #turn-banner {
+      font-family: 'Cinzel', serif;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      padding: 3px 20px 3px;
+      border-radius: 20px;
+      transition: all 0.35s ease;
+      white-space: nowrap;
+    }
+
+    .player-turn {
+      background: rgba(160, 35, 0, 0.75);
+      border: 1px solid rgba(255, 100, 30, 0.55);
+      color: #ffaa50;
+      box-shadow: 0 0 16px rgba(255,60,0,0.3);
+    }
+
+    .enemy-turn {
+      background: rgba(0, 25, 80, 0.8);
+      border: 1px solid rgba(50, 130, 255, 0.55);
+      color: #80c8ff;
+      box-shadow: 0 0 16px rgba(0,100,255,0.3);
+    }
+
+    #turn-count {
+      font-family: 'Inter', sans-serif;
+      font-size: 9px;
+      font-weight: 600;
+      opacity: 0.6;
+      letter-spacing: 1px;
+      display: inline;
+      margin-left: 8px;
+    }
+
+    /* Mana gems */
+    #mana-row {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .mana-gem {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+      display: inline-block;
+    }
+
+    .mana-gem.full {
+      background: #9955ff;
+      box-shadow: 0 0 6px rgba(150,80,255,0.9);
+    }
+
+    .mana-gem.empty {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    /* ═══════════════════════════════════════════
+       ENEMY STATUS
+    ═══════════════════════════════════════════ */
+    #enemy-status {
+      position: fixed;
+      top: 62px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 300;
+      display: none;
+      background: rgba(0, 15, 50, 0.9);
+      border: 1px solid rgba(50,130,255,0.4);
+      border-radius: 20px;
+      padding: 4px 16px;
+      color: #70b8ff;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      animation: glow-pulse 1.2s ease-in-out infinite alternate;
+    }
+
+    @keyframes glow-pulse {
+      from { box-shadow: 0 0 6px rgba(50,130,255,0.2); }
+      to   { box-shadow: 0 0 18px rgba(50,130,255,0.6); }
+    }
+
+    /* ═══════════════════════════════════════════
+       SURGE INDICATOR
+    ═══════════════════════════════════════════ */
+    #surge-indicator {
+      position: fixed;
+      top: 62px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 300;
+      display: none;
+      background: rgba(180, 120, 0, 0.15);
+      border: 1px solid rgba(255,180,0,0.5);
+      border-radius: 20px;
+      padding: 3px 14px;
+      color: #ffcc00;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      animation: glow-pulse 0.8s ease-in-out infinite alternate;
+    }
+
+    /* ═══════════════════════════════════════════
+       BOARD CONTROL BAR (çok ince, üst kısım altı)
+    ═══════════════════════════════════════════ */
+    #board-control-meter {
+      position: fixed;
+      top: 56px;
+      left: 0; right: 0;
+      z-index: 299;
+      height: 4px;
+      pointer-events: none;
+    }
+
+    .bcm-bar-bg {
+      width: 100%; height: 100%;
+      background: rgba(255,255,255,0.05);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bcm-bar-fill {
+      position: absolute;
+      top: 0; height: 100%;
+      transition: left 0.5s ease, width 0.5s ease;
+    }
+
+    /* ═══════════════════════════════════════════
+       DEBUG (sol alt köşe, minimal)
+    ═══════════════════════════════════════════ */
+    #debug-ui {
+      position: fixed;
+      bottom: 220px;
+      left: 10px;
+      z-index: 100;
+      pointer-events: none;
+      color: rgba(255,255,255,0.3);
+      font-size: 10px;
+      font-family: monospace;
+      line-height: 1.6;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    }
+
+    #debug-ui .label { color: rgba(255,255,255,0.2); }
+    #debug-ui .val   { color: rgba(100,255,100,0.5); }
+    #debug-ui .val-cyan   { color: rgba(0,220,220,0.4); }
+    #debug-ui .val-orange { color: rgba(255,160,0,0.5); }
+    #debug-ui .val-blue   { color: rgba(80,160,255,0.5); }
+    #debug-ui h3 { display: none; }
+    #debug-ui hr { display: none; }
+
+    /* ═══════════════════════════════════════════
+       BOTTOM CARD TRAY
+    ═══════════════════════════════════════════ */
+    #card-tray {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    #controls-hint {
+      color: rgba(180,180,200,0.35);
+      font-size: 10px;
+      letter-spacing: 0.3px;
+      margin-bottom: 6px;
+      pointer-events: none;
+    }
+
+    #card-area {
+      pointer-events: all;
+      background: rgba(3, 2, 12, 0.82);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      border-top: 1px solid rgba(140, 70, 255, 0.15);
+      padding: 10px 16px 8px;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+
+    #card-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+    }
+
+    /* ─── PROMPT CARDS ─── */
+    #prompt-container {
+      display: flex;
+      gap: 7px;
+      align-items: flex-end;
+    }
+
+    .prompt-card {
+      width: 85px;
+      height: 150px;
+      border-radius: 10px;
+      border: 1px solid rgba(140, 90, 255, 0.35);
+      background: linear-gradient(170deg,
+        rgba(28, 8, 55, 0.98) 0%,
+        rgba(18, 5, 38, 0.95) 100%);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      transition: transform 0.2s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s ease, opacity 0.25s;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.7), 0 0 10px rgba(120,60,255,0.2);
+    }
+
+    .prompt-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(150deg, rgba(200,160,255,0.08) 0%, transparent 50%);
+      border-radius: inherit;
+      pointer-events: none;
+    }
+
+    .prompt-card:hover:not(.card-disabled) {
+      transform: translateY(-20px) scale(1.06);
+      box-shadow: 0 0 28px rgba(160,80,255,0.65), 0 12px 28px rgba(0,0,0,0.7);
+      z-index: 10;
+    }
+
+    .prompt-card.selected {
+      border-color: rgba(255,210,50,0.9);
+      box-shadow: 0 0 24px rgba(255,190,0,0.75), 0 0 60px rgba(255,190,0,0.2);
+      transform: translateY(-14px) scale(1.05);
+    }
+
+    .card-disabled { opacity: 0.35 !important; cursor: not-allowed !important; filter: grayscale(60%); }
+
+    .prompt-card-cost {
+      position: absolute;
+      top: 6px; left: 6px;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 40% 35%, #8833ff, #330088);
+      border: 1px solid rgba(180,120,255,0.6);
+      color: #fff;
+      font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 10px rgba(120,50,255,0.7);
+      z-index: 2;
+    }
+
+    .prompt-card-icon {
+      flex: 1;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 34px;
+      margin-top: 8px;
+      filter: drop-shadow(0 0 8px rgba(180,120,255,0.6));
+    }
+
+    .prompt-card-footer {
+      background: rgba(0,0,0,0.55);
+      padding: 5px 6px 6px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .prompt-card-name {
+      font-size: 9px; font-weight: 700;
+      color: #cc99ff;
+      text-align: center;
+      letter-spacing: 0.3px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .prompt-card-desc {
+      font-size: 8px;
+      color: rgba(200,180,230,0.5);
+      text-align: center;
+      margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* Divider */
+    .card-divider {
+      width: 1px;
+      height: 90px;
+      background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.12), transparent);
+      align-self: center;
+      margin: 0 2px;
+      flex-shrink: 0;
+    }
+
+    /* ─── CHARACTER CARDS ─── */
+    #card-container {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .game-card {
+      width: 110px;
+      height: 165px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.10);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s ease, opacity 0.25s, filter 0.25s;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.07);
+    }
+
+    .game-card::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(155deg, rgba(255,255,255,0.09) 0%, transparent 55%);
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .game-card:hover:not(.card-disabled) {
+      transform: translateY(-22px) scale(1.05);
+      z-index: 10;
+    }
+
+    .card-mana-badge {
+      position: absolute;
+      top: 7px; left: 7px;
+      width: 27px; height: 27px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 40% 35%, #7744ff, #2200aa);
+      border: 1px solid rgba(190,140,255,0.55);
+      color: #fff;
+      font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 12px rgba(110,50,255,0.75);
+      z-index: 2;
+    }
+
+    .card-team-tag {
+      position: absolute;
+      top: 8px; right: 8px;
+      font-size: 15px;
+      z-index: 2;
+      text-shadow: 0 0 8px rgba(0,0,0,0.9);
+    }
+
+    .card-art-zone {
+      flex: 0 0 105px;
+      overflow: hidden;
+      border-radius: 10px 10px 0 0;
+    }
+
+    .card-art-zone img {
+      width: 100%; height: 100%;
+      object-fit: cover; object-position: center top;
+      border-radius: 10px 10px 0 0;
+      display: block;
+    }
+
+    .card-footer {
+      flex: 1;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.78), rgba(5,3,18,0.95));
+      border-top: 1px solid rgba(255,255,255,0.07);
+      padding: 5px 8px 6px;
+      border-radius: 0 0 12px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .card-name {
+      font-size: 11px; font-weight: 700;
+      color: #eee; letter-spacing: 0.4px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .card-role {
+      font-size: 8px; font-weight: 600;
+      letter-spacing: 0.6px; text-transform: uppercase;
+      color: rgba(180,155,220,0.65);
+    }
+
+    .card-stats-row {
+      display: flex; gap: 6px;
+      font-size: 10px; font-weight: 600;
+    }
+
+    .stat-hp  { color: #ff6666; }
+    .stat-atk { color: #ffaa44; }
+
+    /* ─── KITE AI PANEL ─── */
+    #kite-panel {
+      position: fixed;
+      top: 68px; right: 14px;
+      z-index: 310;
+      width: 210px;
+      background: rgba(6, 8, 20, 0.82);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(80, 160, 255, 0.18);
+      border-radius: 10px;
+      padding: 10px 13px 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-family: 'Cinzel', serif;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05);
+      transition: border-color 0.4s;
+    }
+    #kite-panel.live  { border-color: rgba(60, 220, 140, 0.35); }
+    #kite-panel.chain { box-shadow: 0 4px 32px rgba(0,0,0,0.55), 0 0 18px rgba(60,160,255,0.12), inset 0 1px 0 rgba(255,255,255,0.05); }
+
+    .kite-header {
+      display: flex; align-items: center; gap: 7px;
+    }
+    .kite-logo-mark {
+      width: 20px; height: 20px; flex-shrink: 0;
+      opacity: 0.9;
+    }
+    .kite-brand {
+      font-size: 9px; font-weight: 700; letter-spacing: 2.5px;
+      color: rgba(255,255,255,0.85);
+      flex: 1;
+    }
+    .kite-status-dot {
+      width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+      background: #444;
+      box-shadow: 0 0 6px currentColor;
+      transition: background 0.4s, box-shadow 0.4s;
+    }
+    .kite-status-dot.live  { background: #3cdc8c; color: #3cdc8c; }
+    .kite-status-dot.mock  { background: #f0a040; color: #f0a040; }
+    .kite-status-dot.chain { background: #38aaff; color: #38aaff; }
+
+    .kite-row {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 9px; letter-spacing: 0.8px;
+    }
+    .kite-row-label { color: rgba(255,255,255,0.35); font-weight: 600; }
+    .kite-row-val   { color: rgba(255,255,255,0.75); font-weight: 700; font-family: 'Inter', monospace; }
+    .kite-row-val.green  { color: #3cdc8c; }
+    .kite-row-val.orange { color: #f0a040; }
+    .kite-row-val.blue   { color: #38aaff; }
+
+    .kite-divider {
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(80,140,255,0.2), transparent);
+      margin: 1px 0;
+    }
+
+    /* ═══════════════════════════════════════════
+       WIN OVERLAY
+    ═══════════════════════════════════════════ */
+    #win-overlay {
+      position: fixed; inset: 0;
+      z-index: 1000;
+      display: none;
+      align-items: center; justify-content: center; flex-direction: column;
+      gap: 20px;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(16px);
+    }
+
+    #win-overlay.show { display: flex; animation: fadeInScale 0.5s ease; }
+
+    @keyframes fadeInScale {
+      from { opacity: 0; transform: scale(0.92); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    #win-title {
+      font-family: 'Cinzel', serif;
+      font-size: 52px; font-weight: 900;
+      letter-spacing: 5px; text-align: center;
+      text-shadow: 0 0 60px currentColor;
+    }
+
+    #win-title.fire-win { color: #ff7030; }
+    #win-title.ice-win  { color: #70c8ff; }
+
+    #win-message {
+      font-size: 16px; color: rgba(255,255,255,0.7);
+      text-align: center; letter-spacing: 1px;
+    }
+
+    #win-restart-btn {
+      padding: 13px 44px;
+      border-radius: 30px;
+      border: 1px solid rgba(255,255,255,0.3);
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      font-family: 'Cinzel', serif;
+      font-size: 15px; font-weight: 700; letter-spacing: 2px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    #win-restart-btn:hover {
+      background: rgba(255,255,255,0.16);
+      transform: scale(1.04);
+    }
+
+    #win-stats-wrap {
+      max-height: 38vh;
+      overflow-y: auto;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      background: rgba(0,0,0,0.45);
+      padding: 4px 0;
+      min-width: 560px;
+    }
+
+    #win-stats-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      font-family: 'Cinzel', serif;
+      letter-spacing: 0.5px;
+    }
+
+    #win-stats-table thead tr {
+      background: rgba(255,255,255,0.07);
+    }
+
+    #win-stats-table th {
+      padding: 9px 14px;
+      color: rgba(255,255,255,0.5);
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    #win-stats-table td {
+      padding: 8px 14px;
+      text-align: center;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.85);
+    }
+
+    #win-stats-table tr.team-fire td { color: #ffb080; }
+    #win-stats-table tr.team-ice  td { color: #80d4ff; }
+    #win-stats-table td.stat-name { text-align: left; font-weight: 700; }
+    #win-stats-table td.stat-zero { color: rgba(255,255,255,0.25); }
+    #win-stats-table td.stat-dead { color: #ff5555; }
+    #win-stats-table td.stat-alive { color: #55ff99; }
+
+    /* ─── ACTIVE EFFECTS BAR ─── */
+    #active-effects {
+      position: fixed;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 200;
+      pointer-events: none;
+      width: 190px;
+    }
+
+    .effect-entry {
+      background: rgba(10, 8, 20, 0.88);
+      border: 1px solid rgba(160, 80, 255, 0.45);
+      border-radius: 8px;
+      padding: 8px 10px 10px;
+      animation: effectSlideIn 0.25s ease;
+    }
+
+    @keyframes effectSlideIn {
+      from { opacity: 0; transform: translateX(30px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .effect-entry.fading {
+      animation: effectFadeOut 0.35s ease forwards;
+    }
+
+    @keyframes effectFadeOut {
+      to { opacity: 0; transform: translateX(30px); }
+    }
+
+    .effect-name {
+      font-size: 11px;
+      font-weight: 700;
+      color: #cc99ff;
+      margin-bottom: 3px;
+    }
+
+    .effect-desc {
+      font-size: 9px;
+      color: rgba(200, 180, 230, 0.65);
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+
+    .effect-timer-track {
+      height: 4px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .effect-timer-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #9933ff, #cc66ff);
+      border-radius: 2px;
+      transition: width 0.1s linear;
+    }
+
+    /* ═══════════════════════════════════════════
+       HEADER BAR (menü ekranlarında)
+    ═══════════════════════════════════════════ */
+    #app-header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 3000;
+      height: 62px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      background: rgba(3, 2, 12, 0.82);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      pointer-events: all;
+    }
+
+    #app-header .logo {
+      font-family: 'Cinzel', serif;
+      font-size: 17px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      background: linear-gradient(135deg, #ff7030, #ffdd60);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      cursor: pointer;
+      filter: drop-shadow(0 0 10px rgba(255, 120, 0, 0.35));
+      transition: filter 0.2s ease;
+    }
+    #app-header .logo:hover {
+      filter: drop-shadow(0 0 18px rgba(255, 140, 0, 0.6));
+    }
+
+    #wallet-btn {
+      padding: 7px 16px;
+      border-radius: 10px;
+      border: 1px solid rgba(232, 65, 66, 0.32);
+      background: rgba(232, 65, 66, 0.08);
+      color: #e84142;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      text-transform: uppercase;
+    }
+
+    #wallet-btn:hover {
+      background: rgba(232, 65, 66, 0.16);
+      border-color: rgba(232, 65, 66, 0.55);
+      box-shadow: 0 0 16px rgba(232, 65, 66, 0.2);
+    }
+
+    #wallet-btn.connected {
+      border-color: rgba(80, 200, 120, 0.4);
+      background: rgba(80, 200, 120, 0.08);
+      color: #50c878;
+    }
+
+    /* ═══════════════════════════════════════════
+       HOME SCREEN
+    ═══════════════════════════════════════════ */
+    #home-screen {
+      position: fixed; inset: 0;
+      z-index: 2500;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      /* Ateş üstten, buz alttan — logo ışığını zemine yansıtıyor */
+      background:
+        radial-gradient(ellipse 80% 55% at 50% -5%,  rgba(255, 90,  15, 0.22) 0%, transparent 65%),
+        radial-gradient(ellipse 80% 55% at 50% 105%, rgba(20,  110, 255, 0.20) 0%, transparent 65%),
+        radial-gradient(ellipse 45% 35% at 18% 55%,  rgba(255, 70,  0,  0.06) 0%, transparent 55%),
+        radial-gradient(ellipse 45% 35% at 82% 55%,  rgba(0,   90, 255, 0.06) 0%, transparent 55%),
+        #05080f;
+      overflow: hidden;
+    }
+
+    /* Hafif hex-grid */
+    #home-screen::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+      background-size: 44px 44px;
+      animation: gridDrift 30s linear infinite;
+      pointer-events: none;
+    }
+
+    /* Yavaş dönen ateş/buz ikili orb */
+    #home-screen::after {
+      content: '';
+      position: absolute;
+      width: 700px; height: 700px;
+      border-radius: 50%;
+      background: conic-gradient(
+        from 0deg,
+        rgba(255, 85,  10,  0.10),
+        rgba(255, 170, 40,  0.06),
+        rgba(20,  110, 255, 0.10),
+        rgba(80,  190, 255, 0.06),
+        rgba(255, 85,  10,  0.10)
+      );
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      animation: orbitSpin 30s linear infinite;
+      filter: blur(60px);
+      pointer-events: none;
+      opacity: 0.7;
+    }
+
+    .home-logo-img {
+      width: 210px;
+      height: auto;
+      filter:
+        drop-shadow(0 0 40px rgba(255, 110, 20, 0.70))
+        drop-shadow(0 0 90px rgba(60, 140, 255, 0.35));
+      animation: float 5s ease-in-out infinite, fadeUp 0.7s ease backwards;
+      margin-bottom: 2px;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .home-subtitle {
+      font-family: 'Cinzel', serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 7px;
+      color: rgba(255, 255, 255, 0.28);
+      margin-top: 4px;
+      text-align: center;
+      animation: fadeUp 0.7s ease 0.16s backwards;
+    }
+
+    .home-tagline {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 3.5px;
+      color: rgba(255, 200, 80, 0.3);
+      margin-top: 6px;
+      text-transform: uppercase;
+      animation: fadeUp 0.7s ease 0.22s backwards;
+    }
+
+    .home-divider {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 36px 0 0;
+      animation: fadeUp 0.7s ease 0.28s backwards;
+    }
+    .home-divider::before,
+    .home-divider::after {
+      content: '';
+      width: 140px; height: 1px;
+      background: linear-gradient(to right, transparent, rgba(255, 185, 50, 0.3), transparent);
+    }
+    .home-divider-diamond {
+      width: 7px; height: 7px;
+      border-radius: 1px;
+      transform: rotate(45deg);
+      background: rgba(255, 185, 50, 0.45);
+      box-shadow: 0 0 10px var(--gold-dim);
+    }
+
+    .home-nav {
+      display: flex;
+      gap: 18px;
+      margin-top: 36px;
+      animation: fadeUp 0.7s ease 0.36s backwards;
+    }
+
+    .home-card {
+      width: 188px;
+      padding: 36px 20px 28px;
+      border-radius: 16px;
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.07);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .home-card::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 45%;
+      background: linear-gradient(to right, transparent, rgba(255,255,255,0.07), transparent);
+      transform: translateX(-120%) skewX(-15deg);
+    }
+    .home-card:hover::after {
+      transform: translateX(300%) skewX(-15deg);
+      transition: transform 0.55s ease;
+    }
+
+    .home-card:hover {
+      transform: translateY(-10px) scale(1.035);
+      border-color: rgba(255, 200, 80, 0.22);
+      background: var(--glass-hover);
+      box-shadow:
+        0 0 0 1px rgba(255, 180, 60, 0.14),
+        0 0 28px rgba(255, 130, 0, 0.14),
+        0 20px 40px rgba(0,0,0,0.65),
+        inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+
+    .home-card-icon {
+      width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--gold);
+      filter: drop-shadow(0 0 14px rgba(255, 180, 60, 0.5));
+      transition: filter 0.3s ease;
+      animation: float 4s ease-in-out infinite;
+    }
+    .home-card:hover .home-card-icon {
+      filter: drop-shadow(0 0 24px rgba(255, 210, 60, 0.85));
+    }
+    .home-card-icon svg { width: 100%; height: 100%; }
+
+    .home-card-label {
+      font-family: 'Cinzel', serif;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+      color: rgba(255, 210, 130, 0.88);
+    }
+
+    .home-card-desc {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.28);
+      line-height: 1.75;
+      letter-spacing: 0.2px;
+    }
+
+    /* ═══════════════════════════════════════════
+       CHARACTERS SCREEN
+    ═══════════════════════════════════════════ */
+    #characters-screen {
+      position: fixed; inset: 0;
+      z-index: 2500;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      background: radial-gradient(ellipse at 50% 30%, rgba(30, 10, 60, 0.98) 0%, rgba(4, 3, 14, 1) 70%);
+      overflow-y: auto;
+      padding: 80px 24px 40px;
+    }
+
+    .screen-back-btn {
+      position: fixed;
+      top: 17px;
+      left: 28px;
+      z-index: 3001;
+      padding: 7px 14px;
+      border-radius: 9px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      color: rgba(255, 255, 255, 0.45);
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .screen-back-btn:hover {
+      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(255, 200, 80, 0.28);
+      color: rgba(255, 255, 255, 0.82);
+    }
+
+    .char-section-title {
+      font-family: 'Cinzel', serif;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      margin: 32px 0 16px;
+    }
+
+    .char-section-title.fire { color: #ff7030; }
+    .char-section-title.ice { color: #50b8ff; }
+    .char-section-title.merc { color: #cc99ff; }
+
+    .char-grid {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 900px;
+    }
+
+    .char-card {
+      width: 248px;
+      border-radius: 16px;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+      position: relative;
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    /* Faction top bar */
+    .char-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      border-radius: 16px 16px 0 0;
+      z-index: 2;
+    }
+    .char-card.fire-card::before  { background: linear-gradient(90deg, transparent, #ff5520, #ffa040, #ff5520, transparent); }
+    .char-card.ice-card::before   { background: linear-gradient(90deg, transparent, #0088ee, #38aaff, #0088ee, transparent); }
+    .char-card.merc-card::before  { background: linear-gradient(90deg, transparent, #7733cc, #cc88ff, #7733cc, transparent); }
+
+    .char-card:hover {
+      transform: translateY(-8px) scale(1.025);
+      box-shadow: 0 0 24px rgba(255, 200, 100, 0.1), 0 16px 40px rgba(0,0,0,0.8);
+      border-color: rgba(255,255,255,0.1);
+    }
+    .char-card.fire-card:hover { box-shadow: 0 0 28px rgba(255, 80, 0, 0.18), 0 16px 40px rgba(0,0,0,0.8); }
+    .char-card.ice-card:hover  { box-shadow: 0 0 28px rgba(0, 130, 255, 0.16), 0 16px 40px rgba(0,0,0,0.8); }
+    .char-card.merc-card:hover { box-shadow: 0 0 28px rgba(150, 60, 255, 0.16), 0 16px 40px rgba(0,0,0,0.8); }
+
+    .char-card-img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      object-position: center top;
+      display: block;
+      filter: brightness(0.88) contrast(1.06) saturate(1.1);
+      transition: filter 0.3s ease;
+    }
+    .char-card:hover .char-card-img {
+      filter: brightness(0.95) contrast(1.06) saturate(1.15);
+    }
+
+    .char-card-body {
+      padding: 14px 16px 18px;
+      background: linear-gradient(to bottom, rgba(8,4,20,0.97), rgba(4,2,12,1));
+      border-top: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .char-card-name {
+      font-family: 'Cinzel', serif;
+      font-size: 15px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.9);
+      letter-spacing: 1px;
+    }
+
+    .char-card-role {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-top: 3px;
+    }
+    .fire-card .char-card-role  { color: rgba(255, 120, 60, 0.55); }
+    .ice-card  .char-card-role  { color: rgba(80, 180, 255, 0.55); }
+    .merc-card .char-card-role  { color: rgba(180, 120, 255, 0.55); }
+
+    .char-card-stats {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: 11px;
+    }
+
+    .char-card-stats span {
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .char-card-ability {
+      margin-top: 10px;
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.38);
+      line-height: 1.65;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      letter-spacing: 0.2px;
+    }
+
+    /* ═══════════════════════════════════════════
+       STORY SCREEN
+    ═══════════════════════════════════════════ */
+    #story-screen {
+      position: fixed; inset: 0;
+      z-index: 2500;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      background: radial-gradient(ellipse at 50% 30%, rgba(30, 10, 60, 0.98) 0%, rgba(4, 3, 14, 1) 70%);
+      overflow-y: auto;
+      padding: 80px 24px 40px;
+    }
+
+    .story-content {
+      max-width: 680px;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 14px;
+      line-height: 1.9;
+      letter-spacing: 0.3px;
+    }
+
+    .story-content h2 {
+      font-family: 'Cinzel', serif;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      margin: 36px 0 16px;
+      background: linear-gradient(135deg, #ff7030, #ffcc00);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .story-content h3 {
+      font-family: 'Cinzel', serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #cc99ff;
+      letter-spacing: 2px;
+      margin: 28px 0 12px;
+    }
+
+    .story-content p {
+      margin-bottom: 16px;
+    }
+
+    /* ═══════════════════════════════════════════
+       TEAM SELECT SCREEN
+    ═══════════════════════════════════════════ */
+    #team-select-screen {
+      position: fixed; inset: 0;
+      z-index: 2500;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: var(--bg-deep);
+    }
+
+    /* Fire left half */
+    #team-select-screen::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 50%; bottom: 0;
+      background: radial-gradient(ellipse 80% 80% at 25% 50%, rgba(220, 55, 0, 0.2) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    /* Ice right half */
+    #team-select-screen::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 50%; right: 0; bottom: 0;
+      background: radial-gradient(ellipse 80% 80% at 75% 50%, rgba(0, 110, 230, 0.18) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    .team-select-title {
+      font-family: 'Cinzel', serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 7px;
+      color: rgba(255, 255, 255, 0.22);
+      margin-bottom: 48px;
+      text-transform: uppercase;
+      position: relative; z-index: 1;
+    }
+
+    .team-select-row {
+      display: flex;
+      align-items: stretch;
+      position: relative; z-index: 1;
+    }
+
+    /* VS divider */
+    .team-vs-divider {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 64px;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .team-vs-divider::before {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 1px;
+      background: linear-gradient(to bottom,
+        transparent,
+        rgba(255,255,255,0.06) 20%,
+        rgba(255,255,255,0.12) 50%,
+        rgba(255,255,255,0.06) 80%,
+        transparent);
+    }
+    .team-vs-badge {
+      font-family: 'Cinzel', serif;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      color: rgba(255, 215, 80, 0.55);
+      background: rgba(8, 5, 20, 0.9);
+      border: 1px solid rgba(255, 200, 60, 0.18);
+      border-radius: 50%;
+      width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      position: relative; z-index: 2;
+      backdrop-filter: blur(10px);
+    }
+
+    .team-pick-card {
+      width: 280px;
+      padding: 52px 36px 44px;
+      border-radius: 20px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .team-pick-card::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 40%;
+      background: linear-gradient(to right, transparent, rgba(255,255,255,0.06), transparent);
+      transform: translateX(-120%) skewX(-15deg);
+    }
+    .team-pick-card:hover::after {
+      transform: translateX(350%) skewX(-15deg);
+      transition: transform 0.65s ease;
+    }
+
+    .team-pick-card.fire-pick {
+      border: 1px solid rgba(255, 100, 30, 0.2);
+      background: linear-gradient(165deg, rgba(55, 16, 4, 0.88), rgba(16, 4, 0, 0.94));
+      box-shadow: 0 0 0 1px rgba(255, 80, 0, 0.07), 0 20px 60px rgba(0,0,0,0.65);
+    }
+    .team-pick-card.fire-pick:hover {
+      transform: translateY(-12px) scale(1.04);
+      border-color: rgba(255, 120, 40, 0.5);
+      box-shadow: 0 0 0 1px rgba(255, 100, 30, 0.28), 0 0 55px rgba(255, 70, 0, 0.28), 0 24px 60px rgba(0,0,0,0.7);
+    }
+
+    .team-pick-card.ice-pick {
+      border: 1px solid rgba(60, 140, 255, 0.18);
+      background: linear-gradient(165deg, rgba(0, 16, 55, 0.88), rgba(0, 4, 20, 0.94));
+      box-shadow: 0 0 0 1px rgba(0, 100, 255, 0.07), 0 20px 60px rgba(0,0,0,0.65);
+    }
+    .team-pick-card.ice-pick:hover {
+      transform: translateY(-12px) scale(1.04);
+      border-color: rgba(80, 160, 255, 0.5);
+      box-shadow: 0 0 0 1px rgba(60, 140, 255, 0.28), 0 0 55px rgba(0, 110, 255, 0.28), 0 24px 60px rgba(0,0,0,0.7);
+    }
+
+    .team-pick-icon {
+      width: 76px; height: 76px;
+      display: flex; align-items: center; justify-content: center;
+      filter: drop-shadow(0 0 20px currentColor);
+      animation: float 3s ease-in-out infinite;
+    }
+    .team-pick-icon svg { width: 100%; height: 100%; }
+
+    .team-pick-name {
+      font-family: 'Cinzel', serif;
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 4px;
+    }
+
+    .fire-pick .team-pick-name { color: #ff7a38; text-shadow: 0 0 28px rgba(255, 80, 0, 0.45); }
+    .ice-pick  .team-pick-name { color: #5cc8ff; text-shadow: 0 0 28px rgba(0, 150, 255, 0.45); }
+
+    .team-pick-desc {
+      font-size: 11px;
+      line-height: 1.85;
+      color: rgba(255, 255, 255, 0.32);
+      letter-spacing: 0.3px;
+    }
+
+    .team-pick-tag {
+      margin-top: 4px;
+      padding: 5px 18px;
+      border-radius: 20px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .fire-pick .team-pick-tag {
+      background: rgba(255, 80, 0, 0.1);
+      border: 1px solid rgba(255, 100, 30, 0.3);
+      color: #ff7a38;
+    }
+    .ice-pick .team-pick-tag {
+      background: rgba(0, 100, 255, 0.1);
+      border: 1px solid rgba(60, 140, 255, 0.3);
+      color: #5cc8ff;
+    }
+
+    /* ═══════════════════════════════════════════
+       MODE SELECT SCREEN
+    ═══════════════════════════════════════════ */
+    #mode-select {
+      position: fixed; inset: 0;
+      z-index: 2500;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 0%, rgba(100, 30, 200, 0.22) 0%, transparent 55%),
+        var(--bg-deep);
+      overflow: hidden;
+    }
+
+    #mode-select::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      animation: gridDrift 25s linear infinite;
+      pointer-events: none;
+    }
+
+    .mode-select-header {
+      text-align: center;
+      margin-bottom: 44px;
+      position: relative; z-index: 1;
+    }
+
+    .mode-select-logo {
+      font-family: 'Cinzel', serif;
+      font-size: 48px;
+      font-weight: 900;
+      letter-spacing: 8px;
+      line-height: 1;
+      background: linear-gradient(150deg, #ff7030, #ffd060, #ffaa30);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 35px rgba(255, 120, 0, 0.5));
+    }
+
+    .mode-select-subtitle {
+      font-family: 'Cinzel', serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      color: rgba(255, 255, 255, 0.25);
+      margin-top: 8px;
+      text-transform: uppercase;
+    }
+
+    .mode-cards-row {
+      display: flex;
+      gap: 18px;
+      align-items: stretch;
+      position: relative; z-index: 1;
+    }
+
+    .mode-btn {
+      width: 215px;
+      padding: 28px 20px 24px;
+      border-radius: 16px;
+      color: #fff;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 11px;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .mode-btn::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 45%;
+      background: linear-gradient(to right, transparent, rgba(255,255,255,0.06), transparent);
+      transform: translateX(-120%) skewX(-15deg);
+    }
+    .mode-btn:hover::after {
+      transform: translateX(300%) skewX(-15deg);
+      transition: transform 0.55s ease;
+    }
+
+    .mode-btn.realtime {
+      border: 1px solid rgba(255, 220, 50, 0.22);
+      background: rgba(35, 28, 0, 0.72);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255, 200, 0, 0.05);
+    }
+    .mode-btn.realtime:hover {
+      transform: translateY(-8px) scale(1.04);
+      border-color: rgba(255, 230, 60, 0.5);
+      box-shadow: 0 0 0 1px rgba(255, 220, 50, 0.22), 0 0 32px rgba(255, 200, 0, 0.22), 0 18px 48px rgba(0,0,0,0.7);
+    }
+
+    .mode-btn.twoplayer {
+      border: 1px solid rgba(80, 160, 255, 0.2);
+      background: rgba(0, 14, 44, 0.72);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(0, 80, 255, 0.05);
+    }
+    .mode-btn.twoplayer:hover {
+      transform: translateY(-8px) scale(1.04);
+      border-color: rgba(100, 180, 255, 0.5);
+      box-shadow: 0 0 0 1px rgba(80, 160, 255, 0.22), 0 0 32px rgba(0, 100, 255, 0.22), 0 18px 48px rgba(0,0,0,0.7);
+    }
+
+    .mode-btn-icon {
+      width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      transition: filter 0.3s ease;
+    }
+    .mode-btn-icon svg { width: 100%; height: 100%; }
+
+    .stat-lbl {
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      opacity: 0.6;
+      margin-right: 1px;
+    }
+    .mode-btn.realtime  .mode-btn-icon { filter: drop-shadow(0 0 12px rgba(255, 200, 0, 0.65)); }
+    .mode-btn.twoplayer .mode-btn-icon { filter: drop-shadow(0 0 12px rgba(80, 160, 255, 0.65)); }
+    .mode-btn:hover .mode-btn-icon { filter: drop-shadow(0 0 20px currentColor); }
+
+    .mode-btn-label {
+      font-family: 'Cinzel', serif;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+    }
+    .mode-btn.realtime  .mode-btn-label { color: #ffdd60; }
+    .mode-btn.twoplayer .mode-btn-label { color: #7ec8ff; }
+
+    .mode-btn-desc {
+      font-size: 10px;
+      line-height: 1.7;
+      letter-spacing: 0.2px;
+    }
+    .mode-btn.realtime  .mode-btn-desc { color: rgba(255, 230, 150, 0.45); }
+    .mode-btn.twoplayer .mode-btn-desc { color: rgba(150, 200, 255, 0.45); }
+
+    .mode-btn-tag {
+      margin-top: 2px;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .mode-btn.realtime  .mode-btn-tag { border: 1px solid rgba(255, 220, 50, 0.32); color: #ffcc00; }
+    .mode-btn.twoplayer .mode-btn-tag { border: 1px solid rgba(80, 160, 255, 0.32); color: #60b0ff; }
+
+    .mode-recommended-badge {
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(90deg, #e8b000, #ff8800);
+      color: #000;
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      padding: 3px 12px;
+      border-radius: 10px;
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+
+    .mode-footer-hint {
+      margin-top: 36px;
+      color: rgba(255, 255, 255, 0.14);
+      font-size: 9px;
+      letter-spacing: 1.2px;
+      text-align: center;
+      line-height: 2;
+      position: relative; z-index: 1;
+    }
+  </style>
+</head>
+<body>
+  <!-- ═══ HEADER BAR ═══ -->
+  <div id="app-header">
+    <div class="logo" id="header-logo">A2: THE SAGA</div>
+    <button id="wallet-btn">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0">
+        <rect x="1" y="4" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/>
+        <path d="M4 4V3a2 2 0 012-2h4a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+        <circle cx="11" cy="9" r="1.5" fill="currentColor"/>
+      </svg>
+      <span id="wallet-label">Cüzdan Bağla</span>
+    </button>
+  </div>
+
+  <!-- ═══ HOME SCREEN ═══ -->
+  <div id="home-screen">
+    <img class="home-logo-img" src="assets/images/logo.png" alt="A2 — Alaz & Ayaz" />
+    <div class="home-subtitle">THE SAGA OF ALAZ & AYAZ</div>
+    <div class="home-tagline">Türk Mitolojisi · Moba Strateji · Web3</div>
+    <div class="home-divider">
+      <div class="home-divider-diamond"></div>
+    </div>
+    <div class="home-nav">
+      <div class="home-card" id="nav-play">
+        <div class="home-card-icon">
+          <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 31L29 9M27 9h-8v8"/>
+            <path d="M9 31L7 33M5 35l2-2"/>
+            <path d="M17 21l2 2"/>
+            <path d="M31 9L11 29M13 31h8v-8"/>
+            <path d="M31 31l2 2M35 35l-2-2"/>
+          </svg>
+        </div>
+        <div class="home-card-label">OYNA</div>
+        <div class="home-card-desc">Savaşa katıl<br>Ava Shard'ları ele geçir</div>
+      </div>
+      <div class="home-card" id="nav-characters">
+        <div class="home-card-icon">
+          <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 5L33 9.5V22c0 8-13 14-13 14S7 30 7 22V9.5L20 5z" fill="currentColor" fill-opacity="0.1"/>
+            <path d="M20 5L33 9.5V22c0 8-13 14-13 14S7 30 7 22V9.5L20 5z"/>
+            <path d="M20 14v6M17 17h6" stroke-width="1.4" opacity="0.6"/>
+          </svg>
+        </div>
+        <div class="home-card-label">KARAKTERLER</div>
+        <div class="home-card-desc">9 efsanevi savaşçıyı<br>keşfet</div>
+      </div>
+      <div class="home-card" id="nav-story">
+        <div class="home-card-icon">
+          <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 32V11M7 34V10l13 2M33 34V10L20 13" fill="currentColor" fill-opacity="0.08"/>
+            <path d="M20 32V11M7 34V10l13 1M33 34V10L20 11"/>
+            <line x1="10" y1="16" x2="17" y2="17" stroke-width="1.2"/>
+            <line x1="10" y1="21" x2="17" y2="22" stroke-width="1.2"/>
+            <line x1="10" y1="26" x2="17" y2="27" stroke-width="1.2"/>
+          </svg>
+        </div>
+        <div class="home-card-label">HİKAYE</div>
+        <div class="home-card-desc">Alaz & Ayaz<br>destanını oku</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CHARACTERS SCREEN ═══ -->
+  <div id="characters-screen">
+    <button class="screen-back-btn" id="chars-back">← Geri</button>
+
+    <div class="char-section-title fire">ATEŞ TAKIMI</div>
+    <div class="char-grid">
+      <div class="char-card fire-card">
+        <img class="char-card-img" src="/assets/images/characters/korhan.png" alt="Korhan" />
+        <div class="char-card-body">
+          <div class="char-card-name">Korhan</div>
+          <div class="char-card-role">Savaşçı · Ateş</div>
+          <div class="char-card-stats">
+            <span style="color:#ff6666"><span class="stat-lbl">HP</span>200</span>
+            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>22</span>
+            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>5</span>
+            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>7</span>
+            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>4</span>
+          </div>
+          <div class="char-card-ability">Iron Armor — Her 3. darbe %40 azaltılır</div>
+        </div>
+      </div>
+      <div class="char-card fire-card">
+        <img class="char-card-img" src="/assets/images/characters/erlik.png" alt="Erlik" />
+        <div class="char-card-body">
+          <div class="char-card-name">Erlik</div>
+          <div class="char-card-role">Büyücü · Ateş</div>
+          <div class="char-card-stats">
+            <span style="color:#ff6666"><span class="stat-lbl">HP</span>110</span>
+            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>32</span>
+            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>1</span>
+            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>5</span>
+            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>5</span>
+          </div>
+          <div class="char-card-ability">Dark Flame — Saldırıda %30 yakma şansı</div>
+        </div>
+      </div>
+      <div class="char-card fire-card">
+        <img class="char-card-img" src="/assets/images/characters/od.png" alt="Od" />
+        <div class="char-card-body">
+          <div class="char-card-name">Od</div>
+          <div class="char-card-role">Büyücü · Ateş</div>
+          <div class="char-card-stats">
+            <span style="color:#ff6666"><span class="stat-lbl">HP</span>120</span>
+            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>28</span>
+            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>1</span>
+            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>6</span>
+            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>7</span>
+          </div>
+          <div class="char-card-ability">Yalın Ateş — %20 şansla +%50 hasar</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="char-section-title ice">BUZ TAKIMI</div>
+    <div class="char-grid">
+      <div class="char-card ice-card">
+        <img class="char-card-img" src="/assets/images/characters/ayaz.png" alt="Ayaz" />
+        <div class="char-card-body">
+          <div class="char-card-name">Ayaz</div>
+          <div class="char-card-role">Savaşçı · Buz</div>
+          <div class="char-card-stats">
+            <span style="color:#ff6666"><span class="stat-lbl">HP</span>220</span>
+            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>18</span>
+            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>6</span>
+            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>6</span>
+            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>3</span>
+          </div>
+          <div class="char-card-ability">Hoarfrost — 4. saldırıda 2s dondurma</div>
+        </div>
+      </div>
+      <div class="char-card ice-card">
+        <img class="char-card-img" src="/assets/images/characters/tulpar.png" alt="Tulpar" />
+        <div class="char-card-body">
+          <div class="char-card-name">Tulpar</div>
+          <div class="char-card-role">Savaşçı · Buz</div>
+          <div class="char-card-stats">
+            <span style="color:#ff6666"><span class="stat-lbl">HP</span>170</span>
+            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>20</span>
+            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>2</span>
+            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>9</span>
+            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>3</span>
+          </div>
+          <div class="char-card-ability">Charge — İlk saldırı 2x hasar</div>
+        </div>
+      </div>
+      <div class="char-card ice-card">
+        <img class="char-card-img" src="/assets/images/characters/umay.png" alt="Umay" />
+        <div class="char-card-body">
+          <div class="char-card-name">Umay</div>
+          <div class="char-card-role">Büyücü · Buz</div>
+          <div class="char-card-stats">
+            <span style="color:#ff6666"><span class="stat-lbl">HP</span>130</span>
+            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>25</span>
+            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>1</span>
+            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>4</span>
+            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>4</span>
+          </div>
+          <div class="char-card-ability">Mercy — En yakın dosta 15HP/5s iyileştirme</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="char-section-title merc">PARALICILAR</div>
+    <div class="char-grid">
+      <div class="char-card merc-card">
+        <img class="char-card-img" src="/assets/images/characters/albasti.png" alt="Albastı" />
+        <div class="char-card-body">
+          <div class="char-card-name">Albastı</div>
+          <div class="char-card-role">Neutral · Paralı</div>
+          <div class="char-card-stats">
+            <span style="color:#ff6666"><span class="stat-lbl">HP</span>150</span>
+            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>26</span>
+            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>3</span>
+            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>7</span>
+            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>4</span>
+          </div>
+          <div class="char-card-ability">Kanatları olan doğaüstü varlık</div>
+        </div>
+      </div>
+      <div class="char-card merc-card">
+        <img class="char-card-img" src="/assets/images/characters/tepegoz.png" alt="Tepegöz" />
+        <div class="char-card-body">
+          <div class="char-card-name">Tepegöz</div>
+          <div class="char-card-role">Büyücü · Paralı</div>
+          <div class="char-card-stats">
+            <span style="color:#ff6666"><span class="stat-lbl">HP</span>260</span>
+            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>18</span>
+            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>8</span>
+            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>4</span>
+            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>5</span>
+          </div>
+          <div class="char-card-ability">Earth Tremor — AOE sersemletme (8s)</div>
+        </div>
+      </div>
+      <div class="char-card merc-card">
+        <img class="char-card-img" src="/assets/images/characters/sahmeran.png" alt="Şahmeran" />
+        <div class="char-card-body">
+          <div class="char-card-name">Şahmeran</div>
+          <div class="char-card-role">Spirit · Paralı</div>
+          <div class="char-card-stats">
+            <span style="color:#ff6666"><span class="stat-lbl">HP</span>140</span>
+            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>30</span>
+            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>2</span>
+            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>6</span>
+            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>5</span>
+          </div>
+          <div class="char-card-ability">Serpent Venom — Her saldırıda zehir</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ STORY SCREEN ═══ -->
+  <div id="story-screen">
+    <button class="screen-back-btn" id="story-back">← Geri</button>
+    <div class="story-content">
+      <h2>ALAZ & AYAZ DESTANI</h2>
+      <p>Çok eski zamanlarda, Tengri'nin nefesinden iki kardeş doğdu: <strong style="color:#ff8040">Alaz</strong>, ateşin ruhu ve <strong style="color:#70c8ff">Ayaz</strong>, buzun kalbi. Onlar evrenin dengesini korumak için yaratılmıştı — biri ısı, diğeri soğuk; biri tutkuyla yakar, diğeri sabırla dondurur.</p>
+
+      <h3>Ava Shard'ları</h3>
+      <p>Kadim zamanlardan kalma üç gizemli kristal — <em>Ava Shard'lar</em> — bozkırın ortasında gömülüydü. Bu shard'lar yalnızca güç vermekle kalmaz, onları kontrol eden tarafa stratejik üstünlük sağlar: mana yenilenmesi, hasar artışı ve savaş alanı hakimiyeti.</p>
+
+      <p>Her iki taraf da bu kristalleri ele geçirmek için savaşçılarını gönderir. Kim üç shard'ı da 60 saniye boyunca tutarsa, savaşı kazanır. Ya da... düşman üssünü yıkarak.</p>
+
+      <h3>Ateş Takımı</h3>
+      <p><strong style="color:#ff8040">Korhan</strong>, çelik zırhıyla bilinen efsanevi savaşçı. <strong style="color:#ff8040">Erlik</strong>, yeraltı tanrısının karanlık alevlerini kullanan büyücü. <strong style="color:#ff8040">Od</strong>, saf ateşin ruhunu taşıyan uzun menzilli sihirbaz.</p>
+
+      <h3>Buz Takımı</h3>
+      <p><strong style="color:#70c8ff">Ayaz</strong>, dondurucu soğuğun efendisi ve dayanıklı bir tank. <strong style="color:#70c8ff">Tulpar</strong>, rüzgardan hızlı kanatlı at savaşçısı. <strong style="color:#70c8ff">Umay</strong>, şefkat ve buzun birleştiği şifacı büyücü.</p>
+
+      <h3>Paralıcılar</h3>
+      <p>Savaş alanında sadakat değil, güç konuşur. <strong style="color:#cc99ff">Albastı</strong>, <strong style="color:#cc99ff">Tepegöz</strong> ve <strong style="color:#cc99ff">Şahmeran</strong> — bu üç paralıcı, en yüksek teklifi verene hizmet eder. Her iki takım da onları kendi saflarına katabilir.</p>
+
+      <h3>Denge Savaşı</h3>
+      <p>Ateş ve buz arasındaki denge bozulduğunda, evren kendini korumak için bir <em>Denge Dalgası</em> gönderir — zayıf olan tarafa bonus mana vererek savaşı eşitler. Bu asla tek taraflı bir tahakküm değildir; bu, iki gücün ebedi dansıdır.</p>
+    </div>
+  </div>
+
+  <!-- ═══ TEAM SELECT SCREEN ═══ -->
+  <div id="team-select-screen">
+    <button class="screen-back-btn" id="team-back">← Geri</button>
+    <div class="team-select-title">Tarafını Seç</div>
+    <div class="team-select-row">
+      <div class="team-pick-card fire-pick" data-team="fire">
+        <div class="team-pick-icon">
+          <svg viewBox="0 0 64 64" fill="none" stroke="#ff7030" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M32 8c0 0 15 15 15 26 0 10-9 17-15 19 4-6 3-12-1-15-4 4-4 10-1 15-7-2-14-10-14-19C17 23 32 8 32 8z" fill="#ff5520" fill-opacity="0.15"/>
+            <path d="M32 8c0 0 15 15 15 26 0 10-9 17-15 19 4-6 3-12-1-15-4 4-4 10-1 15-7-2-14-10-14-19C17 23 32 8 32 8z"/>
+            <path d="M32 30c0 0 6 5 5 11-1 4-5 7-5 7 3-4 2-8-1-9-3 1-3 5-1 9-4-4-4-10 2-18z" fill="#ffa040" fill-opacity="0.35" stroke="none"/>
+          </svg>
+        </div>
+        <div class="team-pick-name">ATEŞ</div>
+        <div class="team-pick-desc">
+          Korhan · Erlik · Od<br>
+          Yüksek hasar, agresif strateji<br>
+          Yak, yık, fethet
+        </div>
+        <div class="team-pick-tag">Alaz Klanı</div>
+      </div>
+      <div class="team-vs-divider">
+        <div class="team-vs-badge">VS</div>
+      </div>
+      <div class="team-pick-card ice-pick" data-team="ice">
+        <div class="team-pick-icon">
+          <svg viewBox="0 0 64 64" fill="none" stroke="#38aaff" stroke-width="1.5" stroke-linecap="round">
+            <line x1="32" y1="7" x2="32" y2="57"/>
+            <line x1="7" y1="32" x2="57" y2="32"/>
+            <line x1="14" y1="14" x2="50" y2="50"/>
+            <line x1="50" y1="14" x2="14" y2="50"/>
+            <circle cx="32" cy="32" r="5" fill="#38aaff" fill-opacity="0.25"/>
+            <circle cx="32" cy="9"  r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
+            <circle cx="32" cy="55" r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
+            <circle cx="9"  cy="32" r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
+            <circle cx="55" cy="32" r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
+            <circle cx="15" cy="15" r="2.5" fill="#38aaff" fill-opacity="0.4" stroke="none"/>
+            <circle cx="49" cy="49" r="2.5" fill="#38aaff" fill-opacity="0.4" stroke="none"/>
+            <circle cx="49" cy="15" r="2.5" fill="#38aaff" fill-opacity="0.4" stroke="none"/>
+            <circle cx="15" cy="49" r="2.5" fill="#38aaff" fill-opacity="0.4" stroke="none"/>
+          </svg>
+        </div>
+        <div class="team-pick-name">BUZ</div>
+        <div class="team-pick-desc">
+          Ayaz · Tulpar · Umay<br>
+          Dayanıklılık, kontrol, sabır<br>
+          Dondur, savun, ilerle
+        </div>
+        <div class="team-pick-tag">Ayaz Klanı</div>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="renderCanvas"></canvas>
+
+  <!-- TOP HUD -->
+  <div id="top-hud">
+    <!-- Sol: Ateş üssü -->
+    <div class="hud-base fire">
+      <div class="base-icon" style="color:#ff7030">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3c0 0 5 5 5 9 0 4-3 7-5 8 1-2 1-5-1-6-1 1-1 4 0 6-2-1-5-4-5-8C6 8 12 3 12 3z" fill="currentColor" fill-opacity="0.2"/>
+          <path d="M12 3c0 0 5 5 5 9 0 4-3 7-5 8 1-2 1-5-1-6-1 1-1 4 0 6-2-1-5-4-5-8C6 8 12 3 12 3z"/>
+        </svg>
+      </div>
+      <div class="base-info">
+        <div class="base-label">Ateş Üssü</div>
+        <div class="base-bar-track">
+          <div class="base-bar-fill" id="fire-base-fill" style="width:100%"></div>
+        </div>
+        <div class="base-hp-num" id="fire-base-hp">1000 / 1000</div>
+      </div>
+    </div>
+
+    <!-- Orta: Tur + Mana -->
+    <div id="hud-center">
+      <div id="turn-banner" class="player-turn">
+        SENİN TURUN <span id="turn-count">· TUR 1</span>
+      </div>
+      <div id="mana-row"></div>
+    </div>
+
+    <!-- Sağ: Buz üssü -->
+    <div class="hud-base ice">
+      <div class="base-icon" style="color:#38aaff">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <line x1="12" y1="2" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <line x1="5" y1="5" x2="19" y2="19"/>
+          <line x1="19" y1="5" x2="5" y2="19"/>
+          <circle cx="12" cy="12" r="2.5" fill="currentColor" fill-opacity="0.35" stroke="none"/>
+        </svg>
+      </div>
+      <div class="base-info">
+        <div class="base-label">Buz Üssü</div>
+        <div class="base-bar-track">
+          <div class="base-bar-fill" id="ice-base-fill" style="width:100%"></div>
+        </div>
+        <div class="base-hp-num" id="ice-base-hp">1000 / 1000</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Board Control Bar (4px şerit, hud altında) -->
+  <div id="board-control-meter">
+    <div class="bcm-bar-bg">
+      <div class="bcm-bar-fill" id="bcm-fill" style="left:50%;width:0%"></div>
+    </div>
+  </div>
+
+  <!-- Kite AI Status Panel -->
+  <div id="kite-panel" style="display:none">
+    <div class="kite-header">
+      <!-- Kite diamond logomark -->
+      <svg class="kite-logo-mark" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 2L17 10L10 18L3 10Z" stroke="rgba(60,160,255,0.7)" stroke-width="1.2" fill="rgba(40,100,200,0.12)"/>
+        <path d="M10 5L14.5 10L10 15L5.5 10Z" stroke="rgba(60,200,255,0.5)" stroke-width="0.8" fill="rgba(60,140,255,0.08)"/>
+        <circle cx="10" cy="10" r="1.5" fill="rgba(100,200,255,0.6)"/>
+      </svg>
+      <span class="kite-brand">KITE AI</span>
+      <div class="kite-status-dot mock" id="kite-ai-dot" title="AI Kaynağı"></div>
+      <div class="kite-status-dot" id="kite-chain-dot" title="Zincir Bağlantısı" style="margin-left:3px"></div>
+    </div>
+
+    <div class="kite-divider"></div>
+
+    <div class="kite-row">
+      <span class="kite-row-label">KAYNAK</span>
+      <span class="kite-row-val orange" id="kite-source-label">MOCK AI</span>
+    </div>
+    <div class="kite-row">
+      <span class="kite-row-label">ZİNCİR</span>
+      <span class="kite-row-val" id="kite-chain-label">BAĞLANIYOR</span>
+    </div>
+    <div class="kite-row">
+      <span class="kite-row-label">PoAI PUANI</span>
+      <span class="kite-row-val blue" id="kite-poai-val">— —</span>
+    </div>
+  </div>
+
+  <!-- Enemy status -->
+  <div id="enemy-status">Düşman birim sürüyor...</div>
+
+  <!-- Surge indicator -->
+  <div id="surge-indicator">◈ DENGE DALGASI — Bonus Mana!</div>
+
+  <!-- Debug (sol alt, minimal) -->
+  <div id="debug-ui">
+    <h3>AVAX Arena</h3>
+    <div><span class="label">FPS </span><span class="val" id="dbg-fps">0</span></div>
+    <div><span class="label">XYZ </span><span class="val-cyan" id="dbg-hero">0,0,0</span></div>
+    <hr>
+    <div><span class="label">Units </span><span class="val" id="dbg-units">0</span></div>
+        <div><span class="label">ATEŞ </span><span class="val-orange" id="dbg-fire">0</span>
+         <span class="label"> BUZ </span><span class="val-blue" id="dbg-ice">0</span></div>
+  </div>
+
+  <!-- Active Effects Sidebar -->
+  <div id="active-effects"></div>
+
+  <!-- BOTTOM CARD TRAY -->
+  <div id="card-tray">
+    <div id="card-area">
+      <div id="controls-hint">Drag = Kamera &nbsp;·&nbsp; Scroll = Zoom &nbsp;·&nbsp; WASD = Pan &nbsp;·&nbsp; Space = Hero</div>
+      <div id="card-row">
+        <div id="prompt-container"></div>
+        <div class="card-divider"></div>
+        <div id="card-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lane Seçim Overlay -->
+  <div id="lane-overlay" style="
+    display:none; position:fixed; inset:0; z-index:500;
+    align-items:flex-end; justify-content:center;
+    padding-bottom:200px;
+    background:rgba(0,0,0,0.35);
+    backdrop-filter:blur(2px);
+  ">
+    <div style="
+      display:flex; gap:16px; align-items:flex-end;
+      background:rgba(4,3,16,0.92);
+      border:1px solid rgba(255,200,50,0.3);
+      border-radius:16px; padding:14px 20px;
+      box-shadow:0 0 40px rgba(255,180,0,0.2);
+    ">
+      <div style="color:rgba(255,220,100,0.8);font-size:11px;font-weight:700;letter-spacing:1px;align-self:center;margin-right:4px;">LANE SEÇ</div>
+      <button class="lane-btn" data-lane="0" style="
+        width:80px;height:56px;border-radius:10px;border:1px solid rgba(255,140,0,0.5);
+        background:linear-gradient(160deg,rgba(180,60,0,0.8),rgba(100,30,0,0.9));
+        color:#ffaa50;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px;
+        transition:all 0.15s ease;
+      ">SOL</button>
+      <button class="lane-btn" data-lane="1" style="
+        width:80px;height:56px;border-radius:10px;border:1px solid rgba(255,220,50,0.5);
+        background:linear-gradient(160deg,rgba(120,100,0,0.85),rgba(60,50,0,0.9));
+        color:#ffe066;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px;
+        transition:all 0.15s ease;
+      ">ORTA</button>
+      <button class="lane-btn" data-lane="2" style="
+        width:80px;height:56px;border-radius:10px;border:1px solid rgba(80,160,255,0.5);
+        background:linear-gradient(160deg,rgba(0,50,140,0.85),rgba(0,25,80,0.9));
+        color:#80c8ff;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px;
+        transition:all 0.15s ease;
+      ">SAĞ</button>
+      <button id="lane-cancel" style="
+        width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);
+        background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.4);
+        font-size:16px;cursor:pointer;align-self:center;margin-left:4px;
+        transition:all 0.15s ease;
+      ">✕</button>
+    </div>
+  </div>
+
+  <!-- Win Overlay -->
+  <div id="win-overlay">
+    <div id="win-title" class="fire-win">ZAFER!</div>
+    <div id="win-message">Ateş Takımı Kazandı</div>
+    <div id="win-stats-wrap">
+      <table id="win-stats-table">
+        <thead>
+          <tr>
+            <th>Karakter</th>
+            <th>Takım</th>
+            <th>Çağırıldı</th>
+            <th>Öldü</th>
+            <th>Hayatta</th>
+            <th>En yüksek PoAI</th>
+          </tr>
+        </thead>
+        <tbody id="win-stats-body"></tbody>
+      </table>
+    </div>
+    <button id="win-restart-btn" onclick="location.reload()">YENİDEN OYNA</button>
+  </div>
+
+  <!-- MOD SEÇİM EKRANI -->
+  <div id="mode-select">
+    <button class="screen-back-btn" id="mode-back">← Geri</button>
+
+    <div class="mode-select-header">
+      <div class="mode-select-logo">A2</div>
+      <div class="mode-select-subtitle">ALAZ & AYAZ · OYUN MODU SEÇ</div>
+    </div>
+
+    <div class="mode-cards-row">
+
+      <!-- GERÇEK ZAMANLI -->
+      <button class="mode-btn realtime" data-mode="realtime">
+        <div class="mode-recommended-badge">ÖNERİLEN</div>
+        <div class="mode-btn-icon">
+          <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M24 5L11 22h10L14 35L29 18H19L24 5z" fill="currentColor" fill-opacity="0.15"/>
+            <path d="M24 5L11 22h10L14 35L29 18H19L24 5z"/>
+          </svg>
+        </div>
+        <div class="mode-btn-label">GERÇEK ZAMANLI</div>
+        <div class="mode-btn-desc">
+          Mana otomatik dolar.<br>İstediğin an birim yolla.<br>Hızlı tempolu savaş.
+        </div>
+        <div class="mode-btn-tag">VS AI</div>
+      </button>
+
+      <!-- 2 OYUNCULU -->
+      <button class="mode-btn twoplayer" data-mode="twoplayer">
+        <div class="mode-btn-icon">
+          <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="14" cy="13" r="5" fill="currentColor" fill-opacity="0.1"/>
+            <circle cx="14" cy="13" r="5"/>
+            <path d="M4 36c0-6 4-10 10-10s10 4 10 10" fill="currentColor" fill-opacity="0.1"/>
+            <path d="M4 36c0-6 4-10 10-10s10 4 10 10"/>
+            <circle cx="28" cy="11" r="4" fill="currentColor" fill-opacity="0.1"/>
+            <circle cx="28" cy="11" r="4"/>
+            <path d="M22 36c0-5 3-9 8-9s8 4 8 9" fill="currentColor" fill-opacity="0.1"/>
+            <path d="M22 36c0-5 3-9 8-9s8 4 8 9"/>
+          </svg>
+        </div>
+        <div class="mode-btn-label">2 OYUNCULU</div>
+        <div class="mode-btn-desc">
+          Aynı ekran, iki oyuncu.<br>Ateş → Mouse · Buz → Klavye<br>Arkadaşına karşı oyna.
+        </div>
+        <div class="mode-btn-tag">LOCAL 2P</div>
+      </button>
+
+    </div>
+
+    <div class="mode-footer-hint">
+      2 Oyunculu modda: Buz oyuncusu klavye kullanır &nbsp;·&nbsp; 1-4 = Kart seç &nbsp;·&nbsp; Z/X/C = Lane (Sol/Orta/Sağ)
+    </div>
+  </div>
+
+  <!-- ICE PLAYER CARDS (2 oyunculu mod için üstte) -->
+  <div id="ice-card-tray" style="display:none; position:fixed; top:60px; left:0; right:0; z-index:200; display:none; flex-direction:column; align-items:center; pointer-events:none;">
+    <div id="ice-card-area" style="
+      pointer-events:all;
+      background:linear-gradient(to bottom, rgba(0,8,30,0.95) 0%, rgba(0,4,18,0.9) 55%, transparent 100%);
+      border-bottom:1px solid rgba(60,140,255,0.15);
+      padding:8px 16px 10px; width:100%;
+      display:flex; justify-content:center;
+    ">
+      <div style="display:flex; gap:8px; align-items:flex-start;">
+        <div id="ice-card-container" style="display:flex; gap:8px;"></div>
+        <button id="ice-ready-btn" style="
+          width:90px; height:130px; border-radius:12px;
+          border:2px solid rgba(60,140,255,0.5);
+          background:linear-gradient(170deg,#001440,#003080);
+          color:#80c8ff; font-family:'Cinzel',serif; font-size:11px;
+          font-weight:700; cursor:pointer; letter-spacing:1px;
+          transition:all 0.2s ease; display:flex; flex-direction:column;
+          align-items:center; justify-content:center; gap:6px;
+        ">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38aaff" stroke-width="1.5" stroke-linecap="round">
+            <line x1="12" y1="2" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <line x1="5" y1="5" x2="19" y2="19"/>
+            <line x1="19" y1="5" x2="5" y2="19"/>
+            <circle cx="12" cy="12" r="2" fill="#38aaff" fill-opacity="0.4" stroke="none"/>
+          </svg>
+          <span>HAZIR</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIMULTANEOUS mod sayacı -->
+  <div id="phase-timer" style="
+    display:none; position:fixed; top:62px; left:50%; transform:translateX(-50%);
+    z-index:300;
+    background:rgba(0,0,0,0.7); border:1px solid rgba(255,255,255,0.15);
+    border-radius:20px; padding:4px 20px;
+    font-family:'Cinzel',serif; font-size:18px; font-weight:700;
+    color:#fff; letter-spacing:2px;
+  ">20</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
