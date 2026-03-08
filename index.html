@@ -881,6 +881,158 @@
     #win-stats-table td.stat-dead { color: #ff5555; }
     #win-stats-table td.stat-alive { color: #55ff99; }
 
+    /* ═══════════════════════════════════════════
+       PROFILE MODAL
+    ═══════════════════════════════════════════ */
+    #profile-modal {
+      position: fixed; inset: 0;
+      z-index: 5000;
+      display: none;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.82);
+      backdrop-filter: blur(14px);
+    }
+    #profile-modal.show { display: flex; animation: fadeInScale 0.3s ease; }
+
+    .profile-panel {
+      width: 420px;
+      max-height: 85vh;
+      overflow-y: auto;
+      background: linear-gradient(170deg, rgba(18,8,42,0.98), rgba(8,3,22,0.98));
+      border: 1px solid rgba(140,90,255,0.3);
+      border-radius: 16px;
+      padding: 28px 24px;
+      position: relative;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 30px rgba(120,60,255,0.15);
+    }
+
+    .profile-close {
+      position: absolute; top: 12px; right: 14px;
+      background: none; border: none; color: rgba(255,255,255,0.4);
+      font-size: 22px; cursor: pointer; line-height: 1;
+    }
+    .profile-close:hover { color: #fff; }
+
+    .profile-title {
+      font-family: 'Cinzel', serif;
+      font-size: 20px; font-weight: 700;
+      color: #e84142; letter-spacing: 2px;
+      text-align: center; margin-bottom: 20px;
+    }
+
+    /* Register form */
+    .profile-form { display: flex; flex-direction: column; gap: 14px; }
+
+    .profile-form label {
+      font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.6);
+      letter-spacing: 0.8px; text-transform: uppercase;
+    }
+
+    .profile-form input {
+      width: 100%; padding: 10px 14px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06); color: #fff;
+      font-size: 14px; outline: none;
+      transition: border-color 0.2s;
+    }
+    .profile-form input:focus { border-color: rgba(232,65,66,0.5); }
+
+    .profile-form .avatar-preview {
+      width: 64px; height: 64px; border-radius: 50%;
+      border: 2px solid rgba(232,65,66,0.3);
+      object-fit: cover; display: block; margin: 0 auto;
+      background: rgba(255,255,255,0.05);
+    }
+
+    .profile-btn {
+      padding: 11px 0; border-radius: 10px;
+      border: 1px solid rgba(232,65,66,0.4);
+      background: rgba(232,65,66,0.12); color: #e84142;
+      font-size: 13px; font-weight: 700; letter-spacing: 1px;
+      cursor: pointer; transition: all 0.2s; text-transform: uppercase;
+    }
+    .profile-btn:hover { background: rgba(232,65,66,0.25); }
+    .profile-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Profile view (after registered) */
+    .profile-info { text-align: center; }
+
+    .profile-avatar {
+      width: 80px; height: 80px; border-radius: 50%;
+      border: 2px solid rgba(232,65,66,0.4);
+      object-fit: cover; display: block; margin: 0 auto 12px;
+      background: rgba(255,255,255,0.05);
+    }
+
+    .profile-username {
+      font-family: 'Cinzel', serif;
+      font-size: 22px; font-weight: 700; color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .profile-address {
+      font-size: 11px; color: rgba(255,255,255,0.35);
+      letter-spacing: 0.5px; margin-bottom: 16px;
+    }
+
+    .profile-stats-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 8px; margin-bottom: 20px;
+    }
+
+    .profile-stat-box {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px; padding: 10px 4px;
+      text-align: center;
+    }
+
+    .profile-stat-val {
+      font-family: 'Cinzel', serif;
+      font-size: 20px; font-weight: 700; color: #fff;
+    }
+
+    .profile-stat-label {
+      font-size: 9px; color: rgba(255,255,255,0.4);
+      letter-spacing: 0.8px; text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    .profile-stat-box.wins .profile-stat-val { color: #55ff99; }
+    .profile-stat-box.losses .profile-stat-val { color: #ff5555; }
+    .profile-stat-box.draws .profile-stat-val { color: #ffcc44; }
+
+    /* Leaderboard */
+    .profile-section-title {
+      font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.5);
+      letter-spacing: 1.5px; text-transform: uppercase;
+      margin: 16px 0 10px; text-align: center;
+    }
+
+    .leaderboard-table {
+      width: 100%; border-collapse: collapse; font-size: 12px;
+    }
+
+    .leaderboard-table th {
+      padding: 7px 8px; color: rgba(255,255,255,0.4);
+      font-size: 9px; letter-spacing: 1px; text-transform: uppercase;
+      text-align: center; border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .leaderboard-table td {
+      padding: 7px 8px; text-align: center;
+      color: rgba(255,255,255,0.75);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .leaderboard-table tr.is-me td {
+      color: #e84142; font-weight: 700;
+    }
+
+    .lb-rank { font-weight: 700; color: #ffc94d; }
+    .lb-rank-1 { font-size: 14px; }
+    .lb-winrate { color: rgba(255,255,255,0.5); font-size: 11px; }
+
     /* ─── ACTIVE EFFECTS BAR ─── */
     #active-effects {
       position: fixed;
@@ -2233,6 +2385,75 @@
         font-size:16px;cursor:pointer;align-self:center;margin-left:4px;
         transition:all 0.15s ease;
       ">✕</button>
+    </div>
+  </div>
+
+  <!-- ═══ PROFILE MODAL ═══ -->
+  <div id="profile-modal">
+    <div class="profile-panel">
+      <button class="profile-close" id="profile-close">✕</button>
+      <div class="profile-title" data-i18n="profileTitle">PROFİL</div>
+
+      <!-- Register form (shown when no profile) -->
+      <div id="profile-register" style="display:none;">
+        <div class="profile-form">
+          <label data-i18n="profileUsername">Kullanıcı Adı</label>
+          <input type="text" id="profile-name-input" maxlength="32" placeholder="Savaşçı adını gir..." />
+          <label data-i18n="profileAvatar">Avatar URL</label>
+          <input type="text" id="profile-avatar-input" placeholder="https://... (opsiyonel)" />
+          <img class="avatar-preview" id="avatar-preview" src="/assets/images/logo.png" alt="avatar" />
+          <button class="profile-btn" id="profile-register-btn" data-i18n="profileRegister">KAYIT OL</button>
+        </div>
+      </div>
+
+      <!-- Profile view (shown when registered) -->
+      <div id="profile-view" style="display:none;">
+        <div class="profile-info">
+          <img class="profile-avatar" id="profile-avatar" src="/assets/images/logo.png" alt="avatar" />
+          <div class="profile-username" id="profile-display-name">—</div>
+          <div class="profile-address" id="profile-display-addr">0x...</div>
+
+          <div class="profile-stats-grid">
+            <div class="profile-stat-box">
+              <div class="profile-stat-val" id="prof-games">0</div>
+              <div class="profile-stat-label" data-i18n="profileGames">OYUN</div>
+            </div>
+            <div class="profile-stat-box wins">
+              <div class="profile-stat-val" id="prof-wins">0</div>
+              <div class="profile-stat-label" data-i18n="profileWins">GALİBİYET</div>
+            </div>
+            <div class="profile-stat-box losses">
+              <div class="profile-stat-val" id="prof-losses">0</div>
+              <div class="profile-stat-label" data-i18n="profileLosses">MAĞLUBİYET</div>
+            </div>
+            <div class="profile-stat-box draws">
+              <div class="profile-stat-val" id="prof-draws">0</div>
+              <div class="profile-stat-label" data-i18n="profileDraws">BERABERLİK</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="profile-section-title" data-i18n="profileLeaderboard">LİDER TABLOSU</div>
+        <table class="leaderboard-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th data-i18n="profilePlayer">OYUNCU</th>
+              <th data-i18n="profileWins">GALİBİYET</th>
+              <th data-i18n="profileGames">OYUN</th>
+              <th data-i18n="profileWinRate">ORAN</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Not connected state -->
+      <div id="profile-not-connected" style="text-align:center;padding:30px 0;">
+        <div style="font-size:40px;margin-bottom:12px;">🔗</div>
+        <div style="color:rgba(255,255,255,0.5);font-size:13px;margin-bottom:16px;" data-i18n="profileConnectFirst">Önce cüzdanını bağla</div>
+        <button class="profile-btn" id="profile-connect-btn" data-i18n="connectWallet">CÜZDAN BAĞLA</button>
+      </div>
     </div>
   </div>
 

@@ -25,6 +25,7 @@ import { kiteService, KiteService } from './ai/KiteService';
 import './ecs/abilities/characterAbilities';
 import { t, setLang, getLang, Lang } from './i18n';
 import { switchBGM, lowerBGMForGame, setBGMVolume, toggleBGMMute, getBGMVolume, isBGMMuted, playCoinDrop, playCoinCollect, preloadSFX } from './audio/SoundManager';
+import { profileService } from './chain/ProfileService';
 
 // ─── DOM REFS ─────────────────────────────────────────────────────────
 const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
@@ -158,8 +159,132 @@ async function connectWallet(): Promise<void> {
 }
 
 walletBtn.addEventListener('click', () => {
-    if (!walletAddress) connectWallet().catch(console.error);
+    if (!walletAddress) {
+        connectWallet().catch(console.error);
+    } else {
+        openProfileModal();
+    }
 });
+
+// ─── PROFILE MODAL ──────────────────────────────────────────────────
+const profileModal = document.getElementById('profile-modal')!;
+const profileCloseBtn = document.getElementById('profile-close')!;
+const profileRegisterDiv = document.getElementById('profile-register')!;
+const profileViewDiv = document.getElementById('profile-view')!;
+const profileNotConnected = document.getElementById('profile-not-connected')!;
+const profileConnectBtn = document.getElementById('profile-connect-btn')!;
+const profileRegisterBtn = document.getElementById('profile-register-btn')!;
+const profileNameInput = document.getElementById('profile-name-input') as HTMLInputElement;
+const profileAvatarInput = document.getElementById('profile-avatar-input') as HTMLInputElement;
+const avatarPreview = document.getElementById('avatar-preview') as HTMLImageElement;
+
+profileCloseBtn.addEventListener('click', () => {
+    profileModal.classList.remove('show');
+});
+profileModal.addEventListener('click', (e) => {
+    if (e.target === profileModal) profileModal.classList.remove('show');
+});
+
+profileConnectBtn.addEventListener('click', async () => {
+    await connectWallet();
+    if (walletAddress) openProfileModal();
+});
+
+profileAvatarInput.addEventListener('input', () => {
+    const url = profileAvatarInput.value.trim();
+    if (url) avatarPreview.src = url;
+    else avatarPreview.src = '/assets/images/logo.png';
+});
+
+profileRegisterBtn.addEventListener('click', async () => {
+    const username = profileNameInput.value.trim();
+    if (!username || username.length > 32) {
+        profileNameInput.style.borderColor = '#ff5555';
+        return;
+    }
+    profileNameInput.style.borderColor = '';
+    const avatarURI = profileAvatarInput.value.trim();
+
+    profileRegisterBtn.disabled = true;
+    profileRegisterBtn.textContent = t('profileRegistering' as any);
+
+    const ok = await profileService.registerProfile(username, avatarURI);
+    profileRegisterBtn.disabled = false;
+    profileRegisterBtn.textContent = t('profileRegister' as any);
+
+    if (ok) {
+        openProfileModal(); // refresh view
+    } else {
+        alert('Kayıt başarısız — kontrat adresini kontrol et.');
+    }
+});
+
+async function openProfileModal() {
+    profileRegisterDiv.style.display = 'none';
+    profileViewDiv.style.display = 'none';
+    profileNotConnected.style.display = 'none';
+
+    if (!walletAddress) {
+        profileNotConnected.style.display = '';
+        profileModal.classList.add('show');
+        return;
+    }
+
+    // Connect ProfileService if not already
+    if (!profileService.isConnected) {
+        await profileService.connectWallet();
+    }
+
+    const profile = profileService.currentProfile;
+
+    if (!profile) {
+        // Show register form
+        profileRegisterDiv.style.display = '';
+        profileModal.classList.add('show');
+        return;
+    }
+
+    // Show profile + leaderboard
+    const profAvatar = document.getElementById('profile-avatar') as HTMLImageElement;
+    const profName = document.getElementById('profile-display-name')!;
+    const profAddr = document.getElementById('profile-display-addr')!;
+
+    profName.textContent = profile.username;
+    profAddr.textContent = profileService.shortAddress();
+    profAvatar.src = profile.avatarURI || '/assets/images/logo.png';
+
+    document.getElementById('prof-games')!.textContent = String(profile.gamesPlayed);
+    document.getElementById('prof-wins')!.textContent = String(profile.wins);
+    document.getElementById('prof-losses')!.textContent = String(profile.losses);
+    document.getElementById('prof-draws')!.textContent = String(profile.draws);
+
+    // Load leaderboard
+    const lbBody = document.getElementById('leaderboard-body')!;
+    lbBody.innerHTML = '<tr><td colspan="5" style="color:rgba(255,255,255,0.3);padding:12px;">...</td></tr>';
+
+    profileViewDiv.style.display = '';
+    profileModal.classList.add('show');
+
+    // Fetch leaderboard async
+    const entries = await profileService.getLeaderboard();
+    lbBody.innerHTML = '';
+    for (const e of entries) {
+        const isMe = e.address.toLowerCase() === walletAddress!.toLowerCase();
+        const tr = document.createElement('tr');
+        if (isMe) tr.className = 'is-me';
+        tr.innerHTML = `
+            <td class="lb-rank ${e.rank <= 3 ? 'lb-rank-' + e.rank : ''}">${e.rank}</td>
+            <td>${e.username}</td>
+            <td>${e.wins}</td>
+            <td>${e.gamesPlayed}</td>
+            <td class="lb-winrate">${e.winRate}%</td>
+        `;
+        lbBody.appendChild(tr);
+    }
+    if (entries.length === 0) {
+        lbBody.innerHTML = '<tr><td colspan="5" style="color:rgba(255,255,255,0.25);padding:12px;">Henüz oyuncu yok</td></tr>';
+    }
+}
 
 // ─── TEAM SELECTION ──────────────────────────────────────────────────
 let selectedTeam: 'fire' | 'ice' = 'fire';
@@ -769,6 +894,12 @@ function showWinScreen(sys: WinConditionSystem): void {
         turnsPlayed: turnCount,
         totalPoAIDelta: 0,
     });
+
+    // Submit game result on-chain (non-blocking)
+    if (profileService.isConnected && profileService.currentProfile) {
+        const result = playerWon ? 'win' : 'loss';
+        void profileService.submitGameResult(result);
+    }
 }
 
 // ─── CARD UI ─────────────────────────────────────────────────────────
