@@ -443,22 +443,39 @@ export class UnitManager {
         );
         const hammerRoot = inst.rootNodes[0] as TransformNode;
 
-        // Attach to RightHand — animation moves the hand, hammer follows
         const allNodes = poseRoot.getChildTransformNodes(false);
-        const handBone = allNodes.find(n => /righthand/i.test(n.name)) ?? null;
+        const rightHand = allNodes.find(n => /righthand$/i.test(n.name)) ?? null;
+        const spine     = allNodes.find(n => /spine01$/i.test(n.name))   ?? null;
 
-        if (handBone) {
-            hammerRoot.parent = handBone;
-            (hammerRoot as any).scaling = new Vector3(100, 100, 100);
-            // Hammer long axis is X. Bone Y = along arm.
-            // Rotate so handle runs along arm (X→Y), head points outward
-            hammerRoot.rotation = new Vector3(0, 0, -Math.PI / 2);
-            // Slide along bone Y so grip is at hand, head extends outward
-            hammerRoot.position = new Vector3(0, 8, 0);
+        if (tag === 'walk' || tag === 'die') {
+            // ── SIRT pozisyonu: Spine01'e parent, sırtın arkasında dik dursun ──
+            const anchor = spine ?? rightHand;
+            if (anchor) {
+                hammerRoot.parent = anchor;
+                (hammerRoot as any).scaling = new Vector3(100, 100, 100);
+                // Sırtın arkasında, dik, baş yukarıda
+                hammerRoot.rotation = new Vector3(0, Math.PI, 0);
+                hammerRoot.position = new Vector3(0, 4, -3);
+            } else {
+                hammerRoot.parent = parentMesh;
+                (hammerRoot as any).scaling = new Vector3(1, 1, 1);
+                hammerRoot.position = new Vector3(0, 1.8, -0.3);
+                hammerRoot.rotation = new Vector3(0, 0, 0);
+            }
         } else {
-            hammerRoot.parent = parentMesh;
-            hammerRoot.position = new Vector3(0.3, 1.2, 0.4);
-            (hammerRoot as any).scaling = new Vector3(1, 1, 1);
+            // ── ATTACK pozisyonu: RightHand'e parent, iki elle tutar gibi önde ──
+            if (rightHand) {
+                hammerRoot.parent = rightHand;
+                (hammerRoot as any).scaling = new Vector3(100, 100, 100);
+                // Sap ele paralel, baş yukarıda öne uzansın
+                hammerRoot.rotation = new Vector3(-Math.PI / 2, 0, 0);
+                hammerRoot.position = new Vector3(0, 5, 0);
+            } else {
+                hammerRoot.parent = parentMesh;
+                (hammerRoot as any).scaling = new Vector3(1, 1, 1);
+                hammerRoot.position = new Vector3(0.3, 1.2, 0.4);
+                hammerRoot.rotation = new Vector3(0, 0, 0);
+            }
         }
 
         hammerRoot.getChildMeshes().forEach(m => {

@@ -71,7 +71,7 @@ export class AvaShardManager {
             mat.alpha = 0.85;
             crystal.material = mat;
 
-            // Capture progress ring
+            // Capture progress ring (görsel olarak gizli — mekanik aktif)
             const ring = MeshBuilder.CreateTorus(
                 `shardRing_${lane}`,
                 { diameter: 4, thickness: 0.25, tessellation: 32 },
@@ -84,6 +84,7 @@ export class AvaShardManager {
             ringMat.emissiveColor = LANE_COLORS.neutral.scale(0.3);
             ringMat.alpha = 0.5;
             ring.material = ringMat;
+            ring.isVisible = false;
 
             this.shards.push({
                 mesh: crystal,

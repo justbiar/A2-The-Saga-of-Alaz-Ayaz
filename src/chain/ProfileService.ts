@@ -3,6 +3,7 @@
  * Avalanche Fuji testnet. ethers loaded from CDN.
  */
 const ethers = (globalThis as any).ethers;
+const _win = window as any;
 
 const FUJI_CHAIN_ID = 43113;
 const FUJI_RPC = 'https://api.avax-test.network/ext/bc/C/rpc';
@@ -53,23 +54,23 @@ class ProfileService {
 
     /** Connect wallet to Fuji testnet */
     async connectWallet(): Promise<string | null> {
-        if (!ethers || !window.ethereum) {
+        if (!ethers || !_win.ethereum) {
             console.warn('MetaMask not found');
             return null;
         }
         try {
-            this.provider = new ethers.BrowserProvider(window.ethereum);
+            this.provider = new ethers.BrowserProvider(_win.ethereum);
             // Request accounts
             await this.provider.send('eth_requestAccounts', []);
             // Switch to Fuji if needed
             try {
-                await window.ethereum.request({
+                await _win.ethereum.request({
                     method: 'wallet_switchEthereumChain',
                     params: [{ chainId: FUJI_PARAMS.chainId }],
                 });
             } catch (switchErr: any) {
                 if (switchErr.code === 4902) {
-                    await window.ethereum.request({
+                    await _win.ethereum.request({
                         method: 'wallet_addEthereumChain',
                         params: [FUJI_PARAMS],
                     });

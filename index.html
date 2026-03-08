@@ -359,6 +359,7 @@
       display: flex;
       gap: 7px;
       align-items: flex-end;
+      justify-content: center;
     }
 
     .prompt-card {
@@ -576,7 +577,7 @@
 
     .card-art-zone img {
       width: 100%; height: 100%;
-      object-fit: cover; object-position: center top;
+      object-fit: contain; object-position: center bottom;
       border-radius: 10px 10px 0 0;
       display: block;
     }
@@ -683,24 +684,91 @@
       position: fixed;
       bottom: 14px; left: 14px;
       z-index: 320;
+    }
+
+    #audio-settings-btn {
+      width: 38px; height: 38px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(6, 8, 20, 0.82);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 50%;
+      cursor: pointer;
+      color: rgba(200,180,255,0.7);
+      transition: color 0.2s, border-color 0.2s, transform 0.3s ease;
+    }
+    #audio-settings-btn:hover {
+      color: rgba(220,200,255,1);
+      border-color: rgba(160,100,255,0.5);
+    }
+    #audio-controls.open #audio-settings-btn {
+      transform: rotate(45deg);
+      color: #cc99ff;
+      border-color: rgba(160,100,255,0.6);
+    }
+
+    #audio-panel {
+      position: absolute;
+      bottom: calc(100% + 10px);
+      left: 0;
+      width: 220px;
+      background: rgba(8, 6, 22, 0.96);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(140,80,255,0.25);
+      border-radius: 10px;
+      padding: 14px 16px 12px;
+      display: flex; flex-direction: column; gap: 12px;
+      /* Gizli başlangıç */
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: opacity 0.22s ease, transform 0.22s ease;
+    }
+    #audio-controls.open #audio-panel {
+      opacity: 1;
+      pointer-events: all;
+      transform: translateY(0);
+    }
+
+    .audio-panel-title {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: rgba(180,140,255,0.45);
+      text-align: center;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .audio-row {
       display: flex;
       align-items: center;
-      gap: 6px;
-      background: rgba(6, 8, 20, 0.75);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 8px;
-      padding: 5px 8px;
-      font-size: 13px;
+      gap: 8px;
     }
-    #audio-controls button {
-      background: none; border: none; cursor: pointer;
-      font-size: 16px; padding: 2px 4px; border-radius: 4px;
-      transition: background 0.2s;
+    .audio-row-icon {
+      font-size: 15px;
+      cursor: pointer;
+      user-select: none;
+      width: 22px;
+      text-align: center;
+      flex-shrink: 0;
+      transition: filter 0.2s;
     }
-    #audio-controls button:hover { background: rgba(255,255,255,0.1); }
-    #audio-controls input[type="range"] {
-      width: 55px; height: 4px; accent-color: #ff8844;
+    .audio-row-icon.muted { filter: grayscale(1); opacity: 0.4; }
+    .audio-row-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: rgba(200,180,255,0.5);
+      width: 32px;
+      flex-shrink: 0;
+    }
+    .audio-row input[type="range"] {
+      flex: 1;
+      height: 3px;
+      accent-color: #aa66ff;
       cursor: pointer;
     }
 
@@ -708,80 +776,267 @@
     #difficulty-select {
       position: fixed; inset: 0;
       z-index: 2600;
-      background: linear-gradient(180deg, #0a0410 0%, #120818 40%, #1a0a0a 100%);
+      background: #060409;
       display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 30px;
+      align-items: center;
       overflow-y: auto;
+      padding: 80px 24px 80px;
+      isolation: isolate;
     }
-    .diff-header { text-align: center; max-width: 600px; }
-    .diff-title {
-      font-family: 'Cinzel', serif;
-      font-size: 32px; font-weight: 900;
-      color: #e84142;
-      text-shadow: 0 0 30px rgba(232,65,66,0.5);
-      letter-spacing: 4px;
-      margin-bottom: 16px;
+
+    /* ── Arkaplan görseller ── */
+    #difficulty-select .diff-bg-sky,
+    #difficulty-select .diff-bg-ground {
+      position: fixed;
+      left: 0; right: 0;
+      width: 100%;
+      pointer-events: none;
+      z-index: 0;
     }
-    .diff-lore {
-      font-family: 'Cinzel', serif;
-      font-size: 13px; line-height: 1.8;
-      color: rgba(255,200,180,0.6);
-      letter-spacing: 0.5px;
+    #difficulty-select .diff-bg-sky {
+      top: 0;
+      height: 42%;
+      background: url('assets/images/textures/ice_color.jpg') center top / cover no-repeat;
+      filter: blur(18px) brightness(0.18) saturate(1.4);
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.9) 40%, transparent 100%);
+      -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.9) 40%, transparent 100%);
     }
-    .diff-warning {
-      color: #e84142;
-      font-weight: 700;
-      text-shadow: 0 0 10px rgba(232,65,66,0.4);
+    #difficulty-select .diff-bg-ground {
+      bottom: 0;
+      height: 62%;
+      background: url('assets/images/textures/lava_color.png') center bottom / cover no-repeat;
+      filter: blur(22px) brightness(0.12) saturate(1.6);
+      mask-image: linear-gradient(to top, rgba(0,0,0,0.9) 40%, transparent 100%);
+      -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,0.9) 40%, transparent 100%);
     }
-    .diff-levels {
-      display: flex; flex-direction: column; gap: 8px;
-      width: 100%; max-width: 420px;
+    /* merkezde buluşma karartması */
+    #difficulty-select::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse 70% 30% at 50% 50%, rgba(6,4,9,0.98) 0%, transparent 100%);
+      pointer-events: none;
+      z-index: 0;
     }
-    .diff-btn {
-      display: flex; align-items: center; gap: 14px;
-      width: 100%; padding: 14px 18px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px;
+
+    .diff-world-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 480px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* dikey çizgi tüm katları bağlar */
+    .diff-world-col::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 60px;
+      bottom: 60px;
+      width: 1px;
+      transform: translateX(-50%);
+      background: linear-gradient(to bottom,
+        rgba(120,200,255,0.15) 0%,
+        rgba(255,255,255,0.08) 15%,
+        rgba(232,65,66,0.2) 75%,
+        rgba(232,65,66,0.5) 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Gökyüzü butonu ── */
+    .diff-sky-btn {
+      position: relative; z-index: 1;
+      width: 100%;
+      padding: 18px 24px;
+      display: flex; align-items: center; gap: 16px;
+      background: rgba(100,180,255,0.04);
+      border: 1px solid rgba(100,180,255,0.15);
+      border-radius: 4px;
       cursor: pointer;
-      transition: all 0.25s;
+      transition: all 0.3s ease;
+      margin-bottom: 8px;
       text-align: left;
     }
-    .diff-btn:hover {
-      background: rgba(232,65,66,0.1);
-      border-color: rgba(232,65,66,0.4);
-      transform: translateX(6px);
-      box-shadow: 0 0 20px rgba(232,65,66,0.15);
+    .diff-sky-btn:hover {
+      background: rgba(100,180,255,0.08);
+      border-color: rgba(100,180,255,0.3);
     }
+    .diff-sky-icon {
+      font-size: 22px;
+      width: 36px; text-align: center;
+      opacity: 0.5;
+    }
+    .diff-sky-name {
+      font-family: 'Cinzel', serif;
+      font-size: 13px; font-weight: 700;
+      color: rgba(150,210,255,0.5);
+      letter-spacing: 2px;
+    }
+
+    /* ── Gökyüzü toast/tooltip ── */
+    .diff-sky-toast {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0; right: 0;
+      background: rgba(6,10,20,0.96);
+      border: 1px solid rgba(100,180,255,0.2);
+      border-radius: 4px;
+      padding: 14px 18px;
+      font-size: 12px;
+      line-height: 1.7;
+      color: rgba(150,210,255,0.65);
+      letter-spacing: 0.4px;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(-4px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      z-index: 10;
+    }
+    .diff-sky-btn-wrap.revealed .diff-sky-toast {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .diff-sky-toast-sub {
+      opacity: 0.45;
+      font-size: 10px;
+    }
+    .diff-sky-btn-wrap {
+      position: relative;
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    /* sky-btn artık wrap içinde, margin kaldırıldı */
+    .diff-sky-btn-wrap .diff-sky-btn {
+      margin-bottom: 0;
+      width: 100%;
+    }
+
+    /* ── Yeryüzü ayırıcı ── */
+    .diff-surface-line {
+      position: relative; z-index: 1;
+      width: 100%;
+      display: flex; align-items: center; gap: 12px;
+      margin: 4px 0 4px;
+    }
+    .diff-surface-line::before,
+    .diff-surface-line::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(180,140,80,0.3), transparent);
+    }
+    .diff-surface-label {
+      font-family: 'Cinzel', serif;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: rgba(180,140,80,0.4);
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+
+    /* ── Yeraltı katları ── */
+    .diff-levels {
+      display: flex; flex-direction: column;
+      width: 100%;
+      position: relative; z-index: 1;
+      gap: 0;
+    }
+
+    .diff-btn {
+      display: flex; align-items: center; gap: 14px;
+      width: 100%; padding: 15px 20px;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+      position: relative;
+    }
+    .diff-btn::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 0;
+      background: rgba(232,65,66,0.06);
+      transition: width 0.25s ease;
+    }
+    .diff-btn:hover::before { width: 100%; }
+    .diff-btn:hover { padding-left: 28px; }
+
     .diff-num {
       font-family: 'Cinzel', serif;
-      font-size: 22px; font-weight: 900;
-      color: #e84142;
-      min-width: 36px; text-align: center;
-      text-shadow: 0 0 10px rgba(232,65,66,0.3);
+      font-size: 11px; font-weight: 700;
+      color: rgba(232,65,66,0.4);
+      min-width: 28px; text-align: center;
+      letter-spacing: 1px;
+      position: relative; z-index: 1;
     }
     .diff-name {
       font-family: 'Cinzel', serif;
-      font-size: 15px; font-weight: 700;
-      color: rgba(255,255,255,0.85);
+      font-size: 14px; font-weight: 700;
+      color: rgba(255,255,255,0.7);
+      position: relative; z-index: 1;
+      transition: color 0.2s;
     }
+    .diff-btn:hover .diff-name { color: rgba(255,255,255,0.95); }
     .diff-sub {
-      font-family: 'Cinzel', serif;
-      font-size: 11px;
-      color: rgba(255,180,160,0.4);
+      font-family: 'Inter', sans-serif;
+      font-size: 10px;
+      color: rgba(255,150,130,0.3);
       margin-left: auto;
+      letter-spacing: 0.5px;
+      position: relative; z-index: 1;
     }
-    /* Darker = deeper */
-    .diff-btn[data-diff="5"] { border-color: rgba(232,65,66,0.12); }
-    .diff-btn[data-diff="6"] { border-color: rgba(232,65,66,0.18); background: rgba(232,65,66,0.04); }
+
+    /* her kat biraz daha koyulaşır ve kırmızılaşır */
+    .diff-btn[data-diff="1"] { background: rgba(10,5,20,0.0); }
+    .diff-btn[data-diff="2"] { background: rgba(20,5,10,0.3); }
+    .diff-btn[data-diff="3"] { background: rgba(30,5,10,0.4); }
+    .diff-btn[data-diff="4"] { background: rgba(40,5,8,0.5);  }
+    .diff-btn[data-diff="5"] { background: rgba(55,5,5,0.55); border-bottom-color: rgba(232,65,66,0.1); }
+    .diff-btn[data-diff="6"] { background: rgba(70,4,4,0.6);  border-bottom-color: rgba(232,65,66,0.15); }
     .diff-btn[data-diff="7"] {
-      border-color: rgba(232,65,66,0.3);
-      background: rgba(232,65,66,0.06);
-      box-shadow: 0 0 15px rgba(232,65,66,0.1);
+      background: rgba(90,3,3,0.65);
+      border-bottom: 1px solid rgba(232,65,66,0.25);
+      box-shadow: inset 0 -4px 20px rgba(232,65,66,0.08);
     }
     .diff-btn[data-diff="7"] .diff-name { color: #e84142; }
-    .diff-btn[data-diff="7"] .diff-sub { color: rgba(232,65,66,0.6); }
+    .diff-btn[data-diff="7"] .diff-num  { color: #e84142; opacity: 1; }
+    .diff-btn[data-diff="7"] .diff-sub  { color: rgba(232,65,66,0.5); }
+
+    /* ── Tamag zemin etiketi ── */
+    .diff-bottom-line {
+      position: relative; z-index: 1;
+      width: 100%;
+      display: flex; align-items: center; gap: 12px;
+      margin-top: 4px;
+    }
+    .diff-bottom-line::before,
+    .diff-bottom-line::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(232,65,66,0.3), transparent);
+    }
+    .diff-bottom-label {
+      font-family: 'Cinzel', serif;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: rgba(232,65,66,0.45);
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+
+    .diff-header { display: none; }
+    .diff-title  { display: none; }
+    .diff-lore   { display: none; }
+    .diff-warning{ display: none; }
 
     /* ═══════════════════════════════════════════
        WIN OVERLAY
@@ -1033,6 +1288,84 @@
     .lb-rank-1 { font-size: 14px; }
     .lb-winrate { color: rgba(255,255,255,0.5); font-size: 11px; }
 
+    /* ═══════════════════════════════════════════
+       WALLET SELECT MODAL
+    ═══════════════════════════════════════════ */
+    #wallet-modal {
+      position: fixed; inset: 0;
+      z-index: 6000;
+      display: none;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.82);
+      backdrop-filter: blur(14px);
+    }
+    #wallet-modal.show { display: flex; animation: fadeInScale 0.3s ease; }
+
+    .wallet-panel {
+      width: 360px;
+      background: linear-gradient(170deg, rgba(18,8,42,0.98), rgba(8,3,22,0.98));
+      border: 1px solid rgba(140,90,255,0.3);
+      border-radius: 16px;
+      padding: 28px 24px;
+      position: relative;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 30px rgba(120,60,255,0.15);
+    }
+
+    .wallet-panel-close {
+      position: absolute; top: 12px; right: 14px;
+      background: none; border: none; color: rgba(255,255,255,0.4);
+      font-size: 22px; cursor: pointer; line-height: 1;
+    }
+    .wallet-panel-close:hover { color: #fff; }
+
+    .wallet-panel-title {
+      font-family: 'Cinzel', serif;
+      font-size: 18px; font-weight: 700;
+      color: #fff; letter-spacing: 2px;
+      text-align: center; margin-bottom: 20px;
+    }
+
+    .wallet-options { display: flex; flex-direction: column; gap: 10px; }
+
+    .wallet-option {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 16px; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .wallet-option:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: rgba(232,65,66,0.4);
+      box-shadow: 0 0 16px rgba(232,65,66,0.15);
+    }
+
+    .wallet-option-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+
+    .wallet-option-info { flex: 1; }
+    .wallet-option-name {
+      font-size: 14px; font-weight: 700; color: #fff;
+      letter-spacing: 0.5px;
+    }
+    .wallet-option-desc {
+      font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px;
+    }
+
+    .wallet-option-arrow {
+      color: rgba(255,255,255,0.2); font-size: 16px;
+    }
+
+    .wallet-option.detected .wallet-option-name::after {
+      content: '✓';
+      margin-left: 8px;
+      color: #50c878;
+      font-size: 12px;
+    }
+
     /* ─── ACTIVE EFFECTS BAR ─── */
     #active-effects {
       position: fixed;
@@ -1101,45 +1434,61 @@
     ═══════════════════════════════════════════ */
     #app-header {
       position: fixed;
-      top: 0; left: 0; right: 0;
+      top: 8px; left: 0; right: 0;
       z-index: 3000;
-      height: 62px;
+      height: 56px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 0 28px;
-      background: rgba(3, 2, 12, 0.82);
-      backdrop-filter: blur(22px);
-      -webkit-backdrop-filter: blur(22px);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 0 32px;
+      background: transparent;
       pointer-events: all;
     }
 
-    #app-header .logo {
-      font-family: 'Cinzel', serif;
-      font-size: 17px;
-      font-weight: 900;
-      letter-spacing: 4px;
-      background: linear-gradient(135deg, #ff7030, #ffdd60);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
+    .header-logo-img {
+      height: 32px; width: auto;
       cursor: pointer;
-      filter: drop-shadow(0 0 10px rgba(255, 120, 0, 0.35));
+      filter: drop-shadow(0 0 8px rgba(255, 120, 0, 0.4));
       transition: filter 0.2s ease;
     }
-    #app-header .logo:hover {
-      filter: drop-shadow(0 0 18px rgba(255, 140, 0, 0.6));
+    .header-logo-img:hover {
+      filter: drop-shadow(0 0 16px rgba(255, 140, 0, 0.65));
+    }
+
+    .header-nav {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      margin-left: 40px;
+    }
+
+    .header-nav-item {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+      cursor: pointer;
+      transition: color 0.2s;
+      background: none; border: none; padding: 0;
+    }
+    .header-nav-item:hover { color: #fff; }
+
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
 
     #wallet-btn {
       padding: 7px 16px;
-      border-radius: 10px;
-      border: 1px solid rgba(232, 65, 66, 0.32);
-      background: rgba(232, 65, 66, 0.08);
-      color: #e84142;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.6);
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 600;
       letter-spacing: 0.8px;
       cursor: pointer;
       transition: all 0.2s ease;
@@ -1150,14 +1499,14 @@
     }
 
     #wallet-btn:hover {
-      background: rgba(232, 65, 66, 0.16);
-      border-color: rgba(232, 65, 66, 0.55);
-      box-shadow: 0 0 16px rgba(232, 65, 66, 0.2);
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.2);
+      color: #fff;
     }
 
     #wallet-btn.connected {
       border-color: rgba(80, 200, 120, 0.4);
-      background: rgba(80, 200, 120, 0.08);
+      background: rgba(80, 200, 120, 0.06);
       color: #50c878;
     }
 
@@ -1171,200 +1520,438 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      /* Ateş üstten, buz alttan — logo ışığını zemine yansıtıyor */
-      background:
-        radial-gradient(ellipse 80% 55% at 50% -5%,  rgba(255, 90,  15, 0.22) 0%, transparent 65%),
-        radial-gradient(ellipse 80% 55% at 50% 105%, rgba(20,  110, 255, 0.20) 0%, transparent 65%),
-        radial-gradient(ellipse 45% 35% at 18% 55%,  rgba(255, 70,  0,  0.06) 0%, transparent 55%),
-        radial-gradient(ellipse 45% 35% at 82% 55%,  rgba(0,   90, 255, 0.06) 0%, transparent 55%),
-        #05080f;
+      background: #0a0a0f;
       overflow: hidden;
     }
 
-    /* Hafif hex-grid */
+    /* Subtle fire/ice ambient */
     #home-screen::before {
       content: '';
       position: absolute; inset: 0;
-      background-image:
-        radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
-      background-size: 44px 44px;
-      animation: gridDrift 30s linear infinite;
+      background:
+        radial-gradient(ellipse 60% 50% at 20% 50%, rgba(255,77,0,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 50%, rgba(0,229,255,0.06) 0%, transparent 60%);
       pointer-events: none;
     }
 
-    /* Yavaş dönen ateş/buz ikili orb */
+    /* Noise */
     #home-screen::after {
       content: '';
-      position: absolute;
-      width: 700px; height: 700px;
-      border-radius: 50%;
-      background: conic-gradient(
-        from 0deg,
-        rgba(255, 85,  10,  0.10),
-        rgba(255, 170, 40,  0.06),
-        rgba(20,  110, 255, 0.10),
-        rgba(80,  190, 255, 0.06),
-        rgba(255, 85,  10,  0.10)
-      );
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      animation: orbitSpin 30s linear infinite;
-      filter: blur(60px);
+      position: absolute; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      background-size: 200px 200px;
       pointer-events: none;
-      opacity: 0.7;
+    }
+
+    /* Outer frame */
+    .home-frame {
+      position: absolute; inset: 16px;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      pointer-events: none;
+      z-index: 1;
     }
 
     .home-logo-img {
-      width: 210px;
-      height: auto;
-      filter:
-        drop-shadow(0 0 40px rgba(255, 110, 20, 0.70))
-        drop-shadow(0 0 90px rgba(60, 140, 255, 0.35));
+      width: 200px; height: auto;
+      filter: drop-shadow(0 0 50px rgba(255,110,20,0.65));
       animation: float 5s ease-in-out infinite, fadeUp 0.7s ease backwards;
-      margin-bottom: 2px;
-      pointer-events: none;
-      user-select: none;
+      margin-bottom: 12px;
+      pointer-events: none; user-select: none;
+      position: relative; z-index: 2;
     }
 
     .home-subtitle {
       font-family: 'Cinzel', serif;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 7px;
-      color: rgba(255, 255, 255, 0.28);
-      margin-top: 4px;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 8px;
+      color: rgba(255,255,255,0.22);
       text-align: center;
-      animation: fadeUp 0.7s ease 0.16s backwards;
+      animation: fadeUp 0.7s ease 0.15s backwards;
+      position: relative; z-index: 2;
     }
 
     .home-tagline {
-      font-size: 9px;
-      font-weight: 600;
-      letter-spacing: 3.5px;
-      color: rgba(255, 200, 80, 0.3);
+      font-family: 'Inter', sans-serif;
+      font-size: 10px; font-weight: 500;
+      letter-spacing: 3px;
+      color: rgba(255,255,255,0.25);
       margin-top: 6px;
       text-transform: uppercase;
-      animation: fadeUp 0.7s ease 0.22s backwards;
+      animation: fadeUp 0.7s ease 0.2s backwards;
+      position: relative; z-index: 2;
     }
 
-    .home-divider {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin: 36px 0 0;
-      animation: fadeUp 0.7s ease 0.28s backwards;
-    }
-    .home-divider::before,
-    .home-divider::after {
-      content: '';
-      width: 140px; height: 1px;
-      background: linear-gradient(to right, transparent, rgba(255, 185, 50, 0.3), transparent);
-    }
-    .home-divider-diamond {
-      width: 7px; height: 7px;
-      border-radius: 1px;
-      transform: rotate(45deg);
-      background: rgba(255, 185, 50, 0.45);
-      box-shadow: 0 0 10px var(--gold-dim);
-    }
-
-    .home-nav {
-      display: flex;
-      gap: 18px;
-      margin-top: 36px;
-      animation: fadeUp 0.7s ease 0.36s backwards;
-    }
-
-    .home-card {
-      width: 188px;
-      padding: 36px 20px 28px;
-      border-radius: 16px;
-      background: var(--glass);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
-      box-shadow: 0 8px 32px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.07);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .home-card::after {
-      content: '';
-      position: absolute;
-      top: 0; bottom: 0;
-      width: 45%;
-      background: linear-gradient(to right, transparent, rgba(255,255,255,0.07), transparent);
-      transform: translateX(-120%) skewX(-15deg);
-    }
-    .home-card:hover::after {
-      transform: translateX(300%) skewX(-15deg);
-      transition: transform 0.55s ease;
-    }
-
-    .home-card:hover {
-      transform: translateY(-10px) scale(1.035);
-      border-color: rgba(255, 200, 80, 0.22);
-      background: var(--glass-hover);
-      box-shadow:
-        0 0 0 1px rgba(255, 180, 60, 0.14),
-        0 0 28px rgba(255, 130, 0, 0.14),
-        0 20px 40px rgba(0,0,0,0.65),
-        inset 0 1px 0 rgba(255,255,255,0.1);
-    }
-
-    .home-card-icon {
-      width: 44px; height: 44px;
-      display: flex; align-items: center; justify-content: center;
-      color: var(--gold);
-      filter: drop-shadow(0 0 14px rgba(255, 180, 60, 0.5));
-      transition: filter 0.3s ease;
-      animation: float 4s ease-in-out infinite;
-    }
-    .home-card:hover .home-card-icon {
-      filter: drop-shadow(0 0 24px rgba(255, 210, 60, 0.85));
-    }
-    .home-card-icon svg { width: 100%; height: 100%; }
-
-    .home-card-label {
+    /* Big play button */
+    .home-play-btn {
+      margin-top: 48px;
+      padding: 16px 64px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,77,0,0.4);
+      background: rgba(255,77,0,0.1);
+      color: #FF4D00;
       font-family: 'Cinzel', serif;
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 2.5px;
-      color: rgba(255, 210, 130, 0.88);
+      font-size: 18px; font-weight: 700;
+      letter-spacing: 6px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      position: relative; z-index: 2;
+      animation: fadeUp 0.7s ease 0.3s backwards;
+      text-transform: uppercase;
     }
 
-    .home-card-desc {
-      font-size: 10px;
-      color: rgba(255, 255, 255, 0.28);
-      line-height: 1.75;
-      letter-spacing: 0.2px;
+    .home-play-btn:hover {
+      background: rgba(255,77,0,0.2);
+      box-shadow: 0 0 40px rgba(255,77,0,0.25);
+      transform: scale(1.03);
     }
 
     /* ═══════════════════════════════════════════
-       CHARACTERS SCREEN
+       CHARACTERS SCREEN — Draven-style 2K
     ═══════════════════════════════════════════ */
     #characters-screen {
       position: fixed; inset: 0;
       z-index: 2500;
       display: none;
-      flex-direction: column;
-      align-items: center;
-      background: radial-gradient(ellipse at 50% 30%, rgba(30, 10, 60, 0.98) 0%, rgba(4, 3, 14, 1) 70%);
-      overflow-y: auto;
-      padding: 80px 24px 40px;
+      overflow: hidden;
+      background: #0a0a0f;
     }
 
+    /* Blurred background image (character art) */
+    .cs-bg {
+      position: absolute; inset: -40px;
+      background-size: cover;
+      background-position: center;
+      filter: blur(30px) brightness(0.35) saturate(0.7);
+      z-index: 0;
+      transition: background-image 0.5s ease;
+    }
+
+    /* Noise overlay */
+    #characters-screen::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      background-size: 200px 200px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Outer frame border (like the Draven reference) */
+    .cs-frame {
+      position: absolute;
+      inset: 16px;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .cs-frame::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.12) 50%, transparent 95%);
+    }
+
+    /* Main content layer */
+    .cs-content {
+      position: relative;
+      z-index: 3;
+      width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ─── TOP NAV BAR ─── */
+    .cs-topbar {
+      display: flex;
+      align-items: center;
+      padding: 18px 32px;
+      gap: 16px;
+      z-index: 10;
+    }
+
+    .cs-logo {
+      font-family: 'Cinzel', serif;
+      font-size: 16px; font-weight: 900;
+      background: linear-gradient(135deg, #ff7030, #ffdd60);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-right: auto;
+    }
+
+    /* ─── MAIN AREA: 3 zones ─── */
+    .cs-main {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* LEFT: Name + class + description */
+    .cs-info-left {
+      position: absolute;
+      left: 48px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 5;
+      max-width: 380px;
+    }
+
+    .cs-class-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 4px;
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+      transition: all 0.3s;
+    }
+
+    .cs-class-badge.fire { background: rgba(255,77,0,0.15); border: 1px solid rgba(255,77,0,0.3); color: #FF4D00; }
+    .cs-class-badge.ice  { background: rgba(0,229,255,0.12); border: 1px solid rgba(0,229,255,0.3); color: #00E5FF; }
+    .cs-class-badge.merc { background: rgba(157,78,221,0.12); border: 1px solid rgba(157,78,221,0.3); color: #9D4EDD; }
+
+    .cs-hero-name {
+      font-family: 'Cinzel', serif;
+      font-size: 72px;
+      font-weight: 900;
+      color: #F2F2F2;
+      letter-spacing: 8px;
+      line-height: 1;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.9));
+      margin-bottom: 24px;
+    }
+
+    .cs-hero-lore {
+      background: rgba(15,17,26,0.55);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      padding: 18px 20px;
+      max-width: 320px;
+    }
+
+    .cs-hero-lore p {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      color: #A1A1AA;
+      line-height: 1.7;
+      letter-spacing: 0.3px;
+    }
+
+    /* CENTER: Hero image */
+    .cs-hero-center {
+      position: absolute;
+      left: 50%;
+      bottom: 100px;
+      transform: translateX(-50%);
+      height: 80vh;
+      z-index: 4;
+      pointer-events: none;
+    }
+
+    .cs-hero-img {
+      height: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0 0 80px rgba(0,0,0,0.5));
+      transition: opacity 0.35s ease;
+    }
+
+    /* Faction glow behind hero */
+    .cs-hero-glow {
+      position: absolute;
+      bottom: 5%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 500px; height: 500px;
+      border-radius: 50%;
+      opacity: 0.15;
+      filter: blur(100px);
+      z-index: 0;
+      transition: background 0.5s ease;
+    }
+
+    .cs-hero-glow.fire { background: #FF4D00; }
+    .cs-hero-glow.ice  { background: #00E5FF; }
+    .cs-hero-glow.merc { background: #9D4EDD; }
+
+    /* Bottom vignette */
+    .cs-main::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 25%;
+      background: linear-gradient(to top, #0a0a0f, transparent);
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    /* RIGHT: Abilities panel */
+    .cs-abilities-right {
+      position: absolute;
+      right: 48px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 5;
+      width: 260px;
+    }
+
+    .cs-abilities-title {
+      font-family: 'Cinzel', serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: #F2F2F2;
+      letter-spacing: 4px;
+      text-align: right;
+      margin-bottom: 20px;
+    }
+
+    /* Segmented stat bars (block style like reference) */
+    .cs-seg-stat {
+      margin-bottom: 16px;
+    }
+
+    .cs-seg-stat-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 10px;
+      font-weight: 600;
+      color: #A1A1AA;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      text-align: right;
+      margin-bottom: 5px;
+    }
+
+    .cs-seg-bar {
+      display: flex;
+      gap: 3px;
+      justify-content: flex-end;
+    }
+
+    .cs-seg-block {
+      width: 18px; height: 12px;
+      border-radius: 2px;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+
+    .cs-seg-block.empty {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .cs-seg-block.filled.fire { background: #FF4D00; box-shadow: 0 0 6px rgba(255,77,0,0.4); }
+    .cs-seg-block.filled.ice  { background: #00E5FF; box-shadow: 0 0 6px rgba(0,229,255,0.4); }
+    .cs-seg-block.filled.merc { background: #9D4EDD; box-shadow: 0 0 6px rgba(157,78,221,0.4); }
+
+    /* Ability detail box */
+    .cs-ability-box {
+      margin-top: 24px;
+      background: rgba(15,17,26,0.55);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      padding: 14px 16px;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    .cs-ability-box.fire { border-color: rgba(255,77,0,0.2); box-shadow: 0 0 16px rgba(255,77,0,0.06); }
+    .cs-ability-box.ice  { border-color: rgba(0,229,255,0.2); box-shadow: 0 0 16px rgba(0,229,255,0.06); }
+    .cs-ability-box.merc { border-color: rgba(157,78,221,0.2); box-shadow: 0 0 16px rgba(157,78,221,0.06); }
+
+    .cs-ability-box-title {
+      font-family: 'Cinzel', serif;
+      font-size: 13px; font-weight: 700;
+      color: #F2F2F2; letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    .cs-ability-box-desc {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px; color: #A1A1AA;
+      line-height: 1.5;
+    }
+
+    /* ─── BOTTOM BAR: Carousel + buttons ─── */
+    .cs-bottom {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      padding: 0 32px 20px;
+      gap: 16px;
+    }
+
+    .cs-bottom-left {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px; font-weight: 600;
+      color: rgba(255,255,255,0.4);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: color 0.2s;
+      flex-shrink: 0;
+    }
+
+    .cs-bottom-left:hover { color: #fff; }
+
+    /* Carousel */
+    .cs-carousel {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .cs-carousel-item {
+      width: 72px; height: 72px;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px solid transparent;
+      opacity: 0.35;
+      filter: grayscale(1);
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .cs-carousel-item:hover {
+      opacity: 0.8;
+      filter: grayscale(0);
+    }
+
+    .cs-carousel-item.active {
+      opacity: 1;
+      filter: grayscale(0);
+      transform: scale(1.08);
+    }
+
+    .cs-carousel-item.active.fire { border-color: #FF4D00; box-shadow: 0 0 14px rgba(255,77,0,0.45); }
+    .cs-carousel-item.active.ice  { border-color: #00E5FF; box-shadow: 0 0 14px rgba(0,229,255,0.45); }
+    .cs-carousel-item.active.merc { border-color: #9D4EDD; box-shadow: 0 0 14px rgba(157,78,221,0.45); }
+
+    .cs-carousel-item img {
+      width: 100%; height: 100%;
+      object-fit: contain;
+      object-position: center bottom;
+    }
+
+    /* Screen back btn (shared) */
     .screen-back-btn {
       position: fixed;
-      top: 17px;
-      left: 28px;
+      top: 14px;
+      left: 120px;
       z-index: 3001;
       padding: 7px 14px;
       border-radius: 9px;
@@ -1387,123 +1974,16 @@
       color: rgba(255, 255, 255, 0.82);
     }
 
-    .char-section-title {
-      font-family: 'Cinzel', serif;
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: 3px;
-      margin: 32px 0 16px;
+    #mode-back {
+      top: auto;
+      bottom: 32px;
+      left: 32px;
     }
 
-    .char-section-title.fire { color: #ff7030; }
-    .char-section-title.ice { color: #50b8ff; }
-    .char-section-title.merc { color: #cc99ff; }
-
-    .char-grid {
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
-      justify-content: center;
-      max-width: 900px;
-    }
-
-    .char-card {
-      width: 248px;
-      border-radius: 16px;
-      overflow: hidden;
-      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-      box-shadow: 0 8px 32px rgba(0,0,0,0.7);
-      position: relative;
-      background: var(--glass);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,0.06);
-    }
-
-    /* Faction top bar */
-    .char-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 2px;
-      border-radius: 16px 16px 0 0;
-      z-index: 2;
-    }
-    .char-card.fire-card::before  { background: linear-gradient(90deg, transparent, #ff5520, #ffa040, #ff5520, transparent); }
-    .char-card.ice-card::before   { background: linear-gradient(90deg, transparent, #0088ee, #38aaff, #0088ee, transparent); }
-    .char-card.merc-card::before  { background: linear-gradient(90deg, transparent, #7733cc, #cc88ff, #7733cc, transparent); }
-
-    .char-card:hover {
-      transform: translateY(-8px) scale(1.025);
-      box-shadow: 0 0 24px rgba(255, 200, 100, 0.1), 0 16px 40px rgba(0,0,0,0.8);
-      border-color: rgba(255,255,255,0.1);
-    }
-    .char-card.fire-card:hover { box-shadow: 0 0 28px rgba(255, 80, 0, 0.18), 0 16px 40px rgba(0,0,0,0.8); }
-    .char-card.ice-card:hover  { box-shadow: 0 0 28px rgba(0, 130, 255, 0.16), 0 16px 40px rgba(0,0,0,0.8); }
-    .char-card.merc-card:hover { box-shadow: 0 0 28px rgba(150, 60, 255, 0.16), 0 16px 40px rgba(0,0,0,0.8); }
-
-    .char-card-img {
-      width: 100%;
-      height: 180px;
-      object-fit: cover;
-      object-position: center top;
-      display: block;
-      filter: brightness(0.88) contrast(1.06) saturate(1.1);
-      transition: filter 0.3s ease;
-    }
-    .char-card:hover .char-card-img {
-      filter: brightness(0.95) contrast(1.06) saturate(1.15);
-    }
-
-    .char-card-body {
-      padding: 14px 16px 18px;
-      background: linear-gradient(to bottom, rgba(8,4,20,0.97), rgba(4,2,12,1));
-      border-top: 1px solid rgba(255,255,255,0.04);
-    }
-
-    .char-card-name {
-      font-family: 'Cinzel', serif;
-      font-size: 15px;
-      font-weight: 700;
-      color: rgba(255, 255, 255, 0.9);
-      letter-spacing: 1px;
-    }
-
-    .char-card-role {
-      font-size: 9px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      margin-top: 3px;
-    }
-    .fire-card .char-card-role  { color: rgba(255, 120, 60, 0.55); }
-    .ice-card  .char-card-role  { color: rgba(80, 180, 255, 0.55); }
-    .merc-card .char-card-role  { color: rgba(180, 120, 255, 0.55); }
-
-    .char-card-stats {
-      display: flex;
-      gap: 5px;
-      flex-wrap: wrap;
-      margin-top: 11px;
-    }
-
-    .char-card-stats span {
-      padding: 3px 8px;
-      border-radius: 6px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      font-size: 10px;
-      font-weight: 700;
-    }
-
-    .char-card-ability {
-      margin-top: 10px;
-      font-size: 10px;
-      color: rgba(255, 255, 255, 0.38);
-      line-height: 1.65;
-      padding-top: 10px;
-      border-top: 1px solid rgba(255,255,255,0.05);
-      letter-spacing: 0.2px;
+    #diff-back {
+      top: auto;
+      bottom: 32px;
+      left: 32px;
     }
 
     /* ═══════════════════════════════════════════
@@ -1515,43 +1995,198 @@
       display: none;
       flex-direction: column;
       align-items: center;
-      background: radial-gradient(ellipse at 50% 30%, rgba(30, 10, 60, 0.98) 0%, rgba(4, 3, 14, 1) 70%);
+      background: #08060f;
       overflow-y: auto;
-      padding: 80px 24px 40px;
+      padding: 72px 20px 100px;
     }
 
-    .story-content {
-      max-width: 680px;
-      color: rgba(255, 255, 255, 0.7);
-      font-size: 14px;
-      line-height: 1.9;
-      letter-spacing: 0.3px;
+    /* ── Bölüm: tam genişlik sinematik blok ── */
+    .story-act {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      align-items: stretch;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      min-height: 260px;
+      position: relative;
+    }
+    .story-act:last-of-type { border-bottom: none; }
+
+    /* Metin tarafı */
+    .story-act-text {
+      flex: 1;
+      padding: 48px 40px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+      z-index: 1;
+    }
+    /* Görsel tarafı */
+    .story-act-img {
+      width: 260px;
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .story-act-img img {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 130%;
+      object-fit: cover;
+      object-position: top center;
+      filter: saturate(0.7) brightness(0.55);
+      transition: filter 0.4s;
+    }
+    .story-act:hover .story-act-img img {
+      filter: saturate(0.95) brightness(0.72);
+    }
+    /* görsel soldan soluklaşır */
+    .story-act-img::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: linear-gradient(to right, #08060f 0%, transparent 55%);
+      pointer-events: none;
+    }
+    /* görsel alttan soluklaşır */
+    .story-act-img::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: linear-gradient(to top, #08060f 0%, transparent 40%);
+      pointer-events: none;
+    }
+    /* İmge sağda olunca fade yönü tersine döner */
+    .story-act.img-right .story-act-img { order: 2; }
+    .story-act.img-right .story-act-img::before {
+      background: linear-gradient(to left, #08060f 0%, transparent 55%);
+    }
+    .story-act.img-right .story-act-text { order: 1; }
+
+    /* İki karakter gösterilince yan yana */
+    .story-act-img.dual {
+      width: 320px;
+      display: flex;
+    }
+    .story-act-img.dual img {
+      width: 50%;
+      position: relative;
+      height: 100%;
     }
 
-    .story-content h2 {
+    /* Renk şeridi — sol kenar */
+    .story-act-text::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 20%; bottom: 20%;
+      width: 2px;
+      border-radius: 1px;
+    }
+    .story-act.fire .story-act-text::before  { background: #FF4D00; box-shadow: 0 0 12px rgba(255,77,0,0.5); }
+    .story-act.ice  .story-act-text::before  { background: #00E5FF; box-shadow: 0 0 12px rgba(0,229,255,0.4); }
+    .story-act.earth .story-act-text::before { background: #7fbb3a; }
+    .story-act.dark  .story-act-text::before { background: #9340dd; box-shadow: 0 0 12px rgba(147,64,221,0.4); }
+    .story-act.gold  .story-act-text::before { background: #f0c040; }
+    .story-act.blood .story-act-text::before { background: #c82020; }
+
+    .story-act-num {
       font-family: 'Cinzel', serif;
-      font-size: 28px;
-      font-weight: 900;
-      letter-spacing: 4px;
-      margin: 36px 0 16px;
-      background: linear-gradient(135deg, #ff7030, #ffcc00);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .story-content h3 {
-      font-family: 'Cinzel', serif;
-      font-size: 18px;
+      font-size: 9px;
       font-weight: 700;
-      color: #cc99ff;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      opacity: 0.4;
+    }
+    .story-act.fire  .story-act-num { color: #FF8050; }
+    .story-act.ice   .story-act-num { color: #60D8FF; }
+    .story-act.earth .story-act-num { color: #9fcc60; }
+    .story-act.dark  .story-act-num { color: #c080ff; }
+    .story-act.gold  .story-act-num { color: #f0c040; }
+    .story-act.blood .story-act-num { color: #e04040; }
+
+    .story-act-title {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(16px, 2.2vw, 22px);
+      font-weight: 900;
+      color: rgba(255,255,255,0.85);
       letter-spacing: 2px;
-      margin: 28px 0 12px;
+      text-transform: uppercase;
+      margin-bottom: 18px;
+      line-height: 1.3;
+    }
+    .story-act-body {
+      font-size: 13px;
+      line-height: 1.9;
+      color: rgba(255,255,255,0.42);
+      max-width: 480px;
+    }
+    .story-act-body strong { color: rgba(255,255,255,0.75); font-weight: 600; }
+    .story-act-body em     { color: rgba(255,255,255,0.62); font-style: italic; }
+
+    /* ── Başlık (en üst) ── */
+    .story-header {
+      width: 100%;
+      max-width: 900px;
+      padding: 40px 40px 32px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      margin-bottom: 0;
+    }
+    .story-header-eyebrow {
+      font-size: 9px;
+      letter-spacing: 5px;
+      color: rgba(255,255,255,0.2);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .story-header-title {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(24px, 4vw, 42px);
+      font-weight: 900;
+      color: rgba(255,255,255,0.88);
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      line-height: 1.1;
     }
 
-    .story-content p {
-      margin-bottom: 16px;
+    /* ── Son kapanış satırı ── */
+    .story-final {
+      width: 100%;
+      max-width: 900px;
+      padding: 56px 40px 0;
+      display: flex;
+      gap: 40px;
+      align-items: flex-start;
     }
+    .story-final-line {
+      flex: 1;
+      font-family: 'Cinzel', serif;
+      font-size: 13px;
+      line-height: 2;
+      color: rgba(255,255,255,0.22);
+      letter-spacing: 1px;
+      white-space: pre-line;
+    }
+    .story-final-line.f { color: rgba(255,255,255,0.28); }
+    .story-final-line.i { color: rgba(255,255,255,0.24); }
+
+    @media (max-width: 640px) {
+      .story-act { flex-direction: column; }
+      .story-act-img, .story-act-img.dual { width: 100%; height: 180px; }
+      .story-act-img img { height: 100%; object-position: center 20%; }
+      .story-act-img::before { background: linear-gradient(to bottom, #08060f 0%, transparent 40%) !important; }
+      .story-act-img::after  { display: none; }
+      .story-act.img-right .story-act-img { order: 0; }
+      .story-act.img-right .story-act-text { order: 1; }
+      .story-act-text { padding: 28px 20px; }
+      .story-header { padding: 28px 20px 24px; }
+      .story-final { flex-direction: column; gap: 16px; padding: 36px 20px 0; }
+    }
+
 
     /* ═══════════════════════════════════════════
        TEAM SELECT SCREEN
@@ -1560,177 +2195,164 @@
       position: fixed; inset: 0;
       z-index: 2500;
       display: none;
+      overflow: hidden;
+    }
+
+    /* Full-page split layout */
+    .team-split {
+      position: absolute; inset: 0;
+      display: flex;
+    }
+
+    .team-half {
+      flex: 1;
+      display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      cursor: pointer;
+      position: relative;
       overflow: hidden;
-      background: var(--bg-deep);
+      transition: flex 0.4s ease;
+    }
+    .team-half:hover { flex: 1.15; }
+
+    /* Fire half */
+    .team-half.fire-half {
+      background:
+        radial-gradient(ellipse 90% 70% at 40% 50%, rgba(255,60,0,0.25) 0%, transparent 60%),
+        linear-gradient(135deg, #1a0800 0%, #0d0400 40%, #080204 100%);
+    }
+    .team-half.fire-half::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: url('/assets/images/characters/korhan.png') center/cover no-repeat;
+      opacity: 0.08;
+      filter: blur(2px);
+      pointer-events: none;
+    }
+    .team-half.fire-half:hover {
+      background:
+        radial-gradient(ellipse 90% 70% at 40% 50%, rgba(255,60,0,0.35) 0%, transparent 60%),
+        linear-gradient(135deg, #2a0c00 0%, #120600 40%, #080204 100%);
     }
 
-    /* Fire left half */
-    #team-select-screen::before {
+    /* Ice half */
+    .team-half.ice-half {
+      background:
+        radial-gradient(ellipse 90% 70% at 60% 50%, rgba(0,120,255,0.2) 0%, transparent 60%),
+        linear-gradient(225deg, #000d1a 0%, #000410 40%, #020208 100%);
+    }
+    .team-half.ice-half::before {
       content: '';
+      position: absolute; inset: 0;
+      background: url('/assets/images/characters/ayaz.png') center/cover no-repeat;
+      opacity: 0.08;
+      filter: blur(2px);
+      pointer-events: none;
+    }
+    .team-half.ice-half:hover {
+      background:
+        radial-gradient(ellipse 90% 70% at 60% 50%, rgba(0,120,255,0.32) 0%, transparent 60%),
+        linear-gradient(225deg, #001428 0%, #000818 40%, #020208 100%);
+    }
+
+    /* Center divider */
+    .team-center-line {
       position: absolute;
-      top: 0; left: 0; right: 50%; bottom: 0;
-      background: radial-gradient(ellipse 80% 80% at 25% 50%, rgba(220, 55, 0, 0.2) 0%, transparent 65%);
+      top: 0; bottom: 0;
+      left: 50%;
+      width: 1px;
+      background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.12) 30%, rgba(255,255,255,0.12) 70%, transparent);
+      z-index: 10;
       pointer-events: none;
     }
 
-    /* Ice right half */
-    #team-select-screen::after {
-      content: '';
+    .team-vs-badge {
       position: absolute;
-      top: 0; left: 50%; right: 0; bottom: 0;
-      background: radial-gradient(ellipse 80% 80% at 75% 50%, rgba(0, 110, 230, 0.18) 0%, transparent 65%);
-      pointer-events: none;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 11;
+      font-family: 'Cinzel', serif;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: rgba(255, 215, 80, 0.7);
+      background: rgba(8, 5, 20, 0.95);
+      border: 1px solid rgba(255, 200, 60, 0.25);
+      border-radius: 50%;
+      width: 52px; height: 52px;
+      display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(16px);
     }
 
+    /* Title at top */
     .team-select-title {
+      position: absolute;
+      top: 80px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 12;
       font-family: 'Cinzel', serif;
       font-size: 10px;
       font-weight: 700;
       letter-spacing: 7px;
       color: rgba(255, 255, 255, 0.22);
-      margin-bottom: 48px;
       text-transform: uppercase;
-      position: relative; z-index: 1;
+      white-space: nowrap;
     }
 
-    .team-select-row {
-      display: flex;
-      align-items: stretch;
-      position: relative; z-index: 1;
-    }
-
-    /* VS divider */
-    .team-vs-divider {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      width: 64px;
-      flex-shrink: 0;
-      position: relative;
-    }
-    .team-vs-divider::before {
-      content: '';
-      position: absolute;
-      top: 0; bottom: 0;
-      width: 1px;
-      background: linear-gradient(to bottom,
-        transparent,
-        rgba(255,255,255,0.06) 20%,
-        rgba(255,255,255,0.12) 50%,
-        rgba(255,255,255,0.06) 80%,
-        transparent);
-    }
-    .team-vs-badge {
-      font-family: 'Cinzel', serif;
-      font-size: 10px;
-      font-weight: 900;
-      letter-spacing: 1px;
-      color: rgba(255, 215, 80, 0.55);
-      background: rgba(8, 5, 20, 0.9);
-      border: 1px solid rgba(255, 200, 60, 0.18);
-      border-radius: 50%;
-      width: 44px; height: 44px;
-      display: flex; align-items: center; justify-content: center;
+    /* Team content inside each half */
+    .team-half-content {
       position: relative; z-index: 2;
-      backdrop-filter: blur(10px);
-    }
-
-    .team-pick-card {
-      width: 280px;
-      padding: 52px 36px 44px;
-      border-radius: 20px;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 18px;
-      position: relative;
-      overflow: hidden;
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
+      gap: 16px;
+      text-align: center;
+      transition: transform 0.3s ease;
     }
-
-    .team-pick-card::after {
-      content: '';
-      position: absolute;
-      top: 0; bottom: 0;
-      width: 40%;
-      background: linear-gradient(to right, transparent, rgba(255,255,255,0.06), transparent);
-      transform: translateX(-120%) skewX(-15deg);
-    }
-    .team-pick-card:hover::after {
-      transform: translateX(350%) skewX(-15deg);
-      transition: transform 0.65s ease;
-    }
-
-    .team-pick-card.fire-pick {
-      border: 1px solid rgba(255, 100, 30, 0.2);
-      background: linear-gradient(165deg, rgba(55, 16, 4, 0.88), rgba(16, 4, 0, 0.94));
-      box-shadow: 0 0 0 1px rgba(255, 80, 0, 0.07), 0 20px 60px rgba(0,0,0,0.65);
-    }
-    .team-pick-card.fire-pick:hover {
-      transform: translateY(-12px) scale(1.04);
-      border-color: rgba(255, 120, 40, 0.5);
-      box-shadow: 0 0 0 1px rgba(255, 100, 30, 0.28), 0 0 55px rgba(255, 70, 0, 0.28), 0 24px 60px rgba(0,0,0,0.7);
-    }
-
-    .team-pick-card.ice-pick {
-      border: 1px solid rgba(60, 140, 255, 0.18);
-      background: linear-gradient(165deg, rgba(0, 16, 55, 0.88), rgba(0, 4, 20, 0.94));
-      box-shadow: 0 0 0 1px rgba(0, 100, 255, 0.07), 0 20px 60px rgba(0,0,0,0.65);
-    }
-    .team-pick-card.ice-pick:hover {
-      transform: translateY(-12px) scale(1.04);
-      border-color: rgba(80, 160, 255, 0.5);
-      box-shadow: 0 0 0 1px rgba(60, 140, 255, 0.28), 0 0 55px rgba(0, 110, 255, 0.28), 0 24px 60px rgba(0,0,0,0.7);
-    }
+    .team-half:hover .team-half-content { transform: scale(1.04); }
 
     .team-pick-icon {
-      width: 76px; height: 76px;
+      width: 80px; height: 80px;
       display: flex; align-items: center; justify-content: center;
-      filter: drop-shadow(0 0 20px currentColor);
+      filter: drop-shadow(0 0 24px currentColor);
       animation: float 3s ease-in-out infinite;
     }
     .team-pick-icon svg { width: 100%; height: 100%; }
 
     .team-pick-name {
       font-family: 'Cinzel', serif;
-      font-size: 26px;
+      font-size: 36px;
       font-weight: 900;
-      letter-spacing: 4px;
+      letter-spacing: 6px;
     }
 
-    .fire-pick .team-pick-name { color: #ff7a38; text-shadow: 0 0 28px rgba(255, 80, 0, 0.45); }
-    .ice-pick  .team-pick-name { color: #5cc8ff; text-shadow: 0 0 28px rgba(0, 150, 255, 0.45); }
+    .fire-half .team-pick-name { color: #ff7a38; text-shadow: 0 0 40px rgba(255, 80, 0, 0.5); }
+    .ice-half .team-pick-name { color: #5cc8ff; text-shadow: 0 0 40px rgba(0, 150, 255, 0.5); }
 
     .team-pick-desc {
-      font-size: 11px;
-      line-height: 1.85;
-      color: rgba(255, 255, 255, 0.32);
+      font-size: 12px;
+      line-height: 2;
+      color: rgba(255, 255, 255, 0.35);
       letter-spacing: 0.3px;
     }
 
     .team-pick-tag {
-      margin-top: 4px;
-      padding: 5px 18px;
-      border-radius: 20px;
+      margin-top: 8px;
+      padding: 6px 22px;
+      border-radius: 3px;
       font-size: 9px;
       font-weight: 700;
-      letter-spacing: 2px;
+      letter-spacing: 3px;
       text-transform: uppercase;
     }
-    .fire-pick .team-pick-tag {
+    .fire-half .team-pick-tag {
       background: rgba(255, 80, 0, 0.1);
       border: 1px solid rgba(255, 100, 30, 0.3);
       color: #ff7a38;
     }
-    .ice-pick .team-pick-tag {
+    .ice-half .team-pick-tag {
       background: rgba(0, 100, 255, 0.1);
       border: 1px solid rgba(60, 140, 255, 0.3);
       color: #5cc8ff;
@@ -1744,40 +2366,36 @@
       z-index: 2500;
       display: none;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background:
-        radial-gradient(ellipse 80% 60% at 50% 0%, rgba(100, 30, 200, 0.22) 0%, transparent 55%),
-        var(--bg-deep);
+      background: #0a0a0f;
       overflow: hidden;
     }
 
     #mode-select::before {
       content: '';
       position: absolute; inset: 0;
-      background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+      background-image: radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px);
       background-size: 40px 40px;
-      animation: gridDrift 25s linear infinite;
       pointer-events: none;
+      z-index: 0;
+    }
+
+    .mode-select-logo { display: none; }
+
+    .mode-inner {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 32px 32px;
+      gap: 0;
     }
 
     .mode-select-header {
       text-align: center;
       margin-bottom: 44px;
-      position: relative; z-index: 1;
-    }
-
-    .mode-select-logo {
-      font-family: 'Cinzel', serif;
-      font-size: 48px;
-      font-weight: 900;
-      letter-spacing: 8px;
-      line-height: 1;
-      background: linear-gradient(150deg, #ff7030, #ffd060, #ffaa30);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-      filter: drop-shadow(0 0 35px rgba(255, 120, 0, 0.5));
     }
 
     .mode-select-subtitle {
@@ -1785,22 +2403,20 @@
       font-size: 10px;
       font-weight: 700;
       letter-spacing: 6px;
-      color: rgba(255, 255, 255, 0.25);
-      margin-top: 8px;
+      color: rgba(255, 255, 255, 0.22);
       text-transform: uppercase;
     }
 
     .mode-cards-row {
       display: flex;
-      gap: 18px;
+      gap: 20px;
       align-items: stretch;
-      position: relative; z-index: 1;
     }
 
     .mode-btn {
-      width: 215px;
-      padding: 28px 20px 24px;
-      border-radius: 16px;
+      width: 240px;
+      padding: 36px 24px 28px;
+      border-radius: 4px;
       color: #fff;
       cursor: pointer;
       text-align: center;
@@ -1808,7 +2424,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 11px;
+      gap: 12px;
       position: relative;
       overflow: hidden;
       backdrop-filter: blur(14px);
@@ -1820,7 +2436,7 @@
       position: absolute;
       top: 0; bottom: 0;
       width: 45%;
-      background: linear-gradient(to right, transparent, rgba(255,255,255,0.06), transparent);
+      background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent);
       transform: translateX(-120%) skewX(-15deg);
     }
     .mode-btn:hover::after {
@@ -1829,29 +2445,29 @@
     }
 
     .mode-btn.realtime {
-      border: 1px solid rgba(255, 220, 50, 0.22);
-      background: rgba(35, 28, 0, 0.72);
-      box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255, 200, 0, 0.05);
+      border: 1px solid rgba(255, 77, 0, 0.25);
+      background: rgba(20, 8, 0, 0.75);
+      box-shadow: 0 8px 48px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,77,0,0.08);
     }
     .mode-btn.realtime:hover {
-      transform: translateY(-8px) scale(1.04);
-      border-color: rgba(255, 230, 60, 0.5);
-      box-shadow: 0 0 0 1px rgba(255, 220, 50, 0.22), 0 0 32px rgba(255, 200, 0, 0.22), 0 18px 48px rgba(0,0,0,0.7);
+      transform: translateY(-8px) scale(1.03);
+      border-color: rgba(255, 77, 0, 0.55);
+      box-shadow: 0 0 48px rgba(255, 77, 0, 0.15), 0 20px 60px rgba(0,0,0,0.8);
     }
 
     .mode-btn.twoplayer {
-      border: 1px solid rgba(80, 160, 255, 0.2);
-      background: rgba(0, 14, 44, 0.72);
-      box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(0, 80, 255, 0.05);
+      border: 1px solid rgba(0, 229, 255, 0.2);
+      background: rgba(0, 6, 22, 0.75);
+      box-shadow: 0 8px 48px rgba(0,0,0,0.7), inset 0 1px 0 rgba(0,229,255,0.05);
     }
     .mode-btn.twoplayer:hover {
-      transform: translateY(-8px) scale(1.04);
-      border-color: rgba(100, 180, 255, 0.5);
-      box-shadow: 0 0 0 1px rgba(80, 160, 255, 0.22), 0 0 32px rgba(0, 100, 255, 0.22), 0 18px 48px rgba(0,0,0,0.7);
+      transform: translateY(-8px) scale(1.03);
+      border-color: rgba(0, 229, 255, 0.45);
+      box-shadow: 0 0 48px rgba(0, 229, 255, 0.12), 0 20px 60px rgba(0,0,0,0.8);
     }
 
     .mode-btn-icon {
-      width: 44px; height: 44px;
+      width: 48px; height: 48px;
       display: flex; align-items: center; justify-content: center;
       transition: filter 0.3s ease;
     }
@@ -1864,281 +2480,166 @@
       opacity: 0.75;
       margin-right: 2px;
     }
-    .mode-btn.realtime  .mode-btn-icon { filter: drop-shadow(0 0 12px rgba(255, 200, 0, 0.65)); }
-    .mode-btn.twoplayer .mode-btn-icon { filter: drop-shadow(0 0 12px rgba(80, 160, 255, 0.65)); }
-    .mode-btn:hover .mode-btn-icon { filter: drop-shadow(0 0 20px currentColor); }
+    .mode-btn.realtime  .mode-btn-icon { filter: drop-shadow(0 0 14px rgba(255,77,0,0.7)); color: #FF4D00; }
+    .mode-btn.twoplayer .mode-btn-icon { filter: drop-shadow(0 0 14px rgba(0,229,255,0.7)); color: #00E5FF; }
 
     .mode-btn-label {
       font-family: 'Cinzel', serif;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
-      letter-spacing: 2.5px;
+      letter-spacing: 3px;
     }
-    .mode-btn.realtime  .mode-btn-label { color: #ffdd60; }
-    .mode-btn.twoplayer .mode-btn-label { color: #7ec8ff; }
+    .mode-btn.realtime  .mode-btn-label { color: #FF4D00; }
+    .mode-btn.twoplayer .mode-btn-label { color: #00E5FF; }
 
     .mode-btn-desc {
       font-size: 10px;
-      line-height: 1.7;
-      letter-spacing: 0.2px;
+      line-height: 1.9;
+      letter-spacing: 0.3px;
     }
-    .mode-btn.realtime  .mode-btn-desc { color: rgba(255, 230, 150, 0.45); }
-    .mode-btn.twoplayer .mode-btn-desc { color: rgba(150, 200, 255, 0.45); }
+    .mode-btn.realtime  .mode-btn-desc { color: rgba(255, 140, 80, 0.5); }
+    .mode-btn.twoplayer .mode-btn-desc { color: rgba(0, 229, 255, 0.4); }
 
     .mode-btn-tag {
-      margin-top: 2px;
-      padding: 4px 14px;
-      border-radius: 20px;
+      margin-top: 4px;
+      padding: 5px 16px;
+      border-radius: 3px;
       font-size: 9px;
       font-weight: 700;
-      letter-spacing: 1.5px;
+      letter-spacing: 2px;
       text-transform: uppercase;
     }
-    .mode-btn.realtime  .mode-btn-tag { border: 1px solid rgba(255, 220, 50, 0.32); color: #ffcc00; }
-    .mode-btn.twoplayer .mode-btn-tag { border: 1px solid rgba(80, 160, 255, 0.32); color: #60b0ff; }
+    .mode-btn.realtime  .mode-btn-tag { border: 1px solid rgba(255,77,0,0.3);   color: #FF4D00; background: rgba(255,77,0,0.06); }
+    .mode-btn.twoplayer .mode-btn-tag { border: 1px solid rgba(0,229,255,0.25); color: #00E5FF; background: rgba(0,229,255,0.05); }
 
     .mode-recommended-badge {
       position: absolute;
-      top: -10px;
+      top: -11px;
       left: 50%;
       transform: translateX(-50%);
-      background: linear-gradient(90deg, #e8b000, #ff8800);
-      color: #000;
+      background: linear-gradient(90deg, #d47000, #ff6a00);
+      color: #fff;
       font-size: 8px;
       font-weight: 800;
       letter-spacing: 1.5px;
-      padding: 3px 12px;
-      border-radius: 10px;
+      padding: 3px 14px;
+      border-radius: 3px;
       white-space: nowrap;
       text-transform: uppercase;
     }
 
     .mode-footer-hint {
       margin-top: 36px;
-      color: rgba(255, 255, 255, 0.14);
+      color: rgba(255, 255, 255, 0.12);
       font-size: 9px;
       letter-spacing: 1.2px;
       text-align: center;
       line-height: 2;
-      position: relative; z-index: 1;
     }
   </style>
 </head>
 <body>
   <!-- ═══ HEADER BAR ═══ -->
   <div id="app-header">
-    <div class="logo" id="header-logo">A2: THE SAGA</div>
-    <div id="lang-selector" style="display:flex;gap:4px;align-items:center;margin-left:auto;margin-right:12px;">
-      <button class="lang-btn" data-lang="tr" style="padding:2px 8px;font-size:11px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#fff;cursor:pointer;font-weight:700;">TR</button>
-      <button class="lang-btn" data-lang="en" style="padding:2px 8px;font-size:11px;background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:rgba(255,255,255,0.5);cursor:pointer;">EN</button>
-      <button class="lang-btn" data-lang="es" style="padding:2px 8px;font-size:11px;background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:rgba(255,255,255,0.5);cursor:pointer;">ES</button>
+    <img class="header-logo-img" id="header-logo" src="/assets/images/logo.png" alt="A2" />
+    <nav class="header-nav">
+      <button class="header-nav-item" id="nav-characters-header" data-i18n="characters">KARAKTERLER</button>
+      <button class="header-nav-item" id="nav-story-header" data-i18n="story">HİKAYE</button>
+    </nav>
+    <div class="header-right">
+      <div id="lang-selector" style="display:flex;gap:4px;align-items:center;">
+        <button class="lang-btn" data-lang="tr" style="padding:2px 8px;font-size:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:#fff;cursor:pointer;font-weight:700;">TR</button>
+        <button class="lang-btn" data-lang="en" style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid rgba(255,255,255,0.08);border-radius:3px;color:rgba(255,255,255,0.4);cursor:pointer;">EN</button>
+        <button class="lang-btn" data-lang="es" style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid rgba(255,255,255,0.08);border-radius:3px;color:rgba(255,255,255,0.4);cursor:pointer;">ES</button>
+      </div>
+      <button id="wallet-btn">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0">
+          <rect x="1" y="4" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <path d="M4 4V3a2 2 0 012-2h4a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <circle cx="11" cy="9" r="1.5" fill="currentColor"/>
+        </svg>
+        <span id="wallet-label" data-i18n="connectWallet">Cüzdan Bağla</span>
+      </button>
     </div>
-    <button id="wallet-btn">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0">
-        <rect x="1" y="4" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/>
-        <path d="M4 4V3a2 2 0 012-2h4a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.5" fill="none"/>
-        <circle cx="11" cy="9" r="1.5" fill="currentColor"/>
-      </svg>
-      <span id="wallet-label" data-i18n="connectWallet">Cüzdan Bağla</span>
-    </button>
   </div>
 
   <!-- ═══ HOME SCREEN ═══ -->
   <div id="home-screen">
+    <div class="home-frame"></div>
     <img class="home-logo-img" src="/assets/images/logo.png" alt="A2 — Alaz & Ayaz" />
     <div class="home-subtitle">THE SAGA OF ALAZ & AYAZ</div>
     <div class="home-tagline" data-i18n="tagline">Türk Mitolojisi · Moba Strateji · Web3</div>
-    <div class="home-divider">
-      <div class="home-divider-diamond"></div>
-    </div>
-    <div class="home-nav">
-      <div class="home-card" id="nav-play">
-        <div class="home-card-icon">
-          <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 31L29 9M27 9h-8v8"/>
-            <path d="M9 31L7 33M5 35l2-2"/>
-            <path d="M17 21l2 2"/>
-            <path d="M31 9L11 29M13 31h8v-8"/>
-            <path d="M31 31l2 2M35 35l-2-2"/>
-          </svg>
-        </div>
-        <div class="home-card-label" data-i18n="play">OYNA</div>
-        <div class="home-card-desc" data-i18n-html="playDesc">Savaşa katıl<br>Ava Shard'ları ele geçir</div>
-      </div>
-      <div class="home-card" id="nav-characters">
-        <div class="home-card-icon">
-          <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 5L33 9.5V22c0 8-13 14-13 14S7 30 7 22V9.5L20 5z" fill="currentColor" fill-opacity="0.1"/>
-            <path d="M20 5L33 9.5V22c0 8-13 14-13 14S7 30 7 22V9.5L20 5z"/>
-            <path d="M20 14v6M17 17h6" stroke-width="1.4" opacity="0.6"/>
-          </svg>
-        </div>
-        <div class="home-card-label" data-i18n="characters">KARAKTERLER</div>
-        <div class="home-card-desc" data-i18n-html="charsDesc">9 efsanevi savaşçıyı<br>keşfet</div>
-      </div>
-      <div class="home-card" id="nav-story">
-        <div class="home-card-icon">
-          <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 32V11M7 34V10l13 2M33 34V10L20 13" fill="currentColor" fill-opacity="0.08"/>
-            <path d="M20 32V11M7 34V10l13 1M33 34V10L20 11"/>
-            <line x1="10" y1="16" x2="17" y2="17" stroke-width="1.2"/>
-            <line x1="10" y1="21" x2="17" y2="22" stroke-width="1.2"/>
-            <line x1="10" y1="26" x2="17" y2="27" stroke-width="1.2"/>
-          </svg>
-        </div>
-        <div class="home-card-label" data-i18n="story">HİKAYE</div>
-        <div class="home-card-desc" data-i18n-html="storyDesc">Alaz & Ayaz<br>destanını oku</div>
-      </div>
-    </div>
+    <button class="home-play-btn" id="nav-play" data-i18n="play">OYNA</button>
   </div>
 
-  <!-- ═══ CHARACTERS SCREEN ═══ -->
+  <!-- ═══ CHARACTERS SCREEN — Draven-style 2K ═══ -->
   <div id="characters-screen">
-    <button class="screen-back-btn" id="chars-back"><span data-i18n="back">← Geri</span></button>
+    <!-- Blurred character background -->
+    <div class="cs-bg" id="cs-bg" style="background-image:url('/assets/images/characters/korhan.png')"></div>
 
-    <div class="char-section-title fire" data-i18n="fireTeam">ATEŞ TAKIMI</div>
-    <div class="char-grid">
-      <div class="char-card fire-card">
-        <img class="char-card-img" src="/assets/images/characters/korhan.png" alt="Korhan" />
-        <div class="char-card-body">
-          <div class="char-card-name">Korhan</div>
-          <div class="char-card-role">Savaşçı · Ateş</div>
-          <div class="char-card-stats">
-            <span style="color:#ff6666"><span class="stat-lbl">HP</span>200</span>
-            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>22</span>
-            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>5</span>
-            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>7</span>
-            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>4</span>
-          </div>
-          <div class="char-card-ability">Iron Armor — Her 3. darbe %40 azaltılır</div>
-        </div>
-      </div>
-      <div class="char-card fire-card">
-        <img class="char-card-img" src="/assets/images/characters/erlik.png" alt="Erlik" />
-        <div class="char-card-body">
-          <div class="char-card-name">Erlik</div>
-          <div class="char-card-role">Büyücü · Ateş</div>
-          <div class="char-card-stats">
-            <span style="color:#ff6666"><span class="stat-lbl">HP</span>110</span>
-            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>32</span>
-            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>1</span>
-            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>5</span>
-            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>5</span>
-          </div>
-          <div class="char-card-ability">Dark Flame — Saldırıda %30 yakma şansı</div>
-        </div>
-      </div>
-      <div class="char-card fire-card">
-        <img class="char-card-img" src="/assets/images/characters/od.png" alt="Od" />
-        <div class="char-card-body">
-          <div class="char-card-name">Od</div>
-          <div class="char-card-role">Büyücü · Ateş</div>
-          <div class="char-card-stats">
-            <span style="color:#ff6666"><span class="stat-lbl">HP</span>120</span>
-            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>28</span>
-            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>1</span>
-            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>6</span>
-            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>7</span>
-          </div>
-          <div class="char-card-ability">Yalın Ateş — %20 şansla +%50 hasar</div>
-        </div>
-      </div>
-    </div>
+    <!-- Outer frame -->
+    <div class="cs-frame"></div>
 
-    <div class="char-section-title ice" data-i18n="iceTeam">BUZ TAKIMI</div>
-    <div class="char-grid">
-      <div class="char-card ice-card">
-        <img class="char-card-img" src="/assets/images/characters/ayaz.png" alt="Ayaz" />
-        <div class="char-card-body">
-          <div class="char-card-name">Ayaz</div>
-          <div class="char-card-role">Savaşçı · Buz</div>
-          <div class="char-card-stats">
-            <span style="color:#ff6666"><span class="stat-lbl">HP</span>220</span>
-            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>18</span>
-            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>6</span>
-            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>6</span>
-            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>3</span>
+    <div class="cs-content">
+      <!-- MAIN AREA -->
+      <div class="cs-main">
+        <!-- LEFT: Name + Class + Lore -->
+        <div class="cs-info-left">
+          <div class="cs-class-badge fire" id="cs-class-badge">SAVAŞÇI</div>
+          <div class="cs-hero-name" id="cs-hero-name">KORHAN</div>
+          <div class="cs-hero-lore" id="cs-hero-lore">
+            <p id="cs-hero-lore-text">Demir zırhlı savaşçı. Her 3. darbe %40 azaltılır. Yavaş ama dayanıklı, cephenin kalesi.</p>
           </div>
-          <div class="char-card-ability">Hoarfrost — 4. saldırıda 2s dondurma</div>
         </div>
-      </div>
-      <div class="char-card ice-card">
-        <img class="char-card-img" src="/assets/images/characters/tulpar.png" alt="Tulpar" />
-        <div class="char-card-body">
-          <div class="char-card-name">Tulpar</div>
-          <div class="char-card-role">Savaşçı · Buz</div>
-          <div class="char-card-stats">
-            <span style="color:#ff6666"><span class="stat-lbl">HP</span>170</span>
-            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>20</span>
-            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>2</span>
-            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>9</span>
-            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>3</span>
-          </div>
-          <div class="char-card-ability">Charge — İlk saldırı 2x hasar</div>
-        </div>
-      </div>
-      <div class="char-card ice-card">
-        <img class="char-card-img" src="/assets/images/characters/umay.png" alt="Umay" />
-        <div class="char-card-body">
-          <div class="char-card-name">Umay</div>
-          <div class="char-card-role">Büyücü · Buz</div>
-          <div class="char-card-stats">
-            <span style="color:#ff6666"><span class="stat-lbl">HP</span>130</span>
-            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>25</span>
-            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>1</span>
-            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>4</span>
-            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>4</span>
-          </div>
-          <div class="char-card-ability">Mercy — En yakın dosta 15HP/5s iyileştirme</div>
-        </div>
-      </div>
-    </div>
 
-    <div class="char-section-title merc">PARALICILAR</div>
-    <div class="char-grid">
-      <div class="char-card merc-card">
-        <img class="char-card-img" src="/assets/images/characters/albasti.png" alt="Albastı" />
-        <div class="char-card-body">
-          <div class="char-card-name">Albastı</div>
-          <div class="char-card-role">Neutral · Paralı</div>
-          <div class="char-card-stats">
-            <span style="color:#ff6666"><span class="stat-lbl">HP</span>150</span>
-            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>26</span>
-            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>3</span>
-            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>7</span>
-            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>4</span>
+        <!-- CENTER: Hero Image -->
+        <div class="cs-hero-center">
+          <div class="cs-hero-glow fire" id="cs-hero-glow"></div>
+          <img class="cs-hero-img" id="cs-hero-img" src="/assets/images/characters/korhan.png" alt="Hero" />
+        </div>
+
+        <!-- RIGHT: Abilities (segmented bars) -->
+        <div class="cs-abilities-right">
+          <div class="cs-abilities-title" data-i18n="csAbilities">YETENEKLERİ</div>
+
+          <div class="cs-seg-stat">
+            <div class="cs-seg-stat-label" data-i18n="csHp">CAN</div>
+            <div class="cs-seg-bar" id="cs-seg-hp"></div>
           </div>
-          <div class="char-card-ability">Kanatları olan doğaüstü varlık</div>
+          <div class="cs-seg-stat">
+            <div class="cs-seg-stat-label" data-i18n="csStrength">GÜÇ</div>
+            <div class="cs-seg-bar" id="cs-seg-atk"></div>
+          </div>
+          <div class="cs-seg-stat">
+            <div class="cs-seg-stat-label" data-i18n="csArmor">ZIRH</div>
+            <div class="cs-seg-bar" id="cs-seg-arm"></div>
+          </div>
+          <div class="cs-seg-stat">
+            <div class="cs-seg-stat-label" data-i18n="csSpeed">HIZ</div>
+            <div class="cs-seg-bar" id="cs-seg-spd"></div>
+          </div>
+
+          <div class="cs-ability-box fire" id="cs-ability-box">
+            <div class="cs-ability-box-title" id="cs-ability-name">Iron Armor</div>
+            <div class="cs-ability-box-desc" id="cs-ability-desc">Her 3. darbe %40 azaltılır</div>
+          </div>
         </div>
       </div>
-      <div class="char-card merc-card">
-        <img class="char-card-img" src="/assets/images/characters/tepegoz.png" alt="Tepegöz" />
-        <div class="char-card-body">
-          <div class="char-card-name">Tepegöz</div>
-          <div class="char-card-role">Büyücü · Paralı</div>
-          <div class="char-card-stats">
-            <span style="color:#ff6666"><span class="stat-lbl">HP</span>260</span>
-            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>18</span>
-            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>8</span>
-            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>4</span>
-            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>5</span>
-          </div>
-          <div class="char-card-ability">Earth Tremor — AOE sersemletme (8s)</div>
-        </div>
-      </div>
-      <div class="char-card merc-card">
-        <img class="char-card-img" src="/assets/images/characters/sahmeran.png" alt="Şahmeran" />
-        <div class="char-card-body">
-          <div class="char-card-name">Şahmeran</div>
-          <div class="char-card-role">Spirit · Paralı</div>
-          <div class="char-card-stats">
-            <span style="color:#ff6666"><span class="stat-lbl">HP</span>140</span>
-            <span style="color:#ffaa44"><span class="stat-lbl">ATK</span>30</span>
-            <span style="color:#88ccff"><span class="stat-lbl">ARM</span>2</span>
-            <span style="color:#aaffaa"><span class="stat-lbl">SPD</span>6</span>
-            <span style="color:#cc99ff"><span class="stat-lbl">MANA</span>5</span>
-          </div>
-          <div class="char-card-ability">Serpent Venom — Her saldırıda zehir</div>
+
+      <!-- BOTTOM BAR -->
+      <div class="cs-bottom">
+        <div class="cs-bottom-left" id="cs-back-lobby" data-i18n="csBackLobby">← LOBIYE DÖN</div>
+
+        <div class="cs-carousel" id="cs-carousel">
+          <div class="cs-carousel-item active fire" data-char="korhan"><img src="/assets/images/characters/korhan.png" alt="Korhan" /></div>
+          <div class="cs-carousel-item fire" data-char="erlik"><img src="/assets/images/characters/erlik.png" alt="Erlik" /></div>
+          <div class="cs-carousel-item fire" data-char="od"><img src="/assets/images/characters/od.png" alt="Od" /></div>
+          <div class="cs-carousel-item ice" data-char="ayaz"><img src="/assets/images/characters/ayaz.png" alt="Ayaz" /></div>
+          <div class="cs-carousel-item ice" data-char="tulpar"><img src="/assets/images/characters/tulpar.png" alt="Tulpar" /></div>
+          <div class="cs-carousel-item ice" data-char="umay"><img src="/assets/images/characters/umay.png" alt="Umay" /></div>
+          <div class="cs-carousel-item merc" data-char="albasti"><img src="/assets/images/characters/albasti.png" alt="Albastı" /></div>
+          <div class="cs-carousel-item merc" data-char="tepegoz"><img src="/assets/images/characters/tepegoz.png" alt="Tepegöz" /></div>
+          <div class="cs-carousel-item merc" data-char="sahmeran"><img src="/assets/images/characters/sahmeran.png" alt="Şahmeran" /></div>
         </div>
       </div>
     </div>
@@ -2146,75 +2647,141 @@
 
   <!-- ═══ STORY SCREEN ═══ -->
   <div id="story-screen">
-    <button class="screen-back-btn" id="story-back"><span data-i18n="back">← Geri</span></button>
-    <div class="story-content">
-      <h2>ALAZ & AYAZ DESTANI</h2>
-      <p>Çok eski zamanlarda, Tengri'nin nefesinden iki kardeş doğdu: <strong style="color:#ff8040">Alaz</strong>, ateşin ruhu ve <strong style="color:#70c8ff">Ayaz</strong>, buzun kalbi. Onlar evrenin dengesini korumak için yaratılmıştı — biri ısı, diğeri soğuk; biri tutkuyla yakar, diğeri sabırla dondurur.</p>
 
-      <h3>Ava Shard'ları</h3>
-      <p>Kadim zamanlardan kalma üç gizemli kristal — <em>Ava Shard'lar</em> — bozkırın ortasında gömülüydü. Bu shard'lar yalnızca güç vermekle kalmaz, onları kontrol eden tarafa stratejik üstünlük sağlar: mana yenilenmesi, hasar artışı ve savaş alanı hakimiyeti.</p>
-
-      <p>Her iki taraf da bu kristalleri ele geçirmek için savaşçılarını gönderir. Kim üç shard'ı da 60 saniye boyunca tutarsa, savaşı kazanır. Ya da... düşman üssünü yıkarak.</p>
-
-      <h3>Ateş Takımı</h3>
-      <p><strong style="color:#ff8040">Korhan</strong>, çelik zırhıyla bilinen efsanevi savaşçı. <strong style="color:#ff8040">Erlik</strong>, yeraltı tanrısının karanlık alevlerini kullanan büyücü. <strong style="color:#ff8040">Od</strong>, saf ateşin ruhunu taşıyan uzun menzilli sihirbaz.</p>
-
-      <h3>Buz Takımı</h3>
-      <p><strong style="color:#70c8ff">Ayaz</strong>, dondurucu soğuğun efendisi ve dayanıklı bir tank. <strong style="color:#70c8ff">Tulpar</strong>, rüzgardan hızlı kanatlı at savaşçısı. <strong style="color:#70c8ff">Umay</strong>, şefkat ve buzun birleştiği şifacı büyücü.</p>
-
-      <h3>Paralıcılar</h3>
-      <p>Savaş alanında sadakat değil, güç konuşur. <strong style="color:#cc99ff">Albastı</strong>, <strong style="color:#cc99ff">Tepegöz</strong> ve <strong style="color:#cc99ff">Şahmeran</strong> — bu üç paralıcı, en yüksek teklifi verene hizmet eder. Her iki takım da onları kendi saflarına katabilir.</p>
-
-      <h3>Denge Savaşı</h3>
-      <p>Ateş ve buz arasındaki denge bozulduğunda, evren kendini korumak için bir <em>Denge Dalgası</em> gönderir — zayıf olan tarafa bonus mana vererek savaşı eşitler. Bu asla tek taraflı bir tahakküm değildir; bu, iki gücün ebedi dansıdır.</p>
+    <!-- Başlık -->
+    <div class="story-header">
+      <div class="story-header-eyebrow" data-i18n="storyEyebrow">Avaland · Kadim Çağlardan Bu Yana</div>
+      <div class="story-header-title" data-i18n="storyTitle">ALAZ &amp; AYAZ DESTANI</div>
     </div>
+
+    <!-- I · Kadim Denge -->
+    <div class="story-act img-right">
+      <div class="story-act-text">
+        <div class="story-act-num" data-i18n="storyAct1Num">Bölüm I · Kadim Çağ</div>
+        <div class="story-act-title" data-i18n="storyAct1Title">Kadim Denge ve Avastone</div>
+        <div class="story-act-body" data-i18n-html="storyAct1Body"></div>
+      </div>
+      <div class="story-act-img dual">
+        <img src="assets/images/characters/od.png" alt="Od">
+        <img src="assets/images/characters/ayaz.png" alt="Ayaz">
+      </div>
+    </div>
+
+    <!-- II · İsyan -->
+    <div class="story-act earth">
+      <div class="story-act-img dual">
+        <img src="assets/images/characters/tepegoz.png" alt="Tepegöz">
+        <img src="assets/images/characters/albasti.png" alt="Albastı">
+      </div>
+      <div class="story-act-text">
+        <div class="story-act-num" data-i18n="storyAct2Num">Bölüm II · İsyan</div>
+        <div class="story-act-title" data-i18n="storyAct2Title">Toprağın İsyanı ve Paralı Askerler</div>
+        <div class="story-act-body" data-i18n-html="storyAct2Body"></div>
+      </div>
+    </div>
+
+    <!-- III · Kırılma -->
+    <div class="story-act blood img-right">
+      <div class="story-act-text">
+        <div class="story-act-num" data-i18n="storyAct3Num">Bölüm III · Kırılma</div>
+        <div class="story-act-title" data-i18n="storyAct3Title">Kırılma ve Başarısız Barış</div>
+        <div class="story-act-body" data-i18n-html="storyAct3Body"></div>
+      </div>
+      <div class="story-act-img">
+        <img src="assets/images/characters/korhan.png" alt="Korhan">
+      </div>
+    </div>
+
+    <!-- IV · Tamag -->
+    <div class="story-act dark">
+      <div class="story-act-img dual">
+        <img src="assets/images/characters/erlik.png" alt="Erlik">
+        <img src="assets/images/characters/korhan.png" alt="Korhan">
+      </div>
+      <div class="story-act-text">
+        <div class="story-act-num" data-i18n="storyAct4Num">Bölüm IV · Ateşin Gazabı</div>
+        <div class="story-act-title" data-i18n="storyAct4Title">Tamag'ın Kapıları Açılıyor</div>
+        <div class="story-act-body" data-i18n-html="storyAct4Body"></div>
+      </div>
+    </div>
+
+    <!-- V · Uçmag -->
+    <div class="story-act ice img-right">
+      <div class="story-act-text">
+        <div class="story-act-num" data-i18n="storyAct5Num">Bölüm V · Buzun Direnişi</div>
+        <div class="story-act-title" data-i18n="storyAct5Title">Uçmag'ın Işığı</div>
+        <div class="story-act-body" data-i18n-html="storyAct5Body"></div>
+      </div>
+      <div class="story-act-img dual">
+        <img src="assets/images/characters/tulpar.png" alt="Tulpar">
+        <img src="assets/images/characters/umay.png" alt="Umay">
+      </div>
+    </div>
+
+    <!-- VI · Son Karar -->
+    <div class="story-act blood">
+      <div class="story-act-img">
+        <img src="assets/images/characters/sahmeran.png" alt="Şahmeran">
+      </div>
+      <div class="story-act-text">
+        <div class="story-act-num" data-i18n="storyAct6Num">Bölüm VI · Son Karar</div>
+        <div class="story-act-title" data-i18n="storyAct6Title">Son Kararlaşma</div>
+        <div class="story-act-body" data-i18n-html="storyAct6Body"></div>
+      </div>
+    </div>
+
+    <!-- Kapanış -->
+    <div class="story-final">
+      <div class="story-final-line f" data-i18n="storyFinalFire">Ateş söner mi bilmem —
+ama yaktığı yeri hiç unutmam.</div>
+      <div class="story-final-line i" data-i18n="storyFinalIce">Buz erir mi bilmem —
+ama dondurduğu kalp çözülmez.</div>
+    </div>
+
   </div>
 
   <!-- ═══ TEAM SELECT SCREEN ═══ -->
   <div id="team-select-screen">
-    <button class="screen-back-btn" id="team-back"><span data-i18n="back">← Geri</span></button>
-    <div class="team-select-title" data-i18n="chooseTeam">Tarafını Seç</div>
-    <div class="team-select-row">
-      <div class="team-pick-card fire-pick" data-team="fire">
-        <div class="team-pick-icon">
-          <svg viewBox="0 0 64 64" fill="none" stroke="#ff7030" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M32 8c0 0 15 15 15 26 0 10-9 17-15 19 4-6 3-12-1-15-4 4-4 10-1 15-7-2-14-10-14-19C17 23 32 8 32 8z" fill="#ff5520" fill-opacity="0.15"/>
-            <path d="M32 8c0 0 15 15 15 26 0 10-9 17-15 19 4-6 3-12-1-15-4 4-4 10-1 15-7-2-14-10-14-19C17 23 32 8 32 8z"/>
-            <path d="M32 30c0 0 6 5 5 11-1 4-5 7-5 7 3-4 2-8-1-9-3 1-3 5-1 9-4-4-4-10 2-18z" fill="#ffa040" fill-opacity="0.35" stroke="none"/>
-          </svg>
+    <div class="team-select-title" data-i18n="chooseTeam">TARAFINI SEÇ</div>
+    <div class="team-split">
+      <div class="team-half fire-half" data-team="fire">
+        <div class="team-half-content">
+          <div class="team-pick-icon">
+            <svg viewBox="0 0 64 64" fill="none" stroke="#ff7030" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M32 8c0 0 15 15 15 26 0 10-9 17-15 19 4-6 3-12-1-15-4 4-4 10-1 15-7-2-14-10-14-19C17 23 32 8 32 8z" fill="#ff5520" fill-opacity="0.15"/>
+              <path d="M32 8c0 0 15 15 15 26 0 10-9 17-15 19 4-6 3-12-1-15-4 4-4 10-1 15-7-2-14-10-14-19C17 23 32 8 32 8z"/>
+            </svg>
+          </div>
+          <div class="team-pick-name" data-i18n="fire">ATEŞ</div>
+          <div class="team-pick-desc">
+            <span data-i18n-html="fireDesc">Korhan · Erlik · Od<br>Yüksek hasar, agresif strateji<br>Yak, yık, fethet</span>
+          </div>
+          <div class="team-pick-tag" data-i18n="fireClan">Alaz Klanı</div>
         </div>
-        <div class="team-pick-name" data-i18n="fire">ATEŞ</div>
-        <div class="team-pick-desc">
-          <span data-i18n-html="fireDesc">Korhan · Erlik · Od<br>Yüksek hasar, agresif strateji<br>Yak, yık, fethet</span>
-        </div>
-        <div class="team-pick-tag" data-i18n="fireClan">Alaz Klanı</div>
       </div>
-      <div class="team-vs-divider">
-        <div class="team-vs-badge">VS</div>
-      </div>
-      <div class="team-pick-card ice-pick" data-team="ice">
-        <div class="team-pick-icon">
-          <svg viewBox="0 0 64 64" fill="none" stroke="#38aaff" stroke-width="1.5" stroke-linecap="round">
-            <line x1="32" y1="7" x2="32" y2="57"/>
-            <line x1="7" y1="32" x2="57" y2="32"/>
-            <line x1="14" y1="14" x2="50" y2="50"/>
-            <line x1="50" y1="14" x2="14" y2="50"/>
-            <circle cx="32" cy="32" r="5" fill="#38aaff" fill-opacity="0.25"/>
-            <circle cx="32" cy="9"  r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
-            <circle cx="32" cy="55" r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
-            <circle cx="9"  cy="32" r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
-            <circle cx="55" cy="32" r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
-            <circle cx="15" cy="15" r="2.5" fill="#38aaff" fill-opacity="0.4" stroke="none"/>
-            <circle cx="49" cy="49" r="2.5" fill="#38aaff" fill-opacity="0.4" stroke="none"/>
-            <circle cx="49" cy="15" r="2.5" fill="#38aaff" fill-opacity="0.4" stroke="none"/>
-            <circle cx="15" cy="49" r="2.5" fill="#38aaff" fill-opacity="0.4" stroke="none"/>
-          </svg>
+      <div class="team-center-line"></div>
+      <div class="team-vs-badge">VS</div>
+      <div class="team-half ice-half" data-team="ice">
+        <div class="team-half-content">
+          <div class="team-pick-icon">
+            <svg viewBox="0 0 64 64" fill="none" stroke="#38aaff" stroke-width="1.5" stroke-linecap="round">
+              <line x1="32" y1="7" x2="32" y2="57"/>
+              <line x1="7" y1="32" x2="57" y2="32"/>
+              <line x1="14" y1="14" x2="50" y2="50"/>
+              <line x1="50" y1="14" x2="14" y2="50"/>
+              <circle cx="32" cy="32" r="5" fill="#38aaff" fill-opacity="0.25"/>
+              <circle cx="32" cy="9"  r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
+              <circle cx="32" cy="55" r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
+              <circle cx="9"  cy="32" r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
+              <circle cx="55" cy="32" r="3" fill="#38aaff" fill-opacity="0.5" stroke="none"/>
+            </svg>
+          </div>
+          <div class="team-pick-name" data-i18n="ice">BUZ</div>
+          <div class="team-pick-desc">
+            <span data-i18n-html="iceDesc">Ayaz · Tulpar · Umay<br>Dayanıklılık, kontrol, sabır<br>Dondur, savun, ilerle</span>
+          </div>
+          <div class="team-pick-tag" data-i18n="iceClan">Ayaz Klanı</div>
         </div>
-        <div class="team-pick-name" data-i18n="ice">BUZ</div>
-        <div class="team-pick-desc">
-          <span data-i18n-html="iceDesc">Ayaz · Tulpar · Umay<br>Dayanıklılık, kontrol, sabır<br>Dondur, savun, ilerle</span>
-        </div>
-        <div class="team-pick-tag" data-i18n="iceClan">Ayaz Klanı</div>
       </div>
     </div>
   </div>
@@ -2232,7 +2799,7 @@
         </svg>
       </div>
       <div class="base-info">
-        <div class="base-label">Ateş Üssü</div>
+        <div class="base-label" data-i18n="fireBase">Ateş Üssü</div>
         <div class="base-bar-track">
           <div class="base-bar-fill" id="fire-base-fill" style="width:100%"></div>
         </div>
@@ -2261,7 +2828,7 @@
         </svg>
       </div>
       <div class="base-info">
-        <div class="base-label">Buz Üssü</div>
+        <div class="base-label" data-i18n="iceBase">Buz Üssü</div>
         <div class="base-bar-track">
           <div class="base-bar-fill" id="ice-base-fill" style="width:100%"></div>
         </div>
@@ -2315,8 +2882,26 @@
 
   <!-- Audio Controls -->
   <div id="audio-controls">
-    <button id="bgm-toggle" title="Music">🎵</button>
-    <input type="range" id="bgm-volume" min="0" max="100" value="30">
+    <button id="audio-settings-btn" title="Audio Settings" aria-label="Audio Settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07M4.93 4.93a10 10 0 0 0 0 14.14M8.46 8.46a5 5 0 0 0 0 7.07"/>
+      </svg>
+    </button>
+    <!-- Panel: tıklayınca açılır -->
+    <div id="audio-panel">
+      <div class="audio-panel-title">SES AYARLARI</div>
+      <div class="audio-row">
+        <span class="audio-row-icon" id="bgm-toggle" title="Music toggle">🎵</span>
+        <span class="audio-row-label">MÜZİK</span>
+        <input type="range" id="bgm-volume" min="0" max="100" value="30">
+      </div>
+      <div class="audio-row">
+        <span class="audio-row-icon" id="sfx-toggle" title="SFX toggle">🔊</span>
+        <span class="audio-row-label">SFX</span>
+        <input type="range" id="sfx-volume" min="0" max="100" value="50">
+      </div>
+    </div>
   </div>
 
   <!-- Debug (sol alt, minimal) -->
@@ -2385,6 +2970,15 @@
         font-size:16px;cursor:pointer;align-self:center;margin-left:4px;
         transition:all 0.15s ease;
       ">✕</button>
+    </div>
+  </div>
+
+  <!-- ═══ WALLET SELECT MODAL ═══ -->
+  <div id="wallet-modal">
+    <div class="wallet-panel">
+      <button class="wallet-panel-close" id="wallet-modal-close">✕</button>
+      <div class="wallet-panel-title" data-i18n="connectWallet">CÜZDAN BAĞLA</div>
+      <div class="wallet-options"></div>
     </div>
   </div>
 
@@ -2459,104 +3053,170 @@
 
   <!-- Win Overlay -->
   <div id="win-overlay">
-    <div id="win-title" class="fire-win">ZAFER!</div>
-    <div id="win-message">Ateş Takımı Kazandı</div>
+    <div id="win-title" class="fire-win" data-i18n="victory">ZAFER!</div>
+    <div id="win-message"></div>
     <div id="win-stats-wrap">
       <table id="win-stats-table">
         <thead>
           <tr>
-            <th>Karakter</th>
-            <th>Takım</th>
-            <th>Çağırıldı</th>
-            <th>Öldü</th>
-            <th>Hayatta</th>
-            <th>En yüksek PoAI</th>
+            <th data-i18n="winStatChar">Karakter</th>
+            <th data-i18n="winStatTeam">Takım</th>
+            <th data-i18n="winStatDep">Çağırıldı</th>
+            <th data-i18n="winStatDead">Öldü</th>
+            <th data-i18n="winStatAlive">Hayatta</th>
+            <th data-i18n="winStatPoai">En Yüksek PoAI</th>
           </tr>
         </thead>
         <tbody id="win-stats-body"></tbody>
       </table>
     </div>
-    <button id="win-restart-btn" onclick="location.reload()">YENİDEN OYNA</button>
+    <button id="win-restart-btn" data-i18n="winReplay" onclick="location.reload()">YENİDEN OYNA</button>
+    <button id="win-home-btn" data-i18n="winHome" style="
+      padding:11px 32px; border-radius:30px;
+      border:1px solid rgba(255,255,255,0.15);
+      background:transparent; color:rgba(255,255,255,0.4);
+      font-family:'Cinzel',serif; font-size:12px;
+      font-weight:700; letter-spacing:2px; cursor:pointer;
+      transition:all 0.2s ease;
+    ">ANA MENÜ</button>
   </div>
 
   <!-- MOD SEÇİM EKRANI -->
   <div id="mode-select">
     <button class="screen-back-btn" id="mode-back"><span data-i18n="back">← Geri</span></button>
 
-    <div class="mode-select-header">
-      <div class="mode-select-logo">A2</div>
-      <div class="mode-select-subtitle" data-i18n="modeTitle">ALAZ & AYAZ · OYUN MODU SEÇ</div>
-    </div>
+    <div class="mode-inner">
+      <div class="mode-select-header">
+        <div class="mode-select-subtitle" data-i18n="modeTitle">ALAZ & AYAZ · OYUN MODU SEÇ</div>
+      </div>
 
-    <div class="mode-cards-row">
+      <div class="mode-cards-row">
 
-      <!-- GERÇEK ZAMANLI -->
-      <button class="mode-btn realtime" data-mode="realtime">
-        <div class="mode-recommended-badge" data-i18n="recommended">ÖNERİLEN</div>
-        <div class="mode-btn-icon">
-          <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M24 5L11 22h10L14 35L29 18H19L24 5z" fill="currentColor" fill-opacity="0.15"/>
-            <path d="M24 5L11 22h10L14 35L29 18H19L24 5z"/>
-          </svg>
-        </div>
-        <div class="mode-btn-label" data-i18n="realtime">GERÇEK ZAMANLI</div>
-        <div class="mode-btn-desc">
-          <span data-i18n-html="realtimeDesc">Mana otomatik dolar.<br>İstediğin an birim yolla.<br>Hızlı tempolu savaş.</span>
-        </div>
-        <div class="mode-btn-tag" data-i18n="vsAi">VS AI</div>
-      </button>
+        <!-- GERÇEK ZAMANLI -->
+        <button class="mode-btn realtime" data-mode="realtime">
+          <div class="mode-recommended-badge" data-i18n="recommended">ÖNERİLEN</div>
+          <div class="mode-btn-icon">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M24 5L11 22h10L14 35L29 18H19L24 5z" fill="currentColor" fill-opacity="0.15"/>
+              <path d="M24 5L11 22h10L14 35L29 18H19L24 5z"/>
+            </svg>
+          </div>
+          <div class="mode-btn-label" data-i18n="realtime">GERÇEK ZAMANLI</div>
+          <div class="mode-btn-desc">
+            <span data-i18n-html="realtimeDesc">Mana otomatik dolar.<br>İstediğin an birim yolla.<br>Hızlı tempolu savaş.</span>
+          </div>
+          <div class="mode-btn-tag" data-i18n="vsAi">VS AI</div>
+        </button>
 
-      <!-- 2 OYUNCULU -->
-      <button class="mode-btn twoplayer" data-mode="twoplayer">
-        <div class="mode-btn-icon">
-          <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="14" cy="13" r="5" fill="currentColor" fill-opacity="0.1"/>
-            <circle cx="14" cy="13" r="5"/>
-            <path d="M4 36c0-6 4-10 10-10s10 4 10 10" fill="currentColor" fill-opacity="0.1"/>
-            <path d="M4 36c0-6 4-10 10-10s10 4 10 10"/>
-            <circle cx="28" cy="11" r="4" fill="currentColor" fill-opacity="0.1"/>
-            <circle cx="28" cy="11" r="4"/>
-            <path d="M22 36c0-5 3-9 8-9s8 4 8 9" fill="currentColor" fill-opacity="0.1"/>
-            <path d="M22 36c0-5 3-9 8-9s8 4 8 9"/>
-          </svg>
-        </div>
-        <div class="mode-btn-label" data-i18n="twoPlayerLabel">2 OYUNCULU</div>
-        <div class="mode-btn-desc">
-          <span data-i18n-html="twoPlayerDesc">Aynı ekran, iki oyuncu.<br>Ateş → Mouse · Buz → Klavye<br>Arkadaşına karşı oyna.</span>
-        </div>
-        <div class="mode-btn-tag" data-i18n="localPvp">LOCAL 2P</div>
-      </button>
+        <!-- 2 OYUNCULU -->
+        <button class="mode-btn twoplayer" data-mode="twoplayer">
+          <div class="mode-btn-icon">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="14" cy="13" r="5" fill="currentColor" fill-opacity="0.1"/>
+              <circle cx="14" cy="13" r="5"/>
+              <path d="M4 36c0-6 4-10 10-10s10 4 10 10" fill="currentColor" fill-opacity="0.1"/>
+              <path d="M4 36c0-6 4-10 10-10s10 4 10 10"/>
+              <circle cx="28" cy="11" r="4" fill="currentColor" fill-opacity="0.1"/>
+              <circle cx="28" cy="11" r="4"/>
+              <path d="M22 36c0-5 3-9 8-9s8 4 8 9" fill="currentColor" fill-opacity="0.1"/>
+              <path d="M22 36c0-5 3-9 8-9s8 4 8 9"/>
+            </svg>
+          </div>
+          <div class="mode-btn-label" data-i18n="twoPlayerLabel">2 OYUNCULU</div>
+          <div class="mode-btn-desc">
+            <span data-i18n-html="twoPlayerDesc">Aynı ekran, iki oyuncu.<br>Ateş → Mouse · Buz → Klavye<br>Arkadaşına karşı oyna.</span>
+          </div>
+          <div class="mode-btn-tag" data-i18n="localPvp">LOCAL 2P</div>
+        </button>
 
-    </div>
+      </div>
 
-    <div class="mode-footer-hint">
-      2 Oyunculu modda: Buz oyuncusu klavye kullanır &nbsp;·&nbsp; 1-4 = Kart seç &nbsp;·&nbsp; Z/X/C = Lane (Sol/Orta/Sağ)
+      <div class="mode-footer-hint" data-i18n="twoPlayerHintFull">
+        2 Oyunculu modda: Buz oyuncusu klavye kullanır · 1-4 = Kart seç · Z/X/C = Lane (Sol/Orta/Sağ)
+      </div>
     </div>
   </div>
 
   <!-- DIFFICULTY SELECT (7 Kat) -->
   <div id="difficulty-select" style="display:none">
+
+    <!-- Arka plan görseller -->
+    <div class="diff-bg-sky"></div>
+    <div class="diff-bg-ground"></div>
+
     <button class="screen-back-btn" id="diff-back"><span data-i18n="back">← Geri</span></button>
-    <div class="diff-header">
-      <div class="diff-title">YERİN YEDİ KATI</div>
-      <div class="diff-lore">
-        Bize göre gökyüzünde 7, yerin altında 7 kat vardır.<br>
-        Artık bu dünya için gökyüzünü hayal etmek zordur...<br>
-        Bu yüzden yerin altındaki hangi cehennemde savaşmak istersin?<br>
-        <span class="diff-warning">Unutma — en alttaki katta, Tamag'ın en dibinde, Erlik Han vardır.</span>
-      </div>
+
+    <!-- gizli: i18n için tutulur -->
+    <div class="diff-header" style="display:none">
+      <div class="diff-title" data-i18n="diffTitle">YERİN YEDİ KATI</div>
+      <div class="diff-lore"><span data-i18n-html="diffLore"></span><span class="diff-warning" data-i18n="diffWarning"></span></div>
     </div>
-    <div class="diff-levels">
-      <button class="diff-btn" data-diff="1"><span class="diff-num">I</span><span class="diff-name">Birinci Kat</span><span class="diff-sub">Gölge Geçidi</span></button>
-      <button class="diff-btn" data-diff="2"><span class="diff-num">II</span><span class="diff-name">İkinci Kat</span><span class="diff-sub">Kara Bozkır</span></button>
-      <button class="diff-btn" data-diff="3"><span class="diff-num">III</span><span class="diff-name">Üçüncü Kat</span><span class="diff-sub">Kemik Ormanı</span></button>
-      <button class="diff-btn" data-diff="4"><span class="diff-num">IV</span><span class="diff-name">Dördüncü Kat</span><span class="diff-sub">Demir Çöl</span></button>
-      <button class="diff-btn" data-diff="5"><span class="diff-num">V</span><span class="diff-name">Beşinci Kat</span><span class="diff-sub">Ateş Uçurumu</span></button>
-      <button class="diff-btn" data-diff="6"><span class="diff-num">VI</span><span class="diff-name">Altıncı Kat</span><span class="diff-sub">Kan Nehri</span></button>
-      <button class="diff-btn" data-diff="7"><span class="diff-num">VII</span><span class="diff-name">Yedinci Kat</span><span class="diff-sub">Erlik Han'ın Tahtı</span></button>
+
+    <div class="diff-world-col">
+
+      <!-- GÖKYÜZÜ — tıklanınca açılan mesaj -->
+      <div class="diff-sky-btn-wrap">
+        <button class="diff-sky-btn" id="diff-sky">
+          <span class="diff-sky-icon">☁</span>
+          <span class="diff-sky-name">GÖKYÜZÜ</span>
+        </button>
+        <div class="diff-sky-toast">
+          <span data-i18n="skyToastMain">Artık bu dünya için bir gökyüzü kalmadı.</span><br>
+          <span class="diff-sky-toast-sub" data-i18n="skyToastSub">Tamag'ın 7. katından başka çıkış yok.</span>
+        </div>
+      </div>
+
+      <!-- YERYÜZÜ SINIRI -->
+      <div class="diff-surface-line">
+        <span class="diff-surface-label">Yeryüzü</span>
+      </div>
+
+      <!-- 7 KAT -->
+      <div class="diff-levels">
+        <button class="diff-btn" data-diff="1">
+          <span class="diff-num">I</span>
+          <span class="diff-name" data-i18n="diff1Name">Birinci Kat</span>
+          <span class="diff-sub" data-i18n="diff1Sub">Gölge Geçidi</span>
+        </button>
+        <button class="diff-btn" data-diff="2">
+          <span class="diff-num">II</span>
+          <span class="diff-name" data-i18n="diff2Name">İkinci Kat</span>
+          <span class="diff-sub" data-i18n="diff2Sub">Kara Bozkır</span>
+        </button>
+        <button class="diff-btn" data-diff="3">
+          <span class="diff-num">III</span>
+          <span class="diff-name" data-i18n="diff3Name">Üçüncü Kat</span>
+          <span class="diff-sub" data-i18n="diff3Sub">Kemik Ormanı</span>
+        </button>
+        <button class="diff-btn" data-diff="4">
+          <span class="diff-num">IV</span>
+          <span class="diff-name" data-i18n="diff4Name">Dördüncü Kat</span>
+          <span class="diff-sub" data-i18n="diff4Sub">Demir Çöl</span>
+        </button>
+        <button class="diff-btn" data-diff="5">
+          <span class="diff-num">V</span>
+          <span class="diff-name" data-i18n="diff5Name">Beşinci Kat</span>
+          <span class="diff-sub" data-i18n="diff5Sub">Ateş Uçurumu</span>
+        </button>
+        <button class="diff-btn" data-diff="6">
+          <span class="diff-num">VI</span>
+          <span class="diff-name" data-i18n="diff6Name">Altıncı Kat</span>
+          <span class="diff-sub" data-i18n="diff6Sub">Kan Nehri</span>
+        </button>
+        <button class="diff-btn" data-diff="7">
+          <span class="diff-num">VII</span>
+          <span class="diff-name" data-i18n="diff7Name">Yedinci Kat</span>
+          <span class="diff-sub" data-i18n="diff7Sub">Erlik Han'ın Tahtı</span>
+        </button>
+      </div>
+
+      <!-- TAMAG DİBİ -->
+      <div class="diff-bottom-line">
+        <span class="diff-bottom-label">Tamag · Erlik Han'ın Tahtı</span>
+      </div>
+
     </div>
   </div>
-
   <!-- ICE PLAYER CARDS (2 oyunculu mod için üstte) -->
   <div id="ice-card-tray" style="display:none; position:fixed; top:60px; left:0; right:0; z-index:200; display:none; flex-direction:column; align-items:center; pointer-events:none;">
     <div id="ice-card-area" style="
@@ -2603,15 +3263,22 @@
   <!-- LOADING SCREEN -->
   <div id="loading-screen" style="
     display:none; position:fixed; inset:0; z-index:10000;
-    background:radial-gradient(ellipse at center, #0a0818 0%, #03020c 100%);
-    flex-direction:column; align-items:center; justify-content:center; gap:20px;
+    background: #0a0a0f;
+    flex-direction:column; align-items:center; justify-content:center; gap:24px;
+    overflow: hidden;
   ">
-    <div style="font-family:'Cinzel',serif; font-size:42px; font-weight:900; color:#fff; letter-spacing:4px; text-shadow:0 0 30px rgba(155,95,230,0.5);">A2</div>
-    <div data-i18n="loading" style="font-family:'Inter',sans-serif; font-size:14px; color:rgba(200,180,255,0.7); letter-spacing:1px;">YÜKLENIYOR</div>
-    <div style="width:240px; height:4px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden;">
-      <div id="loading-bar" style="width:0%; height:100%; background:linear-gradient(90deg,#9b5fe6,#ff5520); border-radius:2px; transition:width 0.3s ease;"></div>
+    <!-- Ambient glow -->
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 50%, rgba(255,77,0,0.06) 0%, transparent 60%);pointer-events:none;"></div>
+    <!-- Logo -->
+    <img src="/assets/images/logo.png" alt="A2" style="width:120px;height:auto;filter:drop-shadow(0 0 30px rgba(255,110,20,0.5));position:relative;z-index:1;animation:float 5s ease-in-out infinite;" />
+    <!-- Subtitle -->
+    <div style="font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:7px;color:rgba(255,255,255,0.2);position:relative;z-index:1;">THE SAGA OF ALAZ & AYAZ</div>
+    <!-- Progress bar -->
+    <div style="width:200px;height:2px;background:rgba(255,255,255,0.06);border-radius:1px;overflow:hidden;position:relative;z-index:1;">
+      <div id="loading-bar" style="width:0%;height:100%;background:linear-gradient(90deg,#FF4D00,#ff8040);border-radius:1px;transition:width 0.3s ease;"></div>
     </div>
-    <div id="loading-status" style="font-family:'Inter',sans-serif; font-size:11px; color:rgba(200,180,255,0.4);"></div>
+    <!-- Status text -->
+    <div id="loading-status" data-i18n="loading" style="font-family:'Inter',sans-serif;font-size:10px;letter-spacing:2px;color:rgba(255,255,255,0.25);position:relative;z-index:1;">YÜKLENIYOR</div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
