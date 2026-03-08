@@ -23,8 +23,8 @@ const ethers = (window as any).ethers;
 import { kiteService, KiteService } from './ai/KiteService';
 // Register character abilities at startup
 import './ecs/abilities/characterAbilities';
-import { t, setLang, getLang, Lang } from './i18n';
-import { switchBGM, lowerBGMForGame, setBGMVolume, toggleBGMMute, getBGMVolume, isBGMMuted, playCoinDrop, playCoinCollect, preloadSFX } from './audio/SoundManager';
+import { t, setLang, getLang, Lang, TransKey } from './i18n';
+import { switchBGM, lowerBGMForGame, setBGMVolume, toggleBGMMute, getBGMVolume, isBGMMuted, setSFXVolume, toggleSFXMute, getSFXVolume, isSFXMuted, playCoinDrop, playCoinCollect, preloadSFX } from './audio/SoundManager';
 import { profileService } from './chain/ProfileService';
 
 // ─── DOM REFS ─────────────────────────────────────────────────────────
@@ -84,6 +84,7 @@ function showScreen(screen: Screen): void {
     switch (screen) {
         case 'home':
             homeScreen.style.display = 'flex';
+            switchBGM('/assets/sound/storymusic.mp3', 0.25);
             break;
         case 'characters':
             charactersScreen.style.display = 'flex';
@@ -95,9 +96,11 @@ function showScreen(screen: Screen): void {
             break;
         case 'team-select':
             teamSelectScreen.style.display = 'flex';
+            switchBGM('/assets/sound/storymusic.mp3', 0.25);
             break;
         case 'mode-select':
             modeSelectEl.style.display = 'flex';
+            updateModeSelectTeamBadge();
             break;
         case 'game':
             break;
@@ -114,44 +117,158 @@ const FUJI_CHAIN = {
 };
 
 let walletAddress: string | null = null;
+let _activeProvider: any = null;
 
-async function connectWallet(): Promise<void> {
-    const ethereum = (window as any).ethereum;
-    if (!ethereum) {
-        alert('MetaMask bulunamadı! Lütfen MetaMask yükleyin.');
+// ─── EIP-6963 WALLET DISCOVERY ──────────────────────────────────────
+interface EIP6963Provider {
+    info: { uuid: string; name: string; icon: string; rdns: string };
+    provider: any;
+}
+
+const discoveredWallets: EIP6963Provider[] = [];
+
+window.addEventListener('eip6963:announceProvider', ((e: CustomEvent) => {
+    const detail = e.detail as EIP6963Provider;
+    // Phantom isMetaMask=true diyor, rdns ile ayırt et
+    if (!discoveredWallets.find(w => w.info.rdns === detail.info.rdns)) {
+        discoveredWallets.push(detail);
+    }
+}) as EventListener);
+
+// Keşfi başlat
+window.dispatchEvent(new Event('eip6963:requestProvider'));
+
+// ─── WALLET SELECT MODAL ────────────────────────────────────────────
+const walletModal = document.getElementById('wallet-modal')!;
+const walletModalClose = document.getElementById('wallet-modal-close')!;
+const walletOptionsDiv = walletModal.querySelector('.wallet-options')!;
+
+function showWalletModal() {
+    walletOptionsDiv.innerHTML = '';
+
+    if (discoveredWallets.length === 0) {
+        // Hiç cüzdan bulunamadı
+        walletOptionsDiv.innerHTML = `
+            <div style="text-align:center;padding:20px 0;">
+                <div style="font-size:36px;margin-bottom:12px;">🔗</div>
+                <div style="color:rgba(255,255,255,0.5);font-size:13px;margin-bottom:16px;">Cüzdan bulunamadı</div>
+                <a href="https://metamask.io/download/" target="_blank" class="profile-btn" style="display:block;text-decoration:none;text-align:center;">MetaMask İndir</a>
+            </div>`;
+    } else {
+        // Keşfedilen cüzdanları listele
+        for (const w of discoveredWallets) {
+            const opt = document.createElement('div');
+            opt.className = 'wallet-option detected';
+            opt.innerHTML = `
+                <img src="${w.info.icon}" class="wallet-option-icon" style="width:36px;height:36px;border-radius:8px;" alt="${w.info.name}" />
+                <div class="wallet-option-info">
+                    <div class="wallet-option-name">${w.info.name}</div>
+                    <div class="wallet-option-desc">${w.info.rdns}</div>
+                </div>
+                <div class="wallet-option-arrow">›</div>`;
+            opt.addEventListener('click', async () => {
+                walletModal.classList.remove('show');
+                await connectWithProvider(w.provider);
+            });
+            walletOptionsDiv.appendChild(opt);
+        }
+    }
+
+    walletModal.classList.add('show');
+}
+
+walletModalClose.addEventListener('click', () => walletModal.classList.remove('show'));
+walletModal.addEventListener('click', (e) => {
+    if (e.target === walletModal) walletModal.classList.remove('show');
+});
+
+// ─── WRONG CHAIN DETECTION ──────────────────────────────────────────
+async function ensureFujiChain(provider: any): Promise<boolean> {
+    try {
+        const chainId = await provider.request({ method: 'eth_chainId' });
+        if (chainId === FUJI_CHAIN.chainId) return true;
+
+        // Wrong chain — switch
+        try {
+            await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: FUJI_CHAIN.chainId }] });
+            return true;
+        } catch (switchErr: any) {
+            if (switchErr.code === 4902) {
+                await provider.request({ method: 'wallet_addEthereumChain', params: [FUJI_CHAIN] });
+                return true;
+            }
+            throw switchErr;
+        }
+    } catch (err: any) {
+        console.error('Chain switch failed:', err);
+        return false;
+    }
+}
+
+async function connectWithProvider(provider: any): Promise<void> {
+    const _ethers = (window as any).ethers;
+    if (!_ethers) {
+        alert('ethers kütüphanesi yüklenemedi!');
         return;
     }
 
     try {
-        const provider = new ethers.BrowserProvider(ethereum);
+        await provider.request({ method: 'eth_requestAccounts' });
 
-        // Request account access
-        const accounts = await provider.send('eth_requestAccounts', []);
-        if (!accounts.length) return;
-
-        // Switch to Fuji or add it
-        try {
-            await provider.send('wallet_switchEthereumChain', [{ chainId: FUJI_CHAIN.chainId }]);
-        } catch (switchErr: any) {
-            if (switchErr.code === 4902) {
-                await provider.send('wallet_addEthereumChain', [FUJI_CHAIN]);
-            } else {
-                throw switchErr;
-            }
+        // Chain kontrolü
+        const onFuji = await ensureFujiChain(provider);
+        if (!onFuji) {
+            walletLabel.textContent = '⚠ Wrong Chain';
+            walletBtn.classList.add('connected');
+            walletBtn.style.borderColor = 'rgba(255,180,0,0.5)';
+            walletBtn.style.color = '#ffaa00';
+            return;
         }
 
-        // Re-create provider after chain switch
-        const freshProvider = new ethers.BrowserProvider(ethereum);
-        const signer = await freshProvider.getSigner();
+        _activeProvider = provider;
+        const ethProvider = new _ethers.BrowserProvider(provider);
+        const signer = await ethProvider.getSigner();
         walletAddress = await signer.getAddress();
-        (window as any).__walletAddress = walletAddress; // Kite chain erişimi için
-        const balance = await freshProvider.getBalance(walletAddress);
-        const balStr = parseFloat(ethers.formatEther(balance)).toFixed(3);
+        (window as any).__walletAddress = walletAddress;
+        const balance = await ethProvider.getBalance(walletAddress);
+        const balStr = parseFloat(_ethers.formatEther(balance)).toFixed(3);
 
         // Update UI
-        const short = walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4);
+        const short = walletAddress!.slice(0, 6) + '...' + walletAddress!.slice(-4);
         walletLabel.textContent = `${short} · ${balStr} AVAX`;
         walletBtn.classList.add('connected');
+        walletBtn.style.borderColor = '';
+        walletBtn.style.color = '';
+
+        // Chain değişikliğini dinle
+        provider.on?.('chainChanged', async (newChainId: string) => {
+            if (newChainId !== FUJI_CHAIN.chainId) {
+                walletLabel.textContent = '⚠ Wrong Chain';
+                walletBtn.style.borderColor = 'rgba(255,180,0,0.5)';
+                walletBtn.style.color = '#ffaa00';
+            } else {
+                // Doğru chain'e döndü, bilgileri güncelle
+                const ep = new _ethers.BrowserProvider(provider);
+                const s = await ep.getSigner();
+                const bal = await ep.getBalance(await s.getAddress());
+                const bs = parseFloat(_ethers.formatEther(bal)).toFixed(3);
+                const sh = walletAddress!.slice(0, 6) + '...' + walletAddress!.slice(-4);
+                walletLabel.textContent = `${sh} · ${bs} AVAX`;
+                walletBtn.style.borderColor = '';
+                walletBtn.style.color = '';
+            }
+        });
+
+        // Hesap değişikliğini dinle
+        provider.on?.('accountsChanged', (accounts: string[]) => {
+            if (!accounts.length) {
+                walletAddress = null;
+                walletLabel.textContent = t('connectWallet' as any);
+                walletBtn.classList.remove('connected');
+            } else {
+                location.reload();
+            }
+        });
     } catch (err: any) {
         console.error('Wallet connection failed:', err);
         alert('Cüzdan bağlantısı başarısız: ' + (err.message || err));
@@ -160,7 +277,14 @@ async function connectWallet(): Promise<void> {
 
 walletBtn.addEventListener('click', () => {
     if (!walletAddress) {
-        connectWallet().catch(console.error);
+        // Wrong chain durumunda tıklayınca düzelt
+        if (walletLabel.textContent === '⚠ Wrong Chain' && _activeProvider) {
+            ensureFujiChain(_activeProvider).then(ok => {
+                if (ok) connectWithProvider(_activeProvider);
+            });
+            return;
+        }
+        showWalletModal();
     } else {
         openProfileModal();
     }
@@ -173,7 +297,7 @@ const profileRegisterDiv = document.getElementById('profile-register')!;
 const profileViewDiv = document.getElementById('profile-view')!;
 const profileNotConnected = document.getElementById('profile-not-connected')!;
 const profileConnectBtn = document.getElementById('profile-connect-btn')!;
-const profileRegisterBtn = document.getElementById('profile-register-btn')!;
+const profileRegisterBtn = document.getElementById('profile-register-btn') as HTMLButtonElement;
 const profileNameInput = document.getElementById('profile-name-input') as HTMLInputElement;
 const profileAvatarInput = document.getElementById('profile-avatar-input') as HTMLInputElement;
 const avatarPreview = document.getElementById('avatar-preview') as HTMLImageElement;
@@ -185,9 +309,9 @@ profileModal.addEventListener('click', (e) => {
     if (e.target === profileModal) profileModal.classList.remove('show');
 });
 
-profileConnectBtn.addEventListener('click', async () => {
-    await connectWallet();
-    if (walletAddress) openProfileModal();
+profileConnectBtn.addEventListener('click', () => {
+    profileModal.classList.remove('show');
+    showWalletModal();
 });
 
 profileAvatarInput.addEventListener('input', () => {
@@ -289,20 +413,140 @@ async function openProfileModal() {
 // ─── TEAM SELECTION ──────────────────────────────────────────────────
 let selectedTeam: 'fire' | 'ice' = 'fire';
 
-document.querySelectorAll<HTMLElement>('.team-pick-card').forEach(card => {
+document.querySelectorAll<HTMLElement>('.team-half').forEach(card => {
     card.addEventListener('click', () => {
         selectedTeam = card.dataset.team as 'fire' | 'ice';
         showScreen('mode-select');
     });
 });
 
+// Update mode-select screen with selected team indicator
+function updateModeSelectTeamBadge(): void {
+    let badge = document.getElementById('mode-team-badge');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'mode-team-badge';
+        badge.style.cssText = `
+            display:inline-flex; align-items:center; gap:8px;
+            font-family:'Cinzel',serif; font-size:11px;
+            font-weight:700; letter-spacing:2px;
+            padding:5px 14px; border-radius:3px;
+            text-transform:uppercase;
+            margin-top:12px;
+        `;
+        const header = document.querySelector('.mode-select-header');
+        if (header) header.appendChild(badge);
+    }
+    if (selectedTeam === 'fire') {
+        badge.style.color = '#FF4D00';
+        badge.style.background = 'rgba(255,77,0,0.1)';
+        badge.style.border = '1px solid rgba(255,77,0,0.3)';
+        badge.innerHTML = 'Ateş Klanı';
+    } else {
+        badge.style.color = '#00E5FF';
+        badge.style.background = 'rgba(0,229,255,0.08)';
+        badge.style.border = '1px solid rgba(0,229,255,0.25)';
+        badge.innerHTML = 'Buz Klanı';
+    }
+}
+
 // ─── NAV WIRING ─────────────────────────────────────────────────────
 document.getElementById('nav-play')!.addEventListener('click', () => showScreen('team-select'));
-document.getElementById('nav-characters')!.addEventListener('click', () => showScreen('characters'));
-document.getElementById('nav-story')!.addEventListener('click', () => showScreen('story'));
-document.getElementById('chars-back')!.addEventListener('click', () => showScreen('home'));
-document.getElementById('story-back')!.addEventListener('click', () => showScreen('home'));
-document.getElementById('team-back')!.addEventListener('click', () => showScreen('home'));
+
+// Header nav items
+document.getElementById('nav-characters-header')?.addEventListener('click', () => showScreen('characters'));
+document.getElementById('nav-story-header')?.addEventListener('click', () => showScreen('story'));
+document.getElementById('header-logo')?.addEventListener('click', () => showScreen('home'));
+
+// ─── CHARACTER SELECT SCREEN LOGIC ──────────────────────────────────
+const CS_DATA: Record<string, {
+    name: string; roleKey: TransKey; faction: 'fire' | 'ice' | 'merc';
+    hp: number; atk: number; arm: number; spd: number;
+    abilityNameKey: TransKey; abilityDescKey: TransKey; loreKey: TransKey;
+}> = {
+    korhan:   { name: 'KORHAN',   roleKey: 'roleWarrior', faction: 'fire', hp: 220, atk: 24, arm: 8,  spd: 4,  abilityNameKey: 'korhanAbilName',   abilityDescKey: 'korhanAbilDesc',   loreKey: 'korhanLore'   },
+    erlik:    { name: 'ERLİK',    roleKey: 'roleMage',    faction: 'fire', hp: 100, atk: 35, arm: 1,  spd: 7,  abilityNameKey: 'erlikAbilName',    abilityDescKey: 'erlikAbilDesc',    loreKey: 'erlikLore'    },
+    od:       { name: 'OD',       roleKey: 'roleSupport', faction: 'fire', hp: 70,  atk: 0,  arm: 2,  spd: 10, abilityNameKey: 'odAbilName',       abilityDescKey: 'odAbilDesc',       loreKey: 'odLore'       },
+    ayaz:     { name: 'AYAZ',     roleKey: 'roleWarrior', faction: 'ice',  hp: 240, atk: 18, arm: 10, spd: 3,  abilityNameKey: 'ayazAbilName',     abilityDescKey: 'ayazAbilDesc',     loreKey: 'ayazLore'     },
+    tulpar:   { name: 'TULPAR',   roleKey: 'roleSupport', faction: 'ice',  hp: 70,  atk: 0,  arm: 1,  spd: 10, abilityNameKey: 'tulparAbilName',   abilityDescKey: 'tulparAbilDesc',   loreKey: 'tulparLore'   },
+    umay:     { name: 'UMAY',     roleKey: 'roleMage',    faction: 'ice',  hp: 120, atk: 22, arm: 2,  spd: 5,  abilityNameKey: 'umayAbilName',     abilityDescKey: 'umayAbilDesc',     loreKey: 'umayLore'     },
+    albasti:  { name: 'ALBASTI',  roleKey: 'roleNeutral', faction: 'merc', hp: 140, atk: 26, arm: 2,  spd: 8,  abilityNameKey: 'albastiAbilName',  abilityDescKey: 'albastiAbilDesc',  loreKey: 'albastiLore'  },
+    tepegoz:  { name: 'TEPEGÖZ',  roleKey: 'roleTank',    faction: 'merc', hp: 300, atk: 20, arm: 12, spd: 3,  abilityNameKey: 'tepegozAbilName',  abilityDescKey: 'tepegozAbilDesc',  loreKey: 'tepegozLore'  },
+    sahmeran: { name: 'ŞAHMERAN', roleKey: 'rolePoisoner',faction: 'merc', hp: 130, atk: 32, arm: 1,  spd: 7,  abilityNameKey: 'sahmeranAbilName', abilityDescKey: 'sahmeranAbilDesc', loreKey: 'sahmeranLore' },
+};
+
+const CS_MAX = { hp: 300, atk: 35, arm: 12, spd: 10 };
+const CS_BLOCKS = 12; // segmented bar block count
+
+function buildSegBar(containerId: string, value: number, max: number, faction: string) {
+    const el = document.getElementById(containerId)!;
+    const filled = Math.round((value / max) * CS_BLOCKS);
+    el.innerHTML = '';
+    for (let i = 0; i < CS_BLOCKS; i++) {
+        const block = document.createElement('div');
+        block.className = i < filled ? `cs-seg-block filled ${faction}` : 'cs-seg-block empty';
+        el.appendChild(block);
+    }
+}
+
+// ─── CHARACTER SELECT ────────────────────────────────────────────────
+let currentCharId = 'korhan';
+
+function selectCharacter(charId: string) {
+    currentCharId = charId;
+    const d = CS_DATA[charId];
+    if (!d) return;
+
+    const f = d.faction;
+    const imgUrl = `/assets/images/characters/${charId}.png`;
+
+    // Background blur
+    (document.getElementById('cs-bg')! as HTMLElement).style.backgroundImage = `url('${imgUrl}')`;
+
+    // Hero image
+    (document.getElementById('cs-hero-img') as HTMLImageElement).src = imgUrl;
+
+    // Glow
+    document.getElementById('cs-hero-glow')!.className = 'cs-hero-glow ' + f;
+
+    // Left: class badge, name, lore
+    const badge = document.getElementById('cs-class-badge')!;
+    badge.className = 'cs-class-badge ' + f;
+    badge.innerHTML = `${t(d.roleKey)}`;
+
+    document.getElementById('cs-hero-name')!.textContent = d.name;
+    document.getElementById('cs-hero-lore-text')!.textContent = t(d.loreKey);
+
+    // Right: segmented bars
+    buildSegBar('cs-seg-hp', d.hp, CS_MAX.hp, f);
+    buildSegBar('cs-seg-atk', d.atk, CS_MAX.atk, f);
+    buildSegBar('cs-seg-arm', d.arm, CS_MAX.arm, f);
+    buildSegBar('cs-seg-spd', d.spd, CS_MAX.spd, f);
+
+    // Ability box
+    const abilBox = document.getElementById('cs-ability-box')!;
+    abilBox.className = 'cs-ability-box ' + f;
+    document.getElementById('cs-ability-name')!.textContent = t(d.abilityNameKey);
+    document.getElementById('cs-ability-desc')!.textContent = t(d.abilityDescKey);
+
+    // Carousel active
+    document.querySelectorAll<HTMLElement>('.cs-carousel-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.char === charId) item.classList.add('active');
+    });
+}
+
+// Wire carousel clicks
+document.querySelectorAll<HTMLElement>('.cs-carousel-item').forEach(item => {
+    item.addEventListener('click', () => selectCharacter(item.dataset.char!));
+});
+
+// Back to lobby from bottom
+document.getElementById('cs-back-lobby')?.addEventListener('click', () => showScreen('home'));
+
+// Default selection
+selectCharacter('korhan');
+
 document.getElementById('header-logo')!.addEventListener('click', () => showScreen('home'));
 document.getElementById('mode-back')!.addEventListener('click', () => showScreen('team-select'));
 
@@ -357,8 +601,18 @@ document.querySelectorAll<HTMLButtonElement>('.diff-btn').forEach(btn => {
         showScreen('game');
         boot('realtime').catch(console.error);
     });
-    btn.addEventListener('mouseenter', () => { btn.style.transform = 'translateX(8px)'; });
-    btn.addEventListener('mouseleave', () => { btn.style.transform = ''; });
+});
+
+// Gökyüzü butonu — ironik mesaj toast olarak açılır/kapanır
+document.getElementById('diff-sky')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const wrap = document.getElementById('diff-sky')!.closest('.diff-sky-btn-wrap')!;
+    wrap.classList.toggle('revealed');
+});
+
+// Toast dışına tıklanınca kapat
+document.addEventListener('click', () => {
+    document.querySelector('.diff-sky-btn-wrap.revealed')?.classList.remove('revealed');
 });
 
 document.getElementById('diff-back')?.addEventListener('click', () => {
@@ -368,19 +622,63 @@ document.getElementById('diff-back')?.addEventListener('click', () => {
 
 // ─── AUDIO CONTROLS ──────────────────────────────────────────────────
 function setupAudioControls(): void {
-    const bgmBtn = document.getElementById('bgm-toggle') as HTMLButtonElement | null;
-    const bgmSlider = document.getElementById('bgm-volume') as HTMLInputElement | null;
+    const wrapper    = document.getElementById('audio-controls')!;
+    const settingsBtn = document.getElementById('audio-settings-btn')!;
+    const bgmIcon    = document.getElementById('bgm-toggle') as HTMLElement;
+    const bgmSlider  = document.getElementById('bgm-volume') as HTMLInputElement;
+    const sfxIcon    = document.getElementById('sfx-toggle') as HTMLElement;
+    const sfxSlider  = document.getElementById('sfx-volume') as HTMLInputElement;
 
-    if (bgmBtn) {
-        bgmBtn.addEventListener('click', () => {
-            const muted = toggleBGMMute();
-            bgmBtn.textContent = muted ? '🔇' : '🎵';
-        });
-    }
+    // ── Ayar butonu: paneli aç/kapat ──
+    settingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        wrapper.classList.toggle('open');
+    });
+
+    // ── Dışarı tıklanınca kapat ──
+    document.addEventListener('click', (e) => {
+        if (!wrapper.contains(e.target as Node)) {
+            wrapper.classList.remove('open');
+        }
+    });
+
+    // ── BGM ──
     if (bgmSlider) {
-        bgmSlider.value = String(getBGMVolume() * 100);
+        bgmSlider.value = String(Math.round(getBGMVolume() * 100));
         bgmSlider.addEventListener('input', () => {
             setBGMVolume(Number(bgmSlider.value) / 100);
+            if (isBGMMuted() && Number(bgmSlider.value) > 0) {
+                toggleBGMMute();
+                bgmIcon.textContent = '🎵';
+                bgmIcon.classList.remove('muted');
+            }
+        });
+    }
+    if (bgmIcon) {
+        bgmIcon.addEventListener('click', () => {
+            const muted = toggleBGMMute();
+            bgmIcon.textContent = muted ? '🔇' : '🎵';
+            bgmIcon.classList.toggle('muted', muted);
+        });
+    }
+
+    // ── SFX ──
+    if (sfxSlider) {
+        sfxSlider.value = String(Math.round(getSFXVolume() * 100));
+        sfxSlider.addEventListener('input', () => {
+            setSFXVolume(Number(sfxSlider.value) / 100);
+            if (isSFXMuted() && Number(sfxSlider.value) > 0) {
+                toggleSFXMute();
+                sfxIcon.textContent = '🔊';
+                sfxIcon.classList.remove('muted');
+            }
+        });
+    }
+    if (sfxIcon) {
+        sfxIcon.addEventListener('click', () => {
+            const muted = toggleSFXMute();
+            sfxIcon.textContent = muted ? '🔇' : '🔊';
+            sfxIcon.classList.toggle('muted', muted);
         });
     }
 }
@@ -853,9 +1151,25 @@ const UNIT_TR_NAMES: Record<string, string> = {
 
 function showWinScreen(sys: WinConditionSystem): void {
     const winner = sys.getWinner();
-    winTitle.textContent = t('victory');
+    const playerWon = winner === selectedTeam;
+
+    // Kazanma / kaybetme başlığı
+    winTitle.textContent = playerWon ? t('victory') : t('defeat');
     winTitle.className = winner === 'fire' ? 'fire-win' : 'ice-win';
     winMessage.textContent = sys.getWinMessage();
+
+    // Stats tablo başlıkları
+    const thead = document.querySelector('#win-stats-table thead tr');
+    if (thead) {
+        thead.innerHTML = `
+            <th>${t('winStatChar')}</th>
+            <th>${t('winStatTeam')}</th>
+            <th>${t('winStatDep')}</th>
+            <th>${t('winStatDead')}</th>
+            <th>${t('winStatAlive')}</th>
+            <th>${t('winStatPoai')}</th>
+        `;
+    }
 
     // Fill stats table
     if (_um) {
@@ -863,7 +1177,6 @@ function showWinScreen(sys: WinConditionSystem): void {
         const tbody = document.getElementById('win-stats-body')!;
         tbody.innerHTML = '';
 
-        // Sort: fire first, then ice; alphabetical within team
         const rows = Object.entries(stats).sort(([a], [b]) => a.localeCompare(b));
 
         for (const [key, s] of rows) {
@@ -873,7 +1186,7 @@ function showWinScreen(sys: WinConditionSystem): void {
             tr.className = s.team === 'fire' ? 'team-fire' : 'team-ice';
             tr.innerHTML = `
                 <td class="stat-name">${UNIT_TR_NAMES[type] ?? type}</td>
-                <td>${s.team === 'fire' ? '🔥 Ateş' : '❄️ Buz'}</td>
+                <td>${s.team === 'fire' ? t('teamFire') : t('teamIce')}</td>
                 <td>${s.deployed}</td>
                 <td class="${s.deaths > 0 ? 'stat-dead' : 'stat-zero'}">${s.deaths}</td>
                 <td class="${alive > 0 ? 'stat-alive' : 'stat-zero'}">${alive}</td>
@@ -883,10 +1196,23 @@ function showWinScreen(sys: WinConditionSystem): void {
         }
     }
 
+    // Buton metinleri
+    const winRestartBtn = document.getElementById('win-restart-btn');
+    if (winRestartBtn) winRestartBtn.textContent = t('winReplay');
+    const winHomeBtn = document.getElementById('win-home-btn');
+    if (winHomeBtn) {
+        winHomeBtn.textContent = t('winHome');
+        winHomeBtn.onclick = () => {
+            winOverlay.classList.remove('show');
+            location.reload();
+        };
+        winHomeBtn.onmouseenter = () => { (winHomeBtn as HTMLElement).style.color = '#fff'; (winHomeBtn as HTMLElement).style.borderColor = 'rgba(255,255,255,0.3)'; };
+        winHomeBtn.onmouseleave = () => { (winHomeBtn as HTMLElement).style.color = ''; (winHomeBtn as HTMLElement).style.borderColor = ''; };
+    }
+
     winOverlay.classList.add('show');
 
     // Record match result to Kite Chain (non-blocking)
-    const playerWon = winner === selectedTeam;
     void kiteService.finalizeMatch({
         playerAddress: (window as any).__walletAddress ?? '0x0',
         characterType: selectedTeam === 'fire' ? 'korhan' : 'ayaz',
@@ -963,6 +1289,10 @@ function createCardEl(card: CardDef, um: UnitManager): HTMLElement {
 let manaFrozen = false;
 let manaFreezeTimer = 0;
 let ouroborosMode = false;
+let autoCollectActive = false;
+let autoCollectTimer: ReturnType<typeof setTimeout> | null = null;
+let banCollectActive = false;
+let banCollectTimer: ReturnType<typeof setTimeout> | null = null;
 
 function buildPromptUI(): void {
     promptContainer.innerHTML = '';
@@ -1010,6 +1340,8 @@ const EFFECT_DISPLAY: Record<string, { label: string; color: string }> = {
     mana_fill:   { label: 'Mana Doldur',   color: '#aaff55' },
     mana_freeze: { label: 'Mana Dondur',   color: '#55ccff' },
     ouroboros:   { label: 'Ouroboros',      color: '#cc55ff' },
+    autocollect: { label: 'Auto Collect',   color: '#ffcc00' },
+    bancollect:  { label: 'Ban Collect',    color: '#ff4444' },
 };
 
 function showActiveEffect(def: PromptCardDef): void {
@@ -1073,9 +1405,20 @@ function applyPromptEffect(def: PromptCardDef): void {
             showEnemyPicker(enemies, um, playerTeam);
             break;
         }
+
+        case 'autocollect':
+            if (autoCollectTimer) clearTimeout(autoCollectTimer);
+            autoCollectActive = true;
+            autoCollectTimer = setTimeout(() => { autoCollectActive = false; }, def.duration * 1000);
+            break;
+
+        case 'bancollect':
+            if (banCollectTimer) clearTimeout(banCollectTimer);
+            banCollectActive = true;
+            banCollectTimer = setTimeout(() => { banCollectActive = false; }, def.duration * 1000);
+            break;
     }
 }
-
 function showEnemyPicker(enemies: import('./ecs/Unit').Unit[], um: UnitManager, playerTeam: 'fire' | 'ice'): void {
     let overlay = document.getElementById('ouroboros-overlay');
     if (!overlay) {
@@ -1290,10 +1633,31 @@ function spawnAvxCoin(worldPos: { x: number; y: number; z: number }, killerTeam:
         coin.style.opacity = '1';
     };
 
-    coin.addEventListener('click', () => {
+    // ── autocollect: oyuncu tarafı için otomatik topla ──
+    if (autoCollectActive && gameMode !== 'twoplayer') {
+        setTimeout(() => {
+            if (!coin.parentNode) return;
+            playCoinCollect();
+            playerAvx++;
+            updateAvxUI();
+            updateCardStates();
+            // Hızlı parlama animasyonu
+            const autoAnim = coin.animate([
+                { transform: 'translate(-50%, -50%) scale(1)', opacity: '1' },
+                { transform: 'translate(-50%, -50%) scale(1.8)', opacity: '0' },
+            ], { duration: 250, fill: 'forwards' });
+            autoAnim.onfinish = () => coin.remove();
+        }, 300);
+        return; // manuel click listener'a gerek yok
+    }
+
+    function collectCoin(): void {
         playCoinCollect();
-        // Realtime: player always collects. 2P: goes to killer team.
+        // bancollect aktifse düşman takımı (killerTeam dışındaki) toplayamaz
         if (gameMode === 'twoplayer') {
+            const isEnemy = (killerTeam === 'fire' && banCollectActive)
+                          || (killerTeam === 'ice' && banCollectActive);
+            if (isEnemy) return; // engellendi
             if (killerTeam === 'fire') playerAvx++;
             else iceAvx++;
         } else {
@@ -1306,7 +1670,19 @@ function spawnAvxCoin(worldPos: { x: number; y: number; z: number }, killerTeam:
             { transform: 'translate(-50%, -50%) scale(1.5)', opacity: '0' },
         ], { duration: 200, fill: 'forwards' });
         collectAnim.onfinish = () => coin.remove();
-    });
+    }
+
+    // bancollect aktifse sikkeler tıklanamaz hale gelir (enemy coin)
+    const isEnemyCoin = gameMode === 'twoplayer' && killerTeam !== selectedTeam;
+    if (banCollectActive && isEnemyCoin) {
+        // Düşmanın sikkeleri soluk ve tıklanamaz görünür
+        coin.style.opacity = '0.3';
+        coin.style.filter = 'grayscale(100%)';
+        coin.style.cursor = 'not-allowed';
+        coin.title = 'Ban Collect aktif';
+    } else {
+        coin.addEventListener('click', collectCoin);
+    }
 
     // Auto-expire after 8s
     setTimeout(() => {
@@ -1359,6 +1735,8 @@ function applyI18n(): void {
         const key = el.dataset.i18nHtml as any;
         el.innerHTML = t(key);
     });
+    // Re-render character screen with new language
+    selectCharacter(currentCharId);
 }
 
 // Lang button wiring

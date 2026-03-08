@@ -5,6 +5,7 @@
 import type { BaseBuilding } from '../map/BaseBuilding';
 import type { AvaShardManager } from '../map/AvaShard';
 import { WinCondition } from '../../game/GameState';
+import { t } from '../../i18n';
 
 export class WinConditionSystem {
     private readonly fireBase: BaseBuilding;
@@ -67,13 +68,13 @@ export class WinConditionSystem {
     getWinMessage(): string {
         switch (this.winner) {
             case WinCondition.FireDestroysBase:
-                return '🔥 ATEŞ KAZANDI! Buz Üssü Yıkıldı!';
+                return t('winFireBase');
             case WinCondition.IceDestroysBase:
-                return '❄️ BUZ KAZANDI! Ateş Üssü Yıkıldı!';
+                return t('winIceBase');
             case WinCondition.FireShardTimeout:
-                return '🔥 ATEŞ KAZANDI! Tüm Ava Taşları Ele Geçirildi!';
+                return t('winFireShard');
             case WinCondition.IceShardTimeout:
-                return '❄️ BUZ KAZANDI! Tüm Ava Taşları Ele Geçirildi!';
+                return t('winIceShard');
             default:
                 return '';
         }

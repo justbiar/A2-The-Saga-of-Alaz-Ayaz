@@ -203,7 +203,7 @@ export function createAvaxMap(scene: Scene, _sg: ShadowGenerator): MapData {
     buildBridge(scene, walkable, stoneTex);
     buildLavaFeatures(scene, lavaTex, lavaEmissTex, rockTex);
     buildIceFeatures(scene, iceTex);
-    buildSurfaceVeins(scene);
+    // buildSurfaceVeins(scene); — zigzag çizgiler kaldırıldı
     buildBases(scene, walkable, lavaTex, iceTex);
     buildLighting(scene);
     try { buildParticles(scene); } catch (e) { console.warn('Particles skipped:', e); }
@@ -305,6 +305,11 @@ function buildTriangleEdges(scene: Scene): void {
         { from: [-DW, 0], to: [0, DH], fire: false, name: 'BL' },
         { from: [DW, 0], to: [0, DH], fire: false, name: 'BR' },
     ];
+
+    // lava.jpg texture — ateş kenarları için
+    const lavaTex = new Texture('/assets/images/textures/lava.jpg', scene);
+    lavaTex.uScale = 6; lavaTex.vScale = 1;
+
     edges.forEach(e => {
         const dx = e.to[0] - e.from[0], dz = e.to[1] - e.from[1];
         const len = Math.sqrt(dx * dx + dz * dz);
@@ -318,7 +323,13 @@ function buildTriangleEdges(scene: Scene): void {
         const edge = MeshBuilder.CreateBox(`triEdge_${e.name}`, { width: 0.5, height: 0.3, depth: len }, scene);
         edge.position.set(cx, SURF + 0.18, cz);
         edge.rotation.y = angle;
-        edge.material = cMat(`triEdgeMat_${e.name}`, col, emCol, 0.9, scene);
+        if (e.fire) {
+            edge.material = tMat(`triEdgeMat_${e.name}`, lavaTex, scene, {
+                em: new Color3(.6, .25, .02), a: 0.95,
+            });
+        } else {
+            edge.material = cMat(`triEdgeMat_${e.name}`, col, emCol, 0.9, scene);
+        }
 
         // Geniş glow halo
         const glow = MeshBuilder.CreateBox(`triGlow_${e.name}`, { width: 1.5, height: 0.08, depth: len }, scene);
@@ -366,26 +377,7 @@ function buildEnergyNodes(scene: Scene): void {
         lt.diffuse = col; lt.intensity = 1.0; lt.range = 16;
     });
 
-    // Equator köşeleri
-    [{ x: -DW, label: 'L' }, { x: DW, label: 'R' }].forEach(c => {
-        const mixCol = new Color3(.75, .5, .15);
-        const mixEm = new Color3(.45, .28, .06);
-
-        const torus = MeshBuilder.CreateTorus(`cornerTorus_${c.label}`, {
-            diameter: 5, thickness: 0.45, tessellation: 24,
-        }, scene);
-        torus.position.set(c.x, SURF + 0.4, 0);
-        torus.rotation.x = Math.PI / 2;
-        torus.material = cMat(`cornerTorusMat_${c.label}`, mixCol, mixEm, 0.6, scene);
-
-        const disc = MeshBuilder.CreateDisc(`cornerDisc_${c.label}`, { radius: 2, tessellation: 16 }, scene);
-        disc.position.set(c.x, SURF + 0.15, 0);
-        disc.rotation.x = Math.PI / 2;
-        disc.material = cMat(`cornerDiscMat_${c.label}`, mixCol.scale(.5), mixEm.scale(.5), 0.3, scene);
-
-        const lt = new PointLight(`cornerLt_${c.label}`, new Vector3(c.x, SURF + 3, 0), scene);
-        lt.diffuse = mixCol; lt.intensity = 0.5; lt.range = 10;
-    });
+    // Equator köşeleri — kaldırıldı
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -394,6 +386,10 @@ function buildEnergyNodes(scene: Scene): void {
 function buildLaneVeins(scene: Scene): void {
     const fireTargets: [number, number][] = [[-7, -33], [0, -28], [7, -33]];
     const iceTargets: [number, number][] = [[-7, 33], [0, 28], [7, 33]];
+
+    // lava.jpg — ateş damarları için
+    const lavaTex = new Texture('/assets/images/textures/lava.jpg', scene);
+    lavaTex.uScale = 4; lavaTex.vScale = 1;
 
     function veins(origin: [number, number], targets: [number, number][], fire: boolean) {
         const col = fire ? new Color3(1, .5, .1) : new Color3(.2, .5, 1);
@@ -408,7 +404,13 @@ function buildLaneVeins(scene: Scene): void {
             const vein = MeshBuilder.CreateBox(`laneVein_${tag}_${i}`, { width: 0.5, height: 0.06, depth: len }, scene);
             vein.position.set(cx, SURF + 0.1, cz);
             vein.rotation.y = angle;
-            vein.material = cMat(`laneVeinMat_${tag}_${i}`, col, emCol, 0.65, scene);
+            if (fire) {
+                vein.material = tMat(`laneVeinMat_${tag}_${i}`, lavaTex, scene, {
+                    em: new Color3(.5, .2, .02), a: 0.8,
+                });
+            } else {
+                vein.material = cMat(`laneVeinMat_${tag}_${i}`, col, emCol, 0.65, scene);
+            }
 
             const halo = MeshBuilder.CreateBox(`laneVeinHalo_${tag}_${i}`, { width: 1.5, height: 0.03, depth: len }, scene);
             halo.position.set(cx, SURF + 0.08, cz);
@@ -560,11 +562,7 @@ function buildBridge(scene: Scene, w: Mesh[], stoneTex: DynamicTexture): void {
         halo.material = cMat(`crossHaloMat_${e.nm}`, col, emCol.scale(.7), 0.25, scene);
     });
 
-    // Crossbar merkez
-    const cn = MeshBuilder.CreateTorus('crossCenter', { diameter: 3.5, thickness: 0.4, tessellation: 24 }, scene);
-    cn.position.set(0, SURF + 0.58, 0);
-    cn.rotation.x = Math.PI / 2;
-    cn.material = cMat('crossCenterMat', new Color3(.75, .6, .18), new Color3(.45, .3, .08), 0.75, scene);
+    // Crossbar merkez — kaldırıldı
 
     // Ledge'ler
     const lF = MeshBuilder.CreateBox('ledgeF', { width: BW, height: .24, depth: .4 }, scene);
@@ -574,29 +572,7 @@ function buildBridge(scene: Scene, w: Mesh[], stoneTex: DynamicTexture): void {
     lI.position.set(0, SURF + .48, 3);
     lI.material = cMat('ledgeIMat', new Color3(.14, .28, .55), new Color3(.05, .12, .3), .85, scene);
 
-    // Lane geçiş noktaları (equator'da x=±29)
-    [-29, 0, 29].forEach((x, i) => {
-        const disc = MeshBuilder.CreateGround(`bridgeDisc_${i}`, { width: 5, height: 5 }, scene);
-        disc.position.set(x, SURF + .5, 0);
-        disc.material = tMat(`discMat_${i}`, stoneTex, scene, { a: .5, us: 2, vs: 2 });
-        w.push(disc);
-        for (const dz of [-2.4, 2.4]) {
-            const post = MeshBuilder.CreateBox(`post_${i}_${dz}`, { width: .35, height: 1.2, depth: .35 }, scene);
-            post.position.set(x, SURF + .9, dz);
-            post.material = bridge.material as StandardMaterial;
-        }
-    });
-
-    // Merdiven
-    const lm = cMat('ladderMat', new Color3(.35, .28, .2), new Color3(.06, .05, .03), 1, scene);
-    for (const dx of [-.5, .5]) {
-        const p = MeshBuilder.CreateBox(`lPole_${dx}`, { width: .2, height: 4.5, depth: .2 }, scene);
-        p.position.set(dx, SURF + 2.5, 0); p.material = lm;
-    }
-    for (let y = .8; y <= 3.8; y += .7) {
-        const r = MeshBuilder.CreateBox(`rung_${y}`, { width: 1.2, height: .12, depth: .15 }, scene);
-        r.position.set(0, SURF + y, 0); r.material = lm;
-    }
+    // Lane geçiş noktaları (equator'da x=±29) — diskler ve postlar kaldırıldı
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

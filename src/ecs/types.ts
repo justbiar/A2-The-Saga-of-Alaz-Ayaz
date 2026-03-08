@@ -93,7 +93,9 @@ export interface ShardBonus {
 export type PromptEffectType =
     | 'mana_fill'         // instantly fill mana
     | 'mana_freeze'       // mana doesn't decrease for 5 seconds
-    | 'ouroboros';        // convert an enemy unit to fight for you
+    | 'ouroboros'         // convert an enemy unit to fight for you
+    | 'autocollect'       // auto-collect AVX coins for 30 seconds
+    | 'bancollect';       // block enemy AVX collection for 45 seconds
 
 export interface PromptCardDef {
     id: string;
