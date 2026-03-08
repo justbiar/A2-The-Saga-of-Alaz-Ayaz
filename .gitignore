@@ -8,3 +8,4 @@ dist/
 
 # Assets transferred via rsync (too large for GitHub)
 assets/
+CLAUDE.md
