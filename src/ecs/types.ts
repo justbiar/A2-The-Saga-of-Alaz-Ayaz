@@ -91,14 +91,9 @@ export interface ShardBonus {
 // ─── PROMPT CARDS ─────────────────────────────────────────────────────
 
 export type PromptEffectType =
-    | 'damage_aoe'        // area of effect damage
-    | 'heal_ally'         // heal friendly units
-    | 'speed_boost'       // temporary speed increase
-    | 'freeze_area'       // freeze enemies in zone
-    | 'summon_spirit'     // spawn temporary spirit unit
-    | 'mana_surge'        // gain extra mana next turn
-    | 'shield_all'        // shield all friendly units
-    | 'berserker_rage';   // double attack for 2 turns
+    | 'mana_fill'         // instantly fill mana
+    | 'mana_freeze'       // mana doesn't decrease for 5 seconds
+    | 'ouroboros';        // convert an enemy unit to fight for you
 
 export interface PromptCardDef {
     id: string;
@@ -107,8 +102,7 @@ export interface PromptCardDef {
     manaCost: number;
     effectType: PromptEffectType;
     magnitude: number;
-    duration: number;           // turns (0 = instant)
+    duration: number;           // seconds
     targetTeam: 'self' | 'enemy' | 'both';
-    imagePath?: string;
-    faction?: 'fire' | 'ice' | 'neutral';
+    imagePath: string;
 }

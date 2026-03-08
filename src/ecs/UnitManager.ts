@@ -41,6 +41,8 @@ interface GLBAnimData {
 
 export class UnitManager {
     public readonly units: Unit[] = [];
+    public onProgress: ((loaded: number, total: number) => void) | null = null;
+    public onUnitDeath: ((unit: Unit) => void) | null = null;
     private readonly scene: Scene;
     private readonly sg: ShadowGenerator;
     private readonly nav: SimpleNavGraph;
@@ -78,6 +80,11 @@ export class UnitManager {
     private umayDieContainer:    AssetContainer | null = null;
     private umayAnimMap = new Map<number, GLBAnimData>();
     // Tulpar animation containers (walk only — trample mechanic)
+    private ayazWalkContainer:   AssetContainer | null = null;
+    private ayazAttackContainer: AssetContainer | null = null;
+    private ayazDieContainer:    AssetContainer | null = null;
+    private ayazAnimMap = new Map<number, GLBAnimData>();
+
     private tulparWalkContainer: AssetContainer | null = null;
     private tulparAnimMap = new Map<number, GLBAnimData>();
     // Şahmeran animation containers (walk + attack + die)
@@ -134,15 +141,17 @@ export class UnitManager {
         for (const root of allRoots) {
             root.parent   = parent;
             root.position = Vector3.Zero();
+            root.setEnabled(true);
             (root as any).scaling = new Vector3(scale, scale, scale);
             root.getChildMeshes().forEach(c => {
                 c.setEnabled(true);
+                c.isVisible = true;
                 if (c instanceof Mesh) {
                     this.sg.addShadowCaster(c);
                     if (c.material instanceof PBRMaterial) {
-                        c.material.directIntensity      = 0.6;
-                        c.material.environmentIntensity = 0.05;
-                        c.material.emissiveIntensity    = 0;
+                        c.material.directIntensity      = 1.5;
+                        c.material.environmentIntensity = 0.5;
+                        c.material.emissiveIntensity    = 0.2;
                     }
                 }
             });
@@ -194,13 +203,20 @@ export class UnitManager {
         //    diğerleri etkilenmez, walk varsa GLB gösterilir. ──────────
         const base = '/assets/character%20animation/';
         const load = (file: string) => SceneLoader.LoadAssetContainerAsync(base, file, this.scene);
+        let loaded = 0;
+        const totalFiles = 25;
         const tryLoad = async (file: string): Promise<AssetContainer | null> => {
             try {
                 const timeout = new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('timeout')), 8000),
+                    setTimeout(() => reject(new Error('timeout')), 30000),
                 );
-                return await Promise.race([load(file), timeout]) as AssetContainer;
+                const result = await Promise.race([load(file), timeout]) as AssetContainer;
+                loaded++;
+                if (this.onProgress) this.onProgress(loaded, totalFiles);
+                return result;
             } catch {
+                loaded++;
+                if (this.onProgress) this.onProgress(loaded, totalFiles);
                 console.warn(`⚠️ ${file} yüklenemedi/timeout`);
                 return null;
             }
@@ -235,6 +251,11 @@ export class UnitManager {
         // Umay
         [this.umayWalkContainer, this.umayAttackContainer, this.umayDieContainer] = await Promise.all([
             tryLoad('umaywalk.glb'), tryLoad('umayattack.glb'), tryLoad('umaydie.glb'),
+        ]);
+
+        // Ayaz
+        [this.ayazWalkContainer, this.ayazAttackContainer, this.ayazDieContainer] = await Promise.all([
+            tryLoad('ayazwalk.glb'), tryLoad('ayazattack.glb'), tryLoad('ayazdie.glb'),
         ]);
 
         // Tulpar (walk only — dosya adı tulpar.glb)
@@ -353,15 +374,17 @@ export class UnitManager {
             for (const root of [walkRoot, attackRoot, dieRoot]) {
                 root.parent   = parent;
                 root.position = Vector3.Zero();
+                root.setEnabled(true);
                 (root as any).scaling = new Vector3(1.3, 1.3, 1.3);
                 root.getChildMeshes().forEach(c => {
                     c.setEnabled(true);
+                    c.isVisible = true;
                     if (c instanceof Mesh) {
                         this.sg.addShadowCaster(c);
                         if (c.material instanceof PBRMaterial) {
-                            c.material.directIntensity      = 0.6;
-                            c.material.environmentIntensity = 0.05;
-                            c.material.emissiveIntensity    = 0;
+                            c.material.directIntensity      = 1.5;
+                            c.material.environmentIntensity = 0.5;
+                            c.material.emissiveIntensity    = 0.2;
                         }
                     }
                 });
@@ -507,8 +530,17 @@ export class UnitManager {
         om.diffuseColor = body; om.emissiveColor = emis.scale(3); om.alpha = 0.9; orb.material = om;
     }
 
-    // ─── AYAZ — ice warrior ──────────────────────────────────────────
+    // ─── AYAZ — ice warrior with walk / attack / die animations ──────
     private buildAyaz(parent: Mesh, team: Team): void {
+        if (this.ayazWalkContainer) {
+            const unitId = nextId;
+            this.ayazAnimMap.set(unitId, this.buildGlbRoots(
+                parent, `az${unitId}`, 1.3,
+                this.ayazWalkContainer, this.ayazAttackContainer, this.ayazDieContainer,
+            ));
+            return;
+        }
+        // Procedural fallback
         this.buildWarriorBody(parent,
             team === 'ice' ? new Color3(0.2, 0.5, 0.9) : new Color3(0.8, 0.2, 0.05),
             'shield');
@@ -525,18 +557,35 @@ export class UnitManager {
 
             walkRoot.parent   = parent;
             walkRoot.position = Vector3.Zero();
-            (walkRoot as any).scaling = new Vector3(1.3, 1.3, 1.3);
-            walkRoot.getChildMeshes().forEach(c => {
+            walkRoot.setEnabled(true);
+            (walkRoot as any).scaling = new Vector3(150, 150, 150);
+
+            const allChildren = walkRoot.getChildMeshes(false);
+            allChildren.forEach(c => {
                 c.setEnabled(true);
+                c.isVisible = true;
                 if (c instanceof Mesh) {
                     this.sg.addShadowCaster(c);
                     if (c.material instanceof PBRMaterial) {
-                        c.material.directIntensity      = 0.6;
-                        c.material.environmentIntensity = 0.05;
-                        c.material.emissiveIntensity    = 0;
+                        c.material.albedoColor = new Color3(0.85, 0.82, 0.78);
+                        c.material.emissiveColor = new Color3(0.3, 0.28, 0.25);
+                        c.material.directIntensity      = 2.0;
+                        c.material.environmentIntensity = 1.0;
+                        c.material.emissiveIntensity    = 1.0;
+                        c.material.alpha = 1;
+                        c.material.transparencyMode = 0; // opaque
                     }
                 }
             });
+            if (allChildren[0] instanceof Mesh) {
+                const m = allChildren[0];
+                m.refreshBoundingInfo();
+                const bb = m.getBoundingInfo().boundingBox;
+                console.log('✅ Tulpar GLB: verts:', m.getTotalVertices(),
+                    'bbMin:', bb.minimum, 'bbMax:', bb.maximum,
+                    'parentPos:', parent.position, 'rootPos:', walkRoot.position,
+                    'meshPos:', m.position, 'meshScale:', m.scaling);
+            }
 
             walkInst.animationGroups.forEach(ag => ag.play(true));
 
@@ -825,27 +874,55 @@ export class UnitManager {
             if (!stunned) {
                 const enemy = this.findNearestEnemy(unit, alive);
 
-                // Tulpar — trample: keeps walking, damages enemies on contact
-                if (unit.type === 'tulpar') {
-                    if (enemy && this.distXZ(unit, enemy) < unit.stats.attackRange) {
-                        this.tryAttack(unit, enemy);
-                        unit.targetUnit = enemy;
-                    }
-                    if (unit.pathQueue.length > 0) {
-                        unit.state = 'walking';
-                        this.moveUnit(unit, dt, speedMult);
-                        this.applyWalkBob(unit, dt);
+                // Support units (Tulpar / Od): untargetable, escort allies, heal
+                if (unit.type === 'tulpar' || unit.type === 'od') {
+                    const nearbyAllies = alive.filter(a =>
+                        a.team === unit.team && a.id !== unit.id
+                        && !UnitManager.UNTARGETABLE.has(a.type)
+                    );
+
+                    if (nearbyAllies.length > 0) {
+                        const closest = nearbyAllies.reduce((a, b) =>
+                            this.distXZ(unit, a) < this.distXZ(unit, b) ? a : b);
+                        const dist = this.distXZ(unit, closest);
+
+                        if (dist > 2.5) {
+                            // Move directly toward ally (ignore path)
+                            unit.state = 'walking';
+                            const dir = closest.mesh.position.subtract(unit.mesh.position);
+                            dir.y = 0; dir.normalize();
+                            // Use own speed if far, ally speed if close-ish
+                            const spd = (dist > 8 ? unit.stats.speed : closest.stats.speed) * speedMult * dt;
+                            unit.mesh.position.addInPlace(dir.scale(spd));
+                            unit.mesh.rotation.y = Math.atan2(dir.x, dir.z) + (this.isGlbUnit(unit) ? Math.PI : 0);
+                            this.applyWalkBob(unit, dt);
+                        } else {
+                            // Right next to ally — just stay, face same direction
+                            unit.state = 'walking';
+                            unit.mesh.rotation.y = closest.mesh.rotation.y;
+                            this.applyWalkBob(unit, dt);
+                        }
                     } else {
-                        // Reached enemy base — trample it too
-                        const targetBase = unit.team === 'fire' ? this.iceBase : this.fireBase;
-                        if (targetBase && !targetBase.isDestroyed()) {
-                            if (this.gameTime - unit.lastAttackTime >= unit.stats.attackCooldown) {
-                                unit.lastAttackTime = this.gameTime;
-                                const dmg = Math.max(1, unit.stats.attack - 5);
-                                targetBase.takeDamage(dmg);
-                                this.flashAttackPos(unit, targetBase.position);
-                                this.showDamageNumberAt(targetBase.position, dmg);
-                            }
+                        // No allies — wait at current position
+                        unit.state = 'walking';
+                        this.applyWalkBob(unit, dt);
+                    }
+
+                    // Heal nearby allies every 2s
+                    if (this.gameTime - unit.lastAttackTime >= 2.0) {
+                        const healRange = 8;
+                        const healAmount = 15;
+                        const healTargets = alive.filter(a =>
+                            a.team === unit.team && a.id !== unit.id
+                            && !UnitManager.UNTARGETABLE.has(a.type)
+                            && this.distXZ(unit, a) < healRange
+                            && a.hp < a.stats.maxHp
+                        );
+                        if (healTargets.length > 0) {
+                            const target = healTargets.reduce((a, b) => (a.hp / a.stats.maxHp) < (b.hp / b.stats.maxHp) ? a : b);
+                            target.hp = Math.min(target.stats.maxHp, target.hp + healAmount);
+                            unit.lastAttackTime = this.gameTime;
+                            this.spawnFloatingText(`+${healAmount}`, target.mesh.position.clone().addInPlaceFromFloats(0, 3.5, 0), new Color3(0.2, 1, 0.4));
                         }
                     }
                 } else if (enemy && this.distXZ(unit, enemy) < unit.stats.attackRange) {
@@ -880,6 +957,7 @@ export class UnitManager {
 
             // GLB animation state machines
             if (unit.type === 'tulpar')   this.updateGLBAnim(unit, this.tulparAnimMap);
+            if (unit.type === 'ayaz')     this.updateGLBAnim(unit, this.ayazAnimMap);
             if (unit.type === 'korhan')   this.updateGLBAnim(unit, this.korhanAnimMap);
             if (unit.type === 'erlik')    this.updateGLBAnim(unit, this.erlikAnimMap);
             if (unit.type === 'od')       this.updateGLBAnim(unit, this.odAnimMap);
@@ -889,9 +967,39 @@ export class UnitManager {
             if (unit.type === 'sahmeran') this.updateGLBAnim(unit, this.sahmeranAnimMap);
         }
 
+        // ── Unit collision separation — no unit walks through another ──
+        this.separateUnits(alive);
+
         for (let i = this.units.length - 1; i >= 0; i--) {
             if (this.units[i].hp <= 0 && this.units[i].state !== 'dead') {
                 this.killUnit(this.units[i]);
+            }
+        }
+    }
+
+    private separateUnits(alive: Unit[]): void {
+        const minDist = 1.8;
+        for (let i = 0; i < alive.length; i++) {
+            for (let j = i + 1; j < alive.length; j++) {
+                const a = alive[i], b = alive[j];
+                // Support birimleri dost birimleriyle çakışabilir
+                const aSupport = UnitManager.UNTARGETABLE.has(a.type);
+                const bSupport = UnitManager.UNTARGETABLE.has(b.type);
+                if (aSupport && bSupport) continue; // iki support birbirini itmesin
+                if ((aSupport || bSupport) && a.team === b.team) continue; // support + dost itmesin
+
+                const dx = a.mesh.position.x - b.mesh.position.x;
+                const dz = a.mesh.position.z - b.mesh.position.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist < minDist && dist > 0.01) {
+                    const overlap = (minDist - dist) * 0.3; // yumuşak itme
+                    const nx = dx / dist;
+                    const nz = dz / dist;
+                    a.mesh.position.x += nx * overlap;
+                    a.mesh.position.z += nz * overlap;
+                    b.mesh.position.x -= nx * overlap;
+                    b.mesh.position.z -= nz * overlap;
+                }
             }
         }
     }
@@ -913,8 +1021,12 @@ export class UnitManager {
         unit.mesh.position.y = unit.baseY + 0.18 * Math.abs(Math.sin(unit.walkBobTime));
     }
 
+    private static UNTARGETABLE: Set<string> = new Set(['tulpar', 'od']);
+
     private findNearestEnemy(unit: Unit, alive: Unit[]): Unit | null {
-        const enemies = alive.filter(o => o.team !== unit.team && o.state !== 'dead');
+        // Support units (tulpar, od) cannot be targeted
+        const enemies = alive.filter(o => o.team !== unit.team && o.state !== 'dead'
+            && !UnitManager.UNTARGETABLE.has(o.type));
         const inRange = enemies.filter(o => this.distXZ(unit, o) < 14);
         if (inRange.length === 0) return null;
 
@@ -949,6 +1061,7 @@ export class UnitManager {
             || (u.type === 'korhan'   && !!(this.korhanWalkContainer || this.korhanTemplate))
             || (u.type === 'erlik'    && !!this.erlikWalkContainer)
             || (u.type === 'od'       && !!this.odWalkContainer)
+            || (u.type === 'ayaz'     && !!this.ayazWalkContainer)
             || (u.type === 'tepegoz'  && !!this.tepegozWalkContainer)
             || (u.type === 'albasti'  && !!this.albastiWalkContainer)
             || (u.type === 'umay'     && !!this.umayWalkContainer)
@@ -991,12 +1104,20 @@ export class UnitManager {
         let dmg = Math.max(1, (attacker.stats.attack + shardAtk + empowerBonus) - target.stats.armor)
             * factionMod * confMod * chargeMult;
 
+        // Critical hit: %5 chance — instant kill
+        const critChance = 0.05;
+        let isCrit = false;
+        if (Math.random() < critChance) {
+            dmg = target.hp;
+            isCrit = true;
+        }
+
         // on_hit ability check (e.g. Iron Armor reduction, Od proc)
-        dmg = checkAbilityTrigger('on_hit', target, attacker, dmg);
+        if (!isCrit) dmg = checkAbilityTrigger('on_hit', target, attacker, dmg);
 
         // Shielded status absorbs damage
         const shield = target.statusEffects.find(s => s.type === 'shielded');
-        if (shield) {
+        if (shield && !isCrit) {
             if (dmg <= shield.magnitude) {
                 shield.magnitude -= dmg;
                 dmg = 0;
@@ -1007,6 +1128,7 @@ export class UnitManager {
             }
         }
 
+        if (isCrit) target.abilityState._critKill = true;
         target.hp -= dmg;
 
         // on_attack ability check (e.g. Erlik burn, Ayaz freeze, Şahmeran poison)
@@ -1016,7 +1138,7 @@ export class UnitManager {
         attacker.poaiScore = Math.min(10000, attacker.poaiScore + 10);
 
         this.flashAttack(attacker, target);
-        this.showDamageNumber(target, dmg);
+        this.showDamageNumber(target, dmg, isCrit);
     }
 
     private flashAttackPos(attacker: Unit, targetPos: Vector3): void {
@@ -1177,7 +1299,7 @@ export class UnitManager {
     }
 
     // ─── FLOATING DAMAGE NUMBERS ──────────────────────────────────
-    private showDamageNumber(target: Unit, dmg: number): void {
+    private showDamageNumber(target: Unit, dmg: number, isCrit = false): void {
         const rounded = Math.round(dmg);
         if (rounded <= 0) return;
 
@@ -1186,7 +1308,11 @@ export class UnitManager {
         // Random X offset so numbers don't stack
         pos.x += (Math.random() - 0.5) * 1.5;
 
-        this.spawnFloatingText(`-${rounded}`, pos, new Color3(1, 0.15, 0.1));
+        if (isCrit) {
+            this.spawnFloatingText(`⚡ KRİTİK! -${rounded}`, pos, new Color3(1, 0.85, 0));
+        } else {
+            this.spawnFloatingText(`-${rounded}`, pos, new Color3(1, 0.15, 0.1));
+        }
     }
 
     private showDamageNumberAt(pos: Vector3, dmg: number): void {
@@ -1246,6 +1372,7 @@ export class UnitManager {
 
     private killUnit(unit: Unit): void {
         unit.state = 'dead';
+        this.onUnitDeath?.(unit);
         unit.healthBarBg?.setEnabled(false);
         unit.healthBarFill?.setEnabled(false);
 
@@ -1258,7 +1385,7 @@ export class UnitManager {
         }
 
         // GLB animated units: play die animation, then dispose
-        for (const animMap of [this.korhanAnimMap, this.erlikAnimMap, this.odAnimMap, this.tepegozAnimMap, this.albastiAnimMap, this.umayAnimMap, this.sahmeranAnimMap, this.tulparAnimMap]) {
+        for (const animMap of [this.korhanAnimMap, this.erlikAnimMap, this.odAnimMap, this.tepegozAnimMap, this.albastiAnimMap, this.umayAnimMap, this.sahmeranAnimMap, this.tulparAnimMap, this.ayazAnimMap]) {
             const data = animMap.get(unit.id);
             if (data) {
                 this.killGLBUnit(unit, data, animMap);
