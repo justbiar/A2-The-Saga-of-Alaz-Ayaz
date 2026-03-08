@@ -37,6 +37,7 @@ export interface CardDef {
     cardTeam: CardTeam;    // visual theme
     spawnTeam: Team;       // which team gets deployed
     manaCost: number;
+    avxCost: number;       // 0 = uses mana, >0 = uses AVX currency (mercenaries)
     stats: UnitStats;
     description: string;
     imagePath: string;     // /assets/images/characters/<name>.png
@@ -50,12 +51,12 @@ export interface CardDef {
 const FIRE: Record<string, UnitStats> = {
     korhan: { maxHp: 220, attack: 24, attackRange: 4, attackCooldown: 0.9, speed: 4,  armor: 8, magicResist: 0.10 },  // tank — yavaş, zırhlı
     erlik:  { maxHp: 100, attack: 35, attackRange: 6, attackCooldown: 1.4, speed: 7,  armor: 1, magicResist: 0.15 },  // glass cannon — hızlı, kırılgan
-    od:     { maxHp: 110, attack: 30, attackRange: 7, attackCooldown: 1.2, speed: 6,  armor: 2, magicResist: 0.20 },  // orta mage
+    od:     { maxHp: 70, attack: 0, attackRange: 0, attackCooldown: 1.0, speed: 10,  armor: 2, magicResist: 0.20 },  // support — hedef alınamaz, dostlara can basar
 };
 
 const ICE: Record<string, UnitStats> = {
     ayaz:   { maxHp: 240, attack: 18, attackRange: 3, attackCooldown: 1.0, speed: 3.5, armor: 10, magicResist: 0.12 }, // en tank — en yavaş, en zırhlı
-    tulpar: { maxHp: 130, attack: 20, attackRange: 5, attackCooldown: 0.7, speed: 10,  armor: 1,  magicResist: 0.05 }, // en hızlı — kağıt zırh
+    tulpar: { maxHp: 70, attack: 0, attackRange: 0, attackCooldown: 1.0, speed: 10,  armor: 1,  magicResist: 0.05 }, // support — hedef alınamaz, dostlara can basar
     umay:   { maxHp: 120, attack: 22, attackRange: 8, attackCooldown: 1.5, speed: 5,   armor: 2,  magicResist: 0.30 }, // uzak menzil mage
 };
 
@@ -74,9 +75,9 @@ export const STATS_MAP: Record<UnitType, UnitStats> = {
 export const AI_PROFILES_MAP: Record<UnitType, AIProfile> = {
     korhan:   { trait: 'aggressive',  targetPriority: 'nearest',    retreatThreshold: 0.20, aggressionRadius: 12 },
     erlik:    { trait: 'tactical',    targetPriority: 'lowest_hp',  retreatThreshold: 0.15, aggressionRadius: 10 },
-    od:       { trait: 'tactical',    targetPriority: 'lowest_hp',  retreatThreshold: 0.20, aggressionRadius: 10 },
+    od:       { trait: 'defensive',   targetPriority: 'nearest',    retreatThreshold: 0.0,  aggressionRadius: 0 },
     ayaz:     { trait: 'defensive',   targetPriority: 'highest_hp', retreatThreshold: 0.30, aggressionRadius: 8  },
-    tulpar:   { trait: 'aggressive',  targetPriority: 'base_focus', retreatThreshold: 0.10, aggressionRadius: 16 },
+    tulpar:   { trait: 'defensive',   targetPriority: 'nearest',    retreatThreshold: 0.0,  aggressionRadius: 0 },
     umay:     { trait: 'adaptive',    targetPriority: 'lowest_hp',  retreatThreshold: 0.25, aggressionRadius: 12 },
     albasti:  { trait: 'adaptive',    targetPriority: 'nearest',    retreatThreshold: 0.20, aggressionRadius: 12 },
     tepegoz:  { trait: 'defensive',   targetPriority: 'highest_hp', retreatThreshold: 0.35, aggressionRadius: 8  },
@@ -89,21 +90,21 @@ export const PLAYER_CARDS: CardDef[] = [
     // ── FIRE ──────────────────────────────────────────────────────────
     {
         id: 'korhan', name: 'Korhan', role: 'Savaşçı', cardTeam: 'fire', spawnTeam: 'fire',
-        manaCost: 4, stats: FIRE.korhan,
+        manaCost: 4, avxCost: 0, stats: FIRE.korhan,
         description: 'Ateş zırhı giyen savaşçı',
         imagePath: '/assets/images/characters/korhan.png',
         glowColor: 'rgba(255,80,0,0.8)', borderColor: '#cc3300',
     },
     {
         id: 'erlik', name: 'Erlik', role: 'Büyücü', cardTeam: 'fire', spawnTeam: 'fire',
-        manaCost: 5, stats: FIRE.erlik,
+        manaCost: 5, avxCost: 0, stats: FIRE.erlik,
         description: 'Karanlığın alev sihirbazı',
         imagePath: '/assets/images/characters/erlik.png',
         glowColor: 'rgba(200,20,0,0.8)', borderColor: '#aa0000',
     },
     {
-        id: 'od', name: 'Od', role: 'Büyücü', cardTeam: 'fire', spawnTeam: 'fire',
-        manaCost: 7, stats: FIRE.od,
+        id: 'od', name: 'Od', role: 'Destek', cardTeam: 'fire', spawnTeam: 'fire',
+        manaCost: 7, avxCost: 0, stats: FIRE.od,
         description: 'Ateş büyücüsü, uzun menzil',
         imagePath: '/assets/images/characters/od.png',
         glowColor: 'rgba(255,120,0,0.8)', borderColor: '#dd4400',
@@ -111,21 +112,21 @@ export const PLAYER_CARDS: CardDef[] = [
     // ── MERCENARY ─────────────────────────────────────────────────────
     {
         id: 'albasti', name: 'Albastı', role: 'Neutral', cardTeam: 'mercenary', spawnTeam: 'fire',
-        manaCost: 4, stats: MERC.albasti,
+        manaCost: 0, avxCost: 3, stats: MERC.albasti,
         description: 'Kanatları olan doğaüstü varlık',
         imagePath: '/assets/images/characters/albasti.png',
         glowColor: 'rgba(180,120,255,0.8)', borderColor: '#886600',
     },
     {
         id: 'tepegoz', name: 'Tepegöz', role: 'Büyücü', cardTeam: 'mercenary', spawnTeam: 'fire',
-        manaCost: 5, stats: MERC.tepegoz,
+        manaCost: 0, avxCost: 5, stats: MERC.tepegoz,
         description: 'Tek gözlü dev büyücü',
         imagePath: '/assets/images/characters/tepegoz.png',
         glowColor: 'rgba(160,0,200,0.8)', borderColor: '#775500',
     },
     {
         id: 'sahmeran', name: 'Şahmeran', role: 'Spirit of the Steppe', cardTeam: 'mercenary', spawnTeam: 'fire',
-        manaCost: 5, stats: MERC.sahmeran,
+        manaCost: 0, avxCost: 4, stats: MERC.sahmeran,
         description: 'Yılan kraliçesi, zehirli saldırı',
         imagePath: '/assets/images/characters/sahmeran.png',
         glowColor: 'rgba(60,200,60,0.8)', borderColor: '#886600',
@@ -136,31 +137,45 @@ export const PLAYER_CARDS: CardDef[] = [
 export const AI_CARDS: CardDef[] = [
     {
         id: 'ayaz', name: 'Ayaz', role: 'Savaşçı', cardTeam: 'ice', spawnTeam: 'ice',
-        manaCost: 3, stats: ICE.ayaz,
+        manaCost: 3, avxCost: 0, stats: ICE.ayaz,
         description: 'Dondurucu soğuk savaşçı',
         imagePath: '/assets/images/characters/ayaz.png',
         glowColor: 'rgba(0,140,255,0.8)', borderColor: '#0055aa',
     },
     {
-        id: 'tulpar', name: 'Tulpar', role: 'Savaşçı', cardTeam: 'ice', spawnTeam: 'ice',
-        manaCost: 3, stats: ICE.tulpar,
+        id: 'tulpar', name: 'Tulpar', role: 'Destek', cardTeam: 'ice', spawnTeam: 'ice',
+        manaCost: 3, avxCost: 0, stats: ICE.tulpar,
         description: 'Kanatlı at, hızlı atılım',
         imagePath: '/assets/images/characters/tulpar.png',
         glowColor: 'rgba(40,180,255,0.8)', borderColor: '#0066cc',
     },
     {
         id: 'umay', name: 'Umay', role: 'Büyücü', cardTeam: 'ice', spawnTeam: 'ice',
-        manaCost: 4, stats: ICE.umay,
+        manaCost: 4, avxCost: 0, stats: ICE.umay,
         description: 'Buz büyücüsü, uzak menzil',
         imagePath: '/assets/images/characters/umay.png',
         glowColor: 'rgba(100,200,255,0.8)', borderColor: '#004488',
     },
     {
         id: 'albasti', name: 'Albastı', role: 'Neutral', cardTeam: 'mercenary', spawnTeam: 'ice',
-        manaCost: 4, stats: MERC.albasti,
+        manaCost: 0, avxCost: 3, stats: MERC.albasti,
         description: 'Kanatları olan doğaüstü varlık',
         imagePath: '/assets/images/characters/albasti.png',
         glowColor: 'rgba(180,120,255,0.8)', borderColor: '#886600',
+    },
+    {
+        id: 'tepegoz', name: 'Tepegöz', role: 'Büyücü', cardTeam: 'mercenary', spawnTeam: 'ice',
+        manaCost: 0, avxCost: 5, stats: MERC.tepegoz,
+        description: 'Tek gözlü dev büyücü',
+        imagePath: '/assets/images/characters/tepegoz.png',
+        glowColor: 'rgba(160,0,200,0.8)', borderColor: '#775500',
+    },
+    {
+        id: 'sahmeran', name: 'Şahmeran', role: 'Spirit of the Steppe', cardTeam: 'mercenary', spawnTeam: 'ice',
+        manaCost: 0, avxCost: 4, stats: MERC.sahmeran,
+        description: 'Yılan kraliçesi, zehirli saldırı',
+        imagePath: '/assets/images/characters/sahmeran.png',
+        glowColor: 'rgba(60,200,60,0.8)', borderColor: '#886600',
     },
 ];
 

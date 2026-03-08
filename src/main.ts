@@ -23,6 +23,8 @@ const ethers = (window as any).ethers;
 import { kiteService, KiteService } from './ai/KiteService';
 // Register character abilities at startup
 import './ecs/abilities/characterAbilities';
+import { t, setLang, getLang, Lang } from './i18n';
+import { switchBGM, lowerBGMForGame, setBGMVolume, toggleBGMMute, getBGMVolume, isBGMMuted, playCoinDrop, playCoinCollect, preloadSFX } from './audio/SoundManager';
 
 // ─── DOM REFS ─────────────────────────────────────────────────────────
 const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
@@ -59,7 +61,8 @@ const walletLabel = document.getElementById('wallet-label') as HTMLElement;
 // ─── SCREEN ROUTER ──────────────────────────────────────────────────
 type Screen = 'home' | 'characters' | 'story' | 'team-select' | 'mode-select' | 'game';
 
-const MENU_SCREENS = [homeScreen, charactersScreen, storyScreen, teamSelectScreen, modeSelectEl];
+const difficultyScreen = document.getElementById('difficulty-select') as HTMLElement;
+const MENU_SCREENS = [homeScreen, charactersScreen, storyScreen, teamSelectScreen, modeSelectEl, difficultyScreen];
 const GAME_HUD = ['top-hud', 'board-control-meter', 'debug-ui', 'card-tray', 'surge-indicator', 'kite-panel'];
 
 function showScreen(screen: Screen): void {
@@ -83,9 +86,11 @@ function showScreen(screen: Screen): void {
             break;
         case 'characters':
             charactersScreen.style.display = 'flex';
+            switchBGM('/assets/sound/character.mp3', 0.3);
             break;
         case 'story':
             storyScreen.style.display = 'flex';
+            switchBGM('/assets/sound/storymusic.mp3', 0.3);
             break;
         case 'team-select':
             teamSelectScreen.style.display = 'flex';
@@ -188,6 +193,8 @@ let phase: Phase = 'player';
 let playerMana = 0;
 let iceMana = 0;           // 2P mode ice player mana
 const MAX_MANA = 12;
+let playerAvx = 0;        // AVX currency for mercenary units
+let iceAvx = 0;           // 2P mode ice player AVX
 let turnCount = 1;
 let selectedPromptId: string | null = null;
 let bonusMana = 0;
@@ -198,17 +205,60 @@ let realtimeManaAccum = 0;
 let realtimeAiAccum = 0;
 let iceManaAccum = 0;
 let selectedIceCardId: UnitType | null = null;
+let difficultyLevel = 1; // 1-7, affects AI speed/strength
 
 // ─── MODE SELECT WIRING ───────────────────────────────────────────────
 document.querySelectorAll<HTMLButtonElement>('.mode-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const mode = btn.dataset.mode as GameMode;
-        showScreen('game');
-        boot(mode).catch(console.error);
+        if (mode === 'realtime') {
+            // Show difficulty select for VS AI
+            modeSelectEl.style.display = 'none';
+            difficultyScreen.style.display = 'flex';
+        } else {
+            showScreen('game');
+            boot(mode).catch(console.error);
+        }
     });
     btn.addEventListener('mouseenter', () => { btn.style.transform = 'translateY(-8px) scale(1.04)'; });
     btn.addEventListener('mouseleave', () => { btn.style.transform = ''; });
 });
+
+// Difficulty buttons
+document.querySelectorAll<HTMLButtonElement>('.diff-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        difficultyLevel = parseInt(btn.dataset.diff ?? '1');
+        difficultyScreen.style.display = 'none';
+        showScreen('game');
+        boot('realtime').catch(console.error);
+    });
+    btn.addEventListener('mouseenter', () => { btn.style.transform = 'translateX(8px)'; });
+    btn.addEventListener('mouseleave', () => { btn.style.transform = ''; });
+});
+
+document.getElementById('diff-back')?.addEventListener('click', () => {
+    difficultyScreen.style.display = 'none';
+    showScreen('mode-select');
+});
+
+// ─── AUDIO CONTROLS ──────────────────────────────────────────────────
+function setupAudioControls(): void {
+    const bgmBtn = document.getElementById('bgm-toggle') as HTMLButtonElement | null;
+    const bgmSlider = document.getElementById('bgm-volume') as HTMLInputElement | null;
+
+    if (bgmBtn) {
+        bgmBtn.addEventListener('click', () => {
+            const muted = toggleBGMMute();
+            bgmBtn.textContent = muted ? '🔇' : '🎵';
+        });
+    }
+    if (bgmSlider) {
+        bgmSlider.value = String(getBGMVolume() * 100);
+        bgmSlider.addEventListener('input', () => {
+            setBGMVolume(Number(bgmSlider.value) / 100);
+        });
+    }
+}
 
 // ─── BOOT ─────────────────────────────────────────────────────────────
 async function boot(mode: GameMode): Promise<void> {
@@ -226,6 +276,12 @@ async function boot(mode: GameMode): Promise<void> {
     engine.setHardwareScalingLevel(1 / (window.devicePixelRatio > 1 ? 1.5 : 1));
     const { scene, shadowGenerator } = createScene(engine);
 
+    // War music for game screen
+    switchBGM('/assets/sound/war.mp3', 0.2);
+
+    // Audio controls
+    setupAudioControls();
+
     const mapData = createAvaxMap(scene, shadowGenerator);
 
     // Kamera odaklayıcısı için görünmez küp
@@ -240,6 +296,20 @@ async function boot(mode: GameMode): Promise<void> {
     const iceBase = new BaseBuilding(scene, 'ice');
     const winSystem = new WinConditionSystem(fireBase, iceBase, shards);
     um.setBaseRefs(fireBase, iceBase);
+
+    // AVX coin drop refs
+    _scene = scene;
+    _engine = engine;
+    preloadSFX();
+    um.onUnitDeath = (unit) => {
+        // The team that killed this unit gets the coin
+        const killerTeam = unit.team === 'fire' ? 'ice' : 'fire';
+        const wasCrit = !!unit.abilityState._critKill;
+        const coinCount = wasCrit ? 2 : 1;
+        for (let i = 0; i < coinCount; i++) {
+            spawnAvxCoin(unit.mesh.position, killerTeam, i);
+        }
+    };
 
     // Set module-level refs for prompt effects
     _um = um;
@@ -257,15 +327,15 @@ async function boot(mode: GameMode): Promise<void> {
     // ── Mode-specific setup ───────────────────────────────────────────
     if (mode === 'realtime') {
         phase = 'player';
-        turnBanner.textContent = 'GERÇEK ZAMANLI';
+        turnBanner.textContent = t('realtime');
         turnBanner.className = 'turn-banner player-turn';
-        turnCountEl.textContent = 'VS AI';
+        turnCountEl.textContent = t('vsAi');
 
     } else if (mode === 'twoplayer') {
         phase = 'player';
-        turnBanner.textContent = 'ATEŞ vs BUZ';
+        turnBanner.textContent = t('fireVsIce');
         turnBanner.className = 'turn-banner player-turn';
-        turnCountEl.textContent = '2 OYUNCULU';
+        turnCountEl.textContent = t('twoPlayer');
         iceMana = calcManaGain(1);
         setup2Player(um);
     }
@@ -321,22 +391,53 @@ async function boot(mode: GameMode): Promise<void> {
         scene.render();
     });
 
+    // Loading screen
+    const loadingScreen = document.getElementById('loading-screen')!;
+    const loadingBar = document.getElementById('loading-bar')!;
+    const loadingStatus = document.getElementById('loading-status')!;
+    loadingScreen.style.display = 'flex';
+
+    loadingStatus.textContent = t('loadingScene');
+    loadingBar.style.width = '20%';
+
     try {
-        await Promise.race([
-            um.preload(),
-            new Promise<void>(r => setTimeout(r, 4000)),
-        ]);
+        loadingStatus.textContent = t('loadingChars');
+        loadingBar.style.width = '30%';
+        um.onProgress = (loaded, total) => {
+            const pct = 30 + Math.round((loaded / total) * 65);
+            loadingBar.style.width = `${pct}%`;
+            loadingStatus.textContent = `${t('loadingChars')} ${Math.round((loaded / total) * 100)}%`;
+        };
+        await um.preload();
+        loadingBar.style.width = '95%';
+        loadingStatus.textContent = t('loadingReady');
     } catch {
         console.warn('preload failed, using procedural meshes');
     }
 
+    loadingBar.style.width = '100%';
+    await new Promise(r => setTimeout(r, 300));
+    loadingScreen.remove();
     isGameReady = true;
+    lowerBGMForGame();
 
     window.addEventListener('resize', () => engine.resize());
 }
 
 // ─── REALTIME TICK ────────────────────────────────────────────────────
-const AI_DEPLOY_INTERVAL = 6.5; // seconds
+// Difficulty 1=easy, 7=hardest. AI deploys faster & in bigger groups at higher levels.
+function getAiDeployInterval(): number {
+    // Level 1: 8s, Level 4: 5s, Level 7: 2.5s
+    return Math.max(2.5, 8 - (difficultyLevel - 1) * 0.9);
+}
+function getAiMaxUnits(): number {
+    // Level 1: 6, Level 7: 18
+    return 6 + difficultyLevel * 2;
+}
+function getAiStatMult(): number {
+    // Level 1: 0.8x, Level 4: 1.0x, Level 7: 1.5x
+    return 0.8 + (difficultyLevel - 1) * 0.12;
+}
 
 let realtimeSurgeAccum = 0;
 
@@ -360,12 +461,25 @@ function tickRealtime(dt: number, um: UnitManager): void {
         }
     }
     realtimeAiAccum += dt;
-    if (realtimeAiAccum >= AI_DEPLOY_INTERVAL) {
+    if (realtimeAiAccum >= getAiDeployInterval()) {
         realtimeAiAccum = 0;
         const pool = aiPool();
         const eTeam = enemyTeam();
-        if (um.units.filter(u => u.team === eTeam).length < 10) {
-            um.spawnUnit(pool[Math.floor(Math.random() * pool.length)], eTeam);
+        const maxUnits = getAiMaxUnits();
+        if (um.units.filter(u => u.team === eTeam && u.state !== 'dead').length < maxUnits) {
+            const unit = um.spawnUnit(pool[Math.floor(Math.random() * pool.length)], eTeam);
+            // Apply difficulty stat multiplier
+            const mult = getAiStatMult();
+            unit.hp = Math.round(unit.hp * mult);
+            unit.stats.maxHp = Math.round(unit.stats.maxHp * mult);
+            unit.stats.attack = Math.round(unit.stats.attack * mult);
+            // At level 6-7, AI deploys 2 units at once
+            if (difficultyLevel >= 6 && um.units.filter(u => u.team === eTeam && u.state !== 'dead').length < maxUnits) {
+                const u2 = um.spawnUnit(pool[Math.floor(Math.random() * pool.length)], eTeam);
+                u2.hp = Math.round(u2.hp * mult);
+                u2.stats.maxHp = Math.round(u2.stats.maxHp * mult);
+                u2.stats.attack = Math.round(u2.stats.attack * mult);
+            }
         }
     }
 }
@@ -414,8 +528,8 @@ function enemyTeam(): 'fire' | 'ice' {
     return selectedTeam === 'fire' ? 'ice' : 'fire';
 }
 
-const FIRE_AI_POOL: UnitType[] = ['korhan', 'erlik', 'od', 'albasti', 'tepegoz', 'sahmeran'];
-const ICE_AI_POOL: UnitType[] = ['ayaz', 'tulpar', 'tulpar', 'umay', 'albasti', 'tepegoz'];
+const FIRE_AI_POOL: UnitType[] = ['korhan', 'erlik', 'od'];
+const ICE_AI_POOL: UnitType[] = ['ayaz', 'tulpar', 'umay'];
 
 function aiPool(): UnitType[] {
     return selectedTeam === 'fire' ? ICE_AI_POOL : FIRE_AI_POOL;
@@ -443,14 +557,18 @@ function buildIceCardUI(um: UnitManager): void {
         el.id = `ice-card-${card.id}`;
         el.style.cssText = `border-color:${card.borderColor};height:130px;`;
         el.innerHTML = `
-            <div class="card-mana-badge" style="background:radial-gradient(circle at 40% 35%,#2288ff,#004499)">${card.manaCost}<span class="mana-icon">◆</span></div>
-            <div class="card-team-tag" style="color:#aaddff;font-size:11px;font-weight:700;top:8px;right:8px;">[${idx + 1}]</div>
+            ${card.avxCost > 0
+                ? `<div class="card-avx-badge">${card.avxCost}<img src="/assets/avxcoin.png" class="avx-icon" alt="AVX"></div>`
+                : `<div class="card-mana-badge" style="background:radial-gradient(circle at 40% 35%,#2288ff,#004499)">${card.manaCost}<span class="mana-icon">◆</span></div>`}
+            <div style="color:#aaddff;font-size:11px;font-weight:700;position:absolute;top:8px;right:8px;">[${idx + 1}]</div>
             <div class="card-art-zone" style="flex:0 0 72px"><img src="${card.imagePath}" alt="${card.name}" /></div>
             <div class="card-footer">
                 <div class="card-name">${card.name}</div>
                 <div class="card-stats-row">
                     <span class="stat-hp"><span class="stat-lbl">HP</span>${card.stats.maxHp}</span>
                     <span class="stat-atk"><span class="stat-lbl">ATK</span>${card.stats.attack}</span>
+                    <span class="stat-def"><span class="stat-lbl">DEF</span>${card.stats.armor}</span>
+                    <span class="stat-spd"><span class="stat-lbl">SPD</span>${card.stats.speed}</span>
                 </div>
             </div>
         `;
@@ -471,15 +589,20 @@ function buildIceCardUI(um: UnitManager): void {
     // Keyboard hint
     const hint = document.createElement('div');
     hint.style.cssText = 'font-size:9px;color:rgba(150,200,255,0.3);letter-spacing:0.5px;margin-left:10px;align-self:center;white-space:nowrap;';
-    hint.textContent = '1-4 Kart · Z/X/C Lane';
+    hint.textContent = t('cardHint');
     iceArea.appendChild(hint);
 
     updateIceManaUI();
 }
 
+function canAffordIceCard(card: CardDef): boolean {
+    if (card.avxCost > 0) return iceAvx >= card.avxCost;
+    return iceMana >= card.manaCost;
+}
+
 function selectIceCard(cardId: UnitType, el: HTMLElement): void {
     const card = CARD_DEFS.find(c => c.id === cardId);
-    if (!card || iceMana < card.manaCost) { pulseRed(el); return; }
+    if (!card || !canAffordIceCard(card)) { pulseRed(el); return; }
 
     const same = selectedIceCardId === cardId;
     clearIceSelection();
@@ -515,7 +638,7 @@ function updateIceManaUI(): void {
     ICE_CARDS.forEach(card => {
         const el = document.getElementById(`ice-card-${card.id}`) as HTMLElement | null;
         if (!el) return;
-        const canPlay = iceMana >= card.manaCost;
+        const canPlay = canAffordIceCard(card);
         el.classList.toggle('card-disabled', !canPlay);
         el.style.opacity = canPlay ? '1' : '0.4';
         el.style.filter = canPlay ? '' : 'grayscale(50%) brightness(0.7)';
@@ -543,12 +666,16 @@ function handleIceKeyboard(e: KeyboardEvent, um: UnitManager): void {
         e.preventDefault();
         const card = CARD_DEFS.find(c => c.id === selectedIceCardId);
         if (!card) return;
-        if (iceMana < card.manaCost) {
+        if (!canAffordIceCard(card)) {
             const el = document.getElementById(`ice-card-${card.id}`) as HTMLElement | null;
             if (el) pulseRed(el);
             return;
         }
-        iceMana -= card.manaCost;
+        if (card.avxCost > 0) {
+            iceAvx -= card.avxCost;
+        } else {
+            iceMana -= card.manaCost;
+        }
         um.spawnUnit(selectedIceCardId, 'ice', lane);
         clearIceSelection();
         updateIceManaUI();
@@ -601,7 +728,7 @@ const UNIT_TR_NAMES: Record<string, string> = {
 
 function showWinScreen(sys: WinConditionSystem): void {
     const winner = sys.getWinner();
-    winTitle.textContent = 'ZAFER!';
+    winTitle.textContent = t('victory');
     winTitle.className = winner === 'fire' ? 'fire-win' : 'ice-win';
     winMessage.textContent = sys.getWinMessage();
 
@@ -652,15 +779,23 @@ function buildCardUI(um: UnitManager): void {
     });
 }
 
+function canAffordCard(card: CardDef): boolean {
+    if (card.avxCost > 0) return playerAvx >= card.avxCost;
+    return playerMana >= card.manaCost;
+}
+
 function createCardEl(card: CardDef, um: UnitManager): HTMLElement {
     const el = document.createElement('div');
     el.className = 'game-card';
     el.id = `card-${card.id}`;
     el.style.borderColor = card.borderColor;
     el.style.boxShadow = `0 0 8px ${card.glowColor}`;
+    const isAvx = card.avxCost > 0;
+    const costBadge = isAvx
+        ? `<div class="card-avx-badge">${card.avxCost}<img src="/assets/avxcoin.png" class="avx-icon" alt="AVX"></div>`
+        : `<div class="card-mana-badge">${card.manaCost}<span class="mana-icon">◆</span></div>`;
     el.innerHTML = `
-        <div class="card-mana-badge">${card.manaCost}<span class="mana-icon">◆</span></div>
-        <div class="card-team-tag ${card.cardTeam}">${card.cardTeam === 'fire' ? 'ATEŞ' : card.cardTeam === 'ice' ? 'BUZ' : 'TARAFSIZ'}</div>
+        ${costBadge}
         <div class="card-art-zone">
             <img src="${card.imagePath}" alt="${card.name}" />
         </div>
@@ -670,12 +805,14 @@ function createCardEl(card: CardDef, um: UnitManager): HTMLElement {
             <div class="card-stats-row">
                 <span class="stat-hp"><span class="stat-lbl">HP</span>${card.stats.maxHp}</span>
                 <span class="stat-atk"><span class="stat-lbl">ATK</span>${card.stats.attack}</span>
+                <span class="stat-def"><span class="stat-lbl">DEF</span>${card.stats.armor}</span>
+                <span class="stat-spd"><span class="stat-lbl">SPD</span>${card.stats.speed}</span>
             </div>
         </div>
     `;
 
     el.addEventListener('click', () => {
-        if (phase !== 'player' || playerMana < card.manaCost) {
+        if (phase !== 'player' || !canAffordCard(card)) {
             pulseRed(el); return;
         }
         pendingCard = card;
@@ -691,32 +828,25 @@ function createCardEl(card: CardDef, um: UnitManager): HTMLElement {
     return el;
 }
 
-// ─── PROMPT CARD UI ───────────────────────────────────────────────────
+// ─── SKILL CARD UI ───────────────────────────────────────────────────
+let manaFrozen = false;
+let manaFreezeTimer = 0;
+let ouroborosMode = false;
+
 function buildPromptUI(): void {
     promptContainer.innerHTML = '';
-    PROMPT_DEFS.slice(0, 4).forEach(def => {
+    PROMPT_DEFS.forEach(def => {
         promptContainer.appendChild(createPromptCardEl(def));
     });
 }
-
-const PROMPT_ICONS: Record<string, string> = {
-    berserker_rage: '◈',
-    freeze_area: '✦',
-    summon_spirit: '◇',
-    mana_surge: '◆',
-    damage_aoe: '✸',
-    heal_ally: '+',
-    shield_all: '▣',
-    speed_boost: '▷',
-};
 
 function createPromptCardEl(def: PromptCardDef): HTMLElement {
     const el = document.createElement('div');
     el.className = 'prompt-card';
     el.id = `prompt-${def.id}`;
     el.innerHTML = `
-        <div class="prompt-card-cost">${def.manaCost}</div>
-        <div class="prompt-card-icon">${PROMPT_ICONS[def.effectType] ?? '✨'}</div>
+        <div class="prompt-card-cost">${def.manaCost > 0 ? def.manaCost : ''}</div>
+        <div class="prompt-card-icon"><img src="${def.imagePath}" alt="${def.name}" /></div>
         <div class="prompt-card-footer">
             <div class="prompt-card-name">${def.name}</div>
         </div>
@@ -727,19 +857,12 @@ function createPromptCardEl(def: PromptCardDef): HTMLElement {
         if (phase !== 'player' || playerMana < def.manaCost) {
             pulseRed(el); return;
         }
-        if (selectedPromptId === def.id) {
-            applyPromptEffect(def);
-            playerMana -= def.manaCost;
-            selectedPromptId = null;
-            clearPromptSelections();
-            updateManaUI();
-            updatePromptStates();
-            playCardAnim(el);
-        } else {
-            selectedPromptId = def.id;
-            clearPromptSelections();
-            el.classList.add('selected');
-        }
+        applyPromptEffect(def);
+        if (!manaFrozen) playerMana -= def.manaCost;
+        clearPromptSelections();
+        updateManaUI();
+        updatePromptStates();
+        playCardAnim(el);
     });
 
     return el;
@@ -753,14 +876,9 @@ function clearPromptSelections(): void {
 const activeEffectsEl = document.getElementById('active-effects')!;
 
 const EFFECT_DISPLAY: Record<string, { label: string; color: string }> = {
-    berserker_rage: { label: 'Alaz Dalgası',   color: '#ff7733' },
-    freeze_area:    { label: 'Buz Noktası',     color: '#55ccff' },
-    summon_spirit:  { label: 'Ruh Çağrısı',     color: '#cc99ff' },
-    mana_surge:     { label: 'Mana Akışı',      color: '#aaff55' },
-    damage_aoe:     { label: 'Toprak Ateşi',    color: '#ff5533' },
-    heal_ally:      { label: "Umay'ın Nimeti",  color: '#55ff99' },
-    shield_all:     { label: 'Buz Kalkanı',     color: '#55aaff' },
-    speed_boost:    { label: 'Rüzgar Adımı',    color: '#ffee55' },
+    mana_fill:   { label: 'Mana Doldur',   color: '#aaff55' },
+    mana_freeze: { label: 'Mana Dondur',   color: '#55ccff' },
+    ouroboros:   { label: 'Ouroboros',      color: '#cc55ff' },
 };
 
 function showActiveEffect(def: PromptCardDef): void {
@@ -802,99 +920,74 @@ function applyPromptEffect(def: PromptCardDef): void {
     showActiveEffect(def);
     const um = _um;
     if (!um) return;
-    const alive = um.units.filter(u => u.state !== 'dead');
-    const fireUnits = alive.filter(u => u.team === 'fire');
-    const iceUnits = alive.filter(u => u.team === 'ice');
+    const playerTeam = selectedTeam;
+    const enemyTeam = playerTeam === 'fire' ? 'ice' : 'fire';
 
     switch (def.effectType) {
-        case 'mana_surge':
-            bonusMana += def.magnitude;
-            playerMana = Math.min(MAX_MANA, playerMana + Math.floor(def.magnitude));
+        case 'mana_fill':
+            playerMana = MAX_MANA;
+            updateManaUI();
             break;
 
-        case 'berserker_rage':
-            // +attack to all fire units for duration (via empowered status)
-            for (const u of fireUnits) {
-                applyStatusEffect(u, {
-                    type: 'empowered',
-                    duration: def.duration * 10, // turns → ~seconds (10s per turn approx)
-                    magnitude: def.magnitude,
-                    sourceUnitId: 0,
-                });
-            }
+        case 'mana_freeze':
+            manaFrozen = true;
+            manaFreezeTimer = def.duration;
+            setTimeout(() => { manaFrozen = false; }, def.duration * 1000);
             break;
 
-        case 'freeze_area':
-            // Freeze all enemy units
-            for (const u of iceUnits) {
-                applyStatusEffect(u, {
-                    type: 'frozen',
-                    duration: def.magnitude, // 1.5s
-                    magnitude: 0.8, // 80% speed reduction
-                    sourceUnitId: 0,
-                });
-            }
-            break;
-
-        case 'summon_spirit': {
-            // Spawn a temporary albasti unit on a random lane
-            const lane = Math.floor(Math.random() * 3);
-            const spirit = um.spawnUnit('albasti', 'fire', lane);
-            // Auto-kill after duration (turns → seconds)
-            const lifetimeMs = def.duration * 10 * 1000;
-            setTimeout(() => {
-                if (spirit.state !== 'dead') spirit.hp = 0;
-            }, lifetimeMs);
+        case 'ouroboros': {
+            const enemies = um.units.filter(u => u.team === enemyTeam && u.state !== 'dead');
+            if (enemies.length === 0) break;
+            ouroborosMode = true;
+            showEnemyPicker(enemies, um, playerTeam);
             break;
         }
-
-        case 'damage_aoe':
-            // Deal damage to all enemies in mid lane (X near 0)
-            for (const u of iceUnits) {
-                if (Math.abs(u.mesh.position.x) < 7) {
-                    u.hp -= def.magnitude;
-                }
-            }
-            break;
-
-        case 'heal_ally':
-            // Heal all fire units by magnitude% of maxHp
-            for (const u of fireUnits) {
-                u.hp = Math.min(u.stats.maxHp, u.hp + u.stats.maxHp * def.magnitude);
-            }
-            break;
-
-        case 'shield_all':
-            // Shield all fire units (absorbs magnitude damage)
-            for (const u of fireUnits) {
-                applyStatusEffect(u, {
-                    type: 'shielded',
-                    duration: def.duration * 10,
-                    magnitude: def.magnitude,
-                    sourceUnitId: 0,
-                });
-            }
-            break;
-
-        case 'speed_boost':
-            // Speed boost all fire units (via negative slowed = boost handled as empowered speed)
-            for (const u of fireUnits) {
-                applyStatusEffect(u, {
-                    type: 'empowered', // reuse empowered for attack; use a speed state flag
-                    duration: def.duration * 10,
-                    magnitude: 0, // no attack bonus from speed_boost
-                    sourceUnitId: 0,
-                });
-                // Store speed boost directly on abilityState
-                (u.abilityState as any).speedBoost = def.magnitude;
-                (u.abilityState as any).speedBoostTimer = def.duration * 10;
-            }
-            break;
     }
 }
 
+function showEnemyPicker(enemies: import('./ecs/Unit').Unit[], um: UnitManager, playerTeam: 'fire' | 'ice'): void {
+    let overlay = document.getElementById('ouroboros-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'ouroboros-overlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;';
+        document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = `<div style="color:#cc55ff;font-size:22px;font-weight:bold;margin-bottom:8px;">${t('ouroborosTitle')}</div>`;
+
+    for (const enemy of enemies) {
+        const btn = document.createElement('button');
+        btn.style.cssText = 'padding:10px 24px;font-size:16px;background:#1a1a2e;color:#fff;border:2px solid #cc55ff;border-radius:8px;cursor:pointer;';
+        btn.textContent = `${enemy.type.toUpperCase()} (HP: ${Math.round(enemy.hp)}, ATK: ${enemy.stats.attack})`;
+        btn.addEventListener('click', () => {
+            enemy.team = playerTeam;
+            // Change mesh color to indicate conversion
+            enemy.mesh.getChildMeshes().forEach(c => {
+                if (c.material && 'emissiveColor' in c.material) {
+                    (c.material as any).emissiveColor = playerTeam === 'fire'
+                        ? { r: 0.6, g: 0.15, b: 0.05 }
+                        : { r: 0.1, g: 0.3, b: 0.6 };
+                }
+            });
+            ouroborosMode = false;
+            overlay!.remove();
+        });
+        overlay.appendChild(btn);
+    }
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.style.cssText = 'padding:8px 20px;font-size:14px;background:#333;color:#aaa;border:1px solid #555;border-radius:6px;cursor:pointer;margin-top:10px;';
+    cancelBtn.textContent = t('cancel');
+    cancelBtn.addEventListener('click', () => {
+        ouroborosMode = false;
+        playerMana += 5; // refund
+        overlay!.remove();
+    });
+    overlay.appendChild(cancelBtn);
+}
+
 function updatePromptStates(): void {
-    PROMPT_DEFS.slice(0, 4).forEach(def => {
+    PROMPT_DEFS.forEach(def => {
         const el = document.getElementById(`prompt-${def.id}`);
         if (!el) return;
         const canPlay = phase === 'player' && playerMana >= def.manaCost;
@@ -947,7 +1040,12 @@ function deployPendingCard(lane: number): void {
     pendingCard = null;
     laneOverlay.style.display = 'none';
 
-    playerMana -= card.manaCost;
+    if (card.avxCost > 0) {
+        playerAvx -= card.avxCost;
+        updateAvxUI();
+    } else if (!manaFrozen) {
+        playerMana -= card.manaCost;
+    }
     _laneUm.spawnUnit(card.id as UnitType, selectedTeam, lane);
 
     const el = document.getElementById(`card-${card.id}`);
@@ -977,7 +1075,7 @@ function updateCardStates(): void {
     playerCardDefs().forEach(card => {
         const el = document.getElementById(`card-${card.id}`) as HTMLElement | null;
         if (!el) return;
-        const canPlay = phase === 'player' && playerMana >= card.manaCost;
+        const canPlay = phase === 'player' && canAffordCard(card);
         el.classList.toggle('card-disabled', !canPlay);
         el.style.opacity = canPlay ? '1' : '0.4';
         el.style.cursor = canPlay ? 'pointer' : 'not-allowed';
@@ -996,6 +1094,98 @@ function updateManaUI(): void {
     updateCardStates();
 }
 
+function updateAvxUI(): void {
+    const el = document.getElementById('avx-counter');
+    if (el) el.textContent = String(playerAvx);
+}
+
+// ─── AVX COIN DROP SYSTEM ────────────────────────────────────────────
+let _scene: any = null;
+let _engine: any = null;
+
+function spawnAvxCoin(worldPos: { x: number; y: number; z: number }, killerTeam: 'fire' | 'ice', index: number): void {
+    if (!_scene || !_engine) return;
+    if (index === 0) playCoinDrop();
+
+    const cam = _scene.activeCamera;
+    if (!cam) return;
+
+    // Use a temporary mesh to get screen coordinates
+    let sx: number, sy: number;
+    try {
+        const tempPos = new Vector3(worldPos.x, worldPos.y + 1.5, worldPos.z);
+        const screenPos = Vector3.Project(
+            tempPos,
+            _scene.getTransformMatrix(),
+            cam.getTransformationMatrix(),
+            cam.viewport.toGlobal(_engine.getRenderWidth(), _engine.getRenderHeight()),
+        );
+        // Canvas might be scaled vs CSS pixels
+        const canvas = _engine.getRenderingCanvas()!;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = rect.width / _engine.getRenderWidth();
+        const scaleY = rect.height / _engine.getRenderHeight();
+        sx = rect.left + screenPos.x * scaleX;
+        sy = rect.top + screenPos.y * scaleY;
+        if (isNaN(sx) || isNaN(sy)) throw new Error('NaN');
+    } catch {
+        sx = window.innerWidth / 2;
+        sy = window.innerHeight / 2;
+    }
+
+    // Offset for multiple coins
+    sx += index * 40 + (Math.random() - 0.5) * 20;
+    sy += (Math.random() - 0.5) * 20;
+
+    const coin = document.createElement('div');
+    coin.className = 'avx-coin';
+    coin.style.left = `${sx}px`;
+    coin.style.top = `${sy}px`;
+    coin.style.opacity = '1';
+    coin.style.pointerEvents = 'auto';
+    coin.innerHTML = `<img src="/assets/avxcoin.png" alt="AVX">`;
+    document.body.appendChild(coin);
+
+    // Drop animation
+    const anim = coin.animate([
+        { transform: 'translate(-50%, -50%) scale(0.3)', opacity: '0.3' },
+        { transform: 'translate(-50%, -50%) scale(1.15)', opacity: '1', offset: 0.65 },
+        { transform: 'translate(-50%, -50%) scale(0.95)', opacity: '1', offset: 0.85 },
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: '1' },
+    ], { duration: 400, fill: 'forwards', easing: 'ease-out' });
+
+    anim.onfinish = () => {
+        coin.style.transform = 'translate(-50%, -50%) scale(1)';
+        coin.style.opacity = '1';
+    };
+
+    coin.addEventListener('click', () => {
+        playCoinCollect();
+        // Realtime: player always collects. 2P: goes to killer team.
+        if (gameMode === 'twoplayer') {
+            if (killerTeam === 'fire') playerAvx++;
+            else iceAvx++;
+        } else {
+            playerAvx++;
+        }
+        updateAvxUI();
+        updateCardStates();
+        const collectAnim = coin.animate([
+            { transform: 'translate(-50%, -50%) scale(1)', opacity: '1' },
+            { transform: 'translate(-50%, -50%) scale(1.5)', opacity: '0' },
+        ], { duration: 200, fill: 'forwards' });
+        collectAnim.onfinish = () => coin.remove();
+    });
+
+    // Auto-expire after 8s
+    setTimeout(() => {
+        if (coin.parentNode) {
+            const fadeAnim = coin.animate([{ opacity: '1' }, { opacity: '0' }], { duration: 400, fill: 'forwards' });
+            fadeAnim.onfinish = () => coin.remove();
+        }
+    }, 8000);
+}
+
 // ─── KITE UI HELPERS ─────────────────────────────────────────────────
 function kiteUpdatePanel(): void {
     const aiDot = document.getElementById('kite-ai-dot');
@@ -1007,25 +1197,65 @@ function kiteUpdatePanel(): void {
 
     if (kiteService.isLiveAI) {
         aiDot.className = 'kite-status-dot live';
-        srcLbl.textContent = 'KITE LLM';
+        srcLbl.textContent = t('kiteLlm');
         srcLbl.className = 'kite-row-val green';
         panel?.classList.add('live');
     } else {
         aiDot.className = 'kite-status-dot mock';
-        srcLbl.textContent = 'MOCK AI';
+        srcLbl.textContent = t('mockAi');
         srcLbl.className = 'kite-row-val orange';
     }
 
     if (kiteService.isChainActive) {
         chainDot.className = 'kite-status-dot chain';
-        chainLbl.textContent = 'BAĞLI';
+        chainLbl.textContent = t('connected');
         chainLbl.className = 'kite-row-val blue';
         panel?.classList.add('chain');
     } else {
         chainDot.className = 'kite-status-dot';
-        chainLbl.textContent = 'ÇEVRİMDIŞI';
+        chainLbl.textContent = t('offline');
         chainLbl.className = 'kite-row-val';
     }
 }
 
+// ─── I18N ────────────────────────────────────────────────────────────
+function applyI18n(): void {
+    document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
+        const key = el.dataset.i18n as any;
+        el.textContent = t(key);
+    });
+    document.querySelectorAll<HTMLElement>('[data-i18n-html]').forEach(el => {
+        const key = el.dataset.i18nHtml as any;
+        el.innerHTML = t(key);
+    });
+}
 
+// Lang button wiring
+document.querySelectorAll<HTMLButtonElement>('.lang-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const lang = btn.dataset.lang as Lang;
+        setLang(lang);
+        applyI18n();
+        // Update button styles
+        document.querySelectorAll<HTMLButtonElement>('.lang-btn').forEach(b => {
+            const active = b.dataset.lang === lang;
+            b.style.background = active ? 'rgba(255,255,255,0.1)' : 'transparent';
+            b.style.color = active ? '#fff' : 'rgba(255,255,255,0.5)';
+            b.style.borderColor = active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)';
+            b.style.fontWeight = active ? '700' : '400';
+        });
+    });
+});
+
+// Apply saved language on load
+(() => {
+    const lang = getLang();
+    applyI18n();
+    document.querySelectorAll<HTMLButtonElement>('.lang-btn').forEach(b => {
+        const active = b.dataset.lang === lang;
+        b.style.background = active ? 'rgba(255,255,255,0.1)' : 'transparent';
+        b.style.color = active ? '#fff' : 'rgba(255,255,255,0.5)';
+        b.style.borderColor = active ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)';
+        b.style.fontWeight = active ? '700' : '400';
+    });
+})();

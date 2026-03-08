@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>A2 — Alaz & Ayaz</title>
+  <link rel="icon" type="image/png" href="/assets/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
@@ -361,8 +362,8 @@
     }
 
     .prompt-card {
-      width: 85px;
-      height: 150px;
+      width: 110px;
+      height: 175px;
       border-radius: 10px;
       border: 1px solid rgba(140, 90, 255, 0.35);
       background: linear-gradient(170deg,
@@ -418,31 +419,41 @@
     .prompt-card-icon {
       flex: 1;
       display: flex; align-items: center; justify-content: center;
-      font-size: 34px;
-      margin-top: 8px;
-      filter: drop-shadow(0 0 8px rgba(180,120,255,0.6));
+      padding: 0;
+      overflow: hidden;
+      border-radius: 10px 10px 0 0;
+    }
+    .prompt-card-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      filter: drop-shadow(0 0 8px rgba(180,120,255,0.4));
     }
 
     .prompt-card-footer {
-      background: rgba(0,0,0,0.55);
-      padding: 5px 6px 6px;
-      border-top: 1px solid rgba(255,255,255,0.05);
+      background: linear-gradient(to top, rgba(5,3,18,0.95) 60%, transparent);
+      padding: 4px 6px 5px;
+      border-top: none;
+      margin-top: -22px;
+      position: relative;
+      z-index: 1;
+      border-radius: 0 0 10px 10px;
     }
 
     .prompt-card-name {
-      font-size: 9px; font-weight: 700;
+      font-size: 11px; font-weight: 700;
       color: #cc99ff;
       text-align: center;
       letter-spacing: 0.3px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
     .prompt-card-desc {
-      font-size: 8px;
-      color: rgba(200,180,230,0.5);
+      font-size: 9px;
+      color: rgba(200,180,230,0.55);
       text-align: center;
-      margin-top: 1px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-top: 2px;
+      line-height: 1.2;
     }
 
     /* Divider */
@@ -464,7 +475,7 @@
 
     .game-card {
       width: 110px;
-      height: 165px;
+      height: 175px;
       border-radius: 12px;
       border: 1px solid rgba(255,255,255,0.10);
       cursor: pointer;
@@ -505,6 +516,50 @@
       z-index: 2;
     }
 
+    .card-avx-badge {
+      position: absolute;
+      top: 7px; left: 7px;
+      height: 27px;
+      padding: 0 7px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #e84142, #cc2222);
+      border: 1px solid rgba(255,120,120,0.55);
+      color: #fff;
+      font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; gap: 3px;
+      box-shadow: 0 0 12px rgba(232,65,66,0.75);
+      z-index: 2;
+    }
+    .avx-icon {
+      width: 14px; height: 14px;
+      object-fit: contain;
+      border-radius: 50%;
+    }
+
+    /* AVX HUD counter */
+    #avx-hud {
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+      margin-top: 2px;
+      font-family: 'Cinzel', serif;
+      font-size: 14px; font-weight: 700;
+      color: #e84142;
+      text-shadow: 0 0 8px rgba(232,65,66,0.5);
+    }
+    .avx-hud-icon { width: 16px; height: 16px; object-fit: contain; border-radius: 50%; }
+
+    /* AVX coin drop */
+    .avx-coin {
+      position: fixed;
+      width: 32px; height: 32px;
+      cursor: pointer;
+      z-index: 400;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 0 6px rgba(232,65,66,0.8));
+      transition: transform 0.1s;
+    }
+    .avx-coin:hover { transform: translate(-50%, -50%) scale(1.3); }
+    .avx-coin img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+
     .card-team-tag {
       position: absolute;
       top: 8px; right: 8px;
@@ -514,7 +569,7 @@
     }
 
     .card-art-zone {
-      flex: 0 0 105px;
+      flex: 1 1 auto;
       overflow: hidden;
       border-radius: 10px 10px 0 0;
     }
@@ -527,14 +582,16 @@
     }
 
     .card-footer {
-      flex: 1;
-      background: linear-gradient(to bottom, rgba(0,0,0,0.78), rgba(5,3,18,0.95));
-      border-top: 1px solid rgba(255,255,255,0.07);
-      padding: 5px 8px 6px;
+      flex: 0 0 auto;
+      background: linear-gradient(to top, rgba(5,3,18,0.95) 60%, transparent);
+      border-top: none;
+      padding: 4px 6px 5px;
       border-radius: 0 0 12px 12px;
+      margin-top: -22px;
+      position: relative;
+      z-index: 1;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
     }
 
     .card-name {
@@ -550,12 +607,17 @@
     }
 
     .card-stats-row {
-      display: flex; gap: 6px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px 6px;
       font-size: 10px; font-weight: 600;
+      margin-top: 2px;
     }
 
     .stat-hp  { color: #ff6666; }
     .stat-atk { color: #ffaa44; }
+    .stat-def { color: #66aaff; }
+    .stat-spd { color: #66ff88; }
 
     /* ─── KITE AI PANEL ─── */
     #kite-panel {
@@ -615,6 +677,111 @@
       background: linear-gradient(to right, transparent, rgba(80,140,255,0.2), transparent);
       margin: 1px 0;
     }
+
+    /* ─── AUDIO CONTROLS ─── */
+    #audio-controls {
+      position: fixed;
+      bottom: 14px; left: 14px;
+      z-index: 320;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(6, 8, 20, 0.75);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 5px 8px;
+      font-size: 13px;
+    }
+    #audio-controls button {
+      background: none; border: none; cursor: pointer;
+      font-size: 16px; padding: 2px 4px; border-radius: 4px;
+      transition: background 0.2s;
+    }
+    #audio-controls button:hover { background: rgba(255,255,255,0.1); }
+    #audio-controls input[type="range"] {
+      width: 55px; height: 4px; accent-color: #ff8844;
+      cursor: pointer;
+    }
+
+    /* ─── DIFFICULTY SELECT ─── */
+    #difficulty-select {
+      position: fixed; inset: 0;
+      z-index: 2600;
+      background: linear-gradient(180deg, #0a0410 0%, #120818 40%, #1a0a0a 100%);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 30px;
+      overflow-y: auto;
+    }
+    .diff-header { text-align: center; max-width: 600px; }
+    .diff-title {
+      font-family: 'Cinzel', serif;
+      font-size: 32px; font-weight: 900;
+      color: #e84142;
+      text-shadow: 0 0 30px rgba(232,65,66,0.5);
+      letter-spacing: 4px;
+      margin-bottom: 16px;
+    }
+    .diff-lore {
+      font-family: 'Cinzel', serif;
+      font-size: 13px; line-height: 1.8;
+      color: rgba(255,200,180,0.6);
+      letter-spacing: 0.5px;
+    }
+    .diff-warning {
+      color: #e84142;
+      font-weight: 700;
+      text-shadow: 0 0 10px rgba(232,65,66,0.4);
+    }
+    .diff-levels {
+      display: flex; flex-direction: column; gap: 8px;
+      width: 100%; max-width: 420px;
+    }
+    .diff-btn {
+      display: flex; align-items: center; gap: 14px;
+      width: 100%; padding: 14px 18px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.25s;
+      text-align: left;
+    }
+    .diff-btn:hover {
+      background: rgba(232,65,66,0.1);
+      border-color: rgba(232,65,66,0.4);
+      transform: translateX(6px);
+      box-shadow: 0 0 20px rgba(232,65,66,0.15);
+    }
+    .diff-num {
+      font-family: 'Cinzel', serif;
+      font-size: 22px; font-weight: 900;
+      color: #e84142;
+      min-width: 36px; text-align: center;
+      text-shadow: 0 0 10px rgba(232,65,66,0.3);
+    }
+    .diff-name {
+      font-family: 'Cinzel', serif;
+      font-size: 15px; font-weight: 700;
+      color: rgba(255,255,255,0.85);
+    }
+    .diff-sub {
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      color: rgba(255,180,160,0.4);
+      margin-left: auto;
+    }
+    /* Darker = deeper */
+    .diff-btn[data-diff="5"] { border-color: rgba(232,65,66,0.12); }
+    .diff-btn[data-diff="6"] { border-color: rgba(232,65,66,0.18); background: rgba(232,65,66,0.04); }
+    .diff-btn[data-diff="7"] {
+      border-color: rgba(232,65,66,0.3);
+      background: rgba(232,65,66,0.06);
+      box-shadow: 0 0 15px rgba(232,65,66,0.1);
+    }
+    .diff-btn[data-diff="7"] .diff-name { color: #e84142; }
+    .diff-btn[data-diff="7"] .diff-sub { color: rgba(232,65,66,0.6); }
 
     /* ═══════════════════════════════════════════
        WIN OVERLAY
@@ -1541,9 +1708,9 @@
     .stat-lbl {
       font-size: 8px;
       font-weight: 800;
-      letter-spacing: 0.8px;
-      opacity: 0.6;
-      margin-right: 1px;
+      letter-spacing: 0.5px;
+      opacity: 0.75;
+      margin-right: 2px;
     }
     .mode-btn.realtime  .mode-btn-icon { filter: drop-shadow(0 0 12px rgba(255, 200, 0, 0.65)); }
     .mode-btn.twoplayer .mode-btn-icon { filter: drop-shadow(0 0 12px rgba(80, 160, 255, 0.65)); }
@@ -1609,21 +1776,26 @@
   <!-- ═══ HEADER BAR ═══ -->
   <div id="app-header">
     <div class="logo" id="header-logo">A2: THE SAGA</div>
+    <div id="lang-selector" style="display:flex;gap:4px;align-items:center;margin-left:auto;margin-right:12px;">
+      <button class="lang-btn" data-lang="tr" style="padding:2px 8px;font-size:11px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#fff;cursor:pointer;font-weight:700;">TR</button>
+      <button class="lang-btn" data-lang="en" style="padding:2px 8px;font-size:11px;background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:rgba(255,255,255,0.5);cursor:pointer;">EN</button>
+      <button class="lang-btn" data-lang="es" style="padding:2px 8px;font-size:11px;background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:rgba(255,255,255,0.5);cursor:pointer;">ES</button>
+    </div>
     <button id="wallet-btn">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0">
         <rect x="1" y="4" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/>
         <path d="M4 4V3a2 2 0 012-2h4a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.5" fill="none"/>
         <circle cx="11" cy="9" r="1.5" fill="currentColor"/>
       </svg>
-      <span id="wallet-label">Cüzdan Bağla</span>
+      <span id="wallet-label" data-i18n="connectWallet">Cüzdan Bağla</span>
     </button>
   </div>
 
   <!-- ═══ HOME SCREEN ═══ -->
   <div id="home-screen">
-    <img class="home-logo-img" src="assets/images/logo.png" alt="A2 — Alaz & Ayaz" />
+    <img class="home-logo-img" src="/assets/images/logo.png" alt="A2 — Alaz & Ayaz" />
     <div class="home-subtitle">THE SAGA OF ALAZ & AYAZ</div>
-    <div class="home-tagline">Türk Mitolojisi · Moba Strateji · Web3</div>
+    <div class="home-tagline" data-i18n="tagline">Türk Mitolojisi · Moba Strateji · Web3</div>
     <div class="home-divider">
       <div class="home-divider-diamond"></div>
     </div>
@@ -1638,8 +1810,8 @@
             <path d="M31 31l2 2M35 35l-2-2"/>
           </svg>
         </div>
-        <div class="home-card-label">OYNA</div>
-        <div class="home-card-desc">Savaşa katıl<br>Ava Shard'ları ele geçir</div>
+        <div class="home-card-label" data-i18n="play">OYNA</div>
+        <div class="home-card-desc" data-i18n-html="playDesc">Savaşa katıl<br>Ava Shard'ları ele geçir</div>
       </div>
       <div class="home-card" id="nav-characters">
         <div class="home-card-icon">
@@ -1649,8 +1821,8 @@
             <path d="M20 14v6M17 17h6" stroke-width="1.4" opacity="0.6"/>
           </svg>
         </div>
-        <div class="home-card-label">KARAKTERLER</div>
-        <div class="home-card-desc">9 efsanevi savaşçıyı<br>keşfet</div>
+        <div class="home-card-label" data-i18n="characters">KARAKTERLER</div>
+        <div class="home-card-desc" data-i18n-html="charsDesc">9 efsanevi savaşçıyı<br>keşfet</div>
       </div>
       <div class="home-card" id="nav-story">
         <div class="home-card-icon">
@@ -1662,17 +1834,17 @@
             <line x1="10" y1="26" x2="17" y2="27" stroke-width="1.2"/>
           </svg>
         </div>
-        <div class="home-card-label">HİKAYE</div>
-        <div class="home-card-desc">Alaz & Ayaz<br>destanını oku</div>
+        <div class="home-card-label" data-i18n="story">HİKAYE</div>
+        <div class="home-card-desc" data-i18n-html="storyDesc">Alaz & Ayaz<br>destanını oku</div>
       </div>
     </div>
   </div>
 
   <!-- ═══ CHARACTERS SCREEN ═══ -->
   <div id="characters-screen">
-    <button class="screen-back-btn" id="chars-back">← Geri</button>
+    <button class="screen-back-btn" id="chars-back"><span data-i18n="back">← Geri</span></button>
 
-    <div class="char-section-title fire">ATEŞ TAKIMI</div>
+    <div class="char-section-title fire" data-i18n="fireTeam">ATEŞ TAKIMI</div>
     <div class="char-grid">
       <div class="char-card fire-card">
         <img class="char-card-img" src="/assets/images/characters/korhan.png" alt="Korhan" />
@@ -1721,7 +1893,7 @@
       </div>
     </div>
 
-    <div class="char-section-title ice">BUZ TAKIMI</div>
+    <div class="char-section-title ice" data-i18n="iceTeam">BUZ TAKIMI</div>
     <div class="char-grid">
       <div class="char-card ice-card">
         <img class="char-card-img" src="/assets/images/characters/ayaz.png" alt="Ayaz" />
@@ -1822,7 +1994,7 @@
 
   <!-- ═══ STORY SCREEN ═══ -->
   <div id="story-screen">
-    <button class="screen-back-btn" id="story-back">← Geri</button>
+    <button class="screen-back-btn" id="story-back"><span data-i18n="back">← Geri</span></button>
     <div class="story-content">
       <h2>ALAZ & AYAZ DESTANI</h2>
       <p>Çok eski zamanlarda, Tengri'nin nefesinden iki kardeş doğdu: <strong style="color:#ff8040">Alaz</strong>, ateşin ruhu ve <strong style="color:#70c8ff">Ayaz</strong>, buzun kalbi. Onlar evrenin dengesini korumak için yaratılmıştı — biri ısı, diğeri soğuk; biri tutkuyla yakar, diğeri sabırla dondurur.</p>
@@ -1848,8 +2020,8 @@
 
   <!-- ═══ TEAM SELECT SCREEN ═══ -->
   <div id="team-select-screen">
-    <button class="screen-back-btn" id="team-back">← Geri</button>
-    <div class="team-select-title">Tarafını Seç</div>
+    <button class="screen-back-btn" id="team-back"><span data-i18n="back">← Geri</span></button>
+    <div class="team-select-title" data-i18n="chooseTeam">Tarafını Seç</div>
     <div class="team-select-row">
       <div class="team-pick-card fire-pick" data-team="fire">
         <div class="team-pick-icon">
@@ -1859,13 +2031,11 @@
             <path d="M32 30c0 0 6 5 5 11-1 4-5 7-5 7 3-4 2-8-1-9-3 1-3 5-1 9-4-4-4-10 2-18z" fill="#ffa040" fill-opacity="0.35" stroke="none"/>
           </svg>
         </div>
-        <div class="team-pick-name">ATEŞ</div>
+        <div class="team-pick-name" data-i18n="fire">ATEŞ</div>
         <div class="team-pick-desc">
-          Korhan · Erlik · Od<br>
-          Yüksek hasar, agresif strateji<br>
-          Yak, yık, fethet
+          <span data-i18n-html="fireDesc">Korhan · Erlik · Od<br>Yüksek hasar, agresif strateji<br>Yak, yık, fethet</span>
         </div>
-        <div class="team-pick-tag">Alaz Klanı</div>
+        <div class="team-pick-tag" data-i18n="fireClan">Alaz Klanı</div>
       </div>
       <div class="team-vs-divider">
         <div class="team-vs-badge">VS</div>
@@ -1888,13 +2058,11 @@
             <circle cx="15" cy="49" r="2.5" fill="#38aaff" fill-opacity="0.4" stroke="none"/>
           </svg>
         </div>
-        <div class="team-pick-name">BUZ</div>
+        <div class="team-pick-name" data-i18n="ice">BUZ</div>
         <div class="team-pick-desc">
-          Ayaz · Tulpar · Umay<br>
-          Dayanıklılık, kontrol, sabır<br>
-          Dondur, savun, ilerle
+          <span data-i18n-html="iceDesc">Ayaz · Tulpar · Umay<br>Dayanıklılık, kontrol, sabır<br>Dondur, savun, ilerle</span>
         </div>
-        <div class="team-pick-tag">Ayaz Klanı</div>
+        <div class="team-pick-tag" data-i18n="iceClan">Ayaz Klanı</div>
       </div>
     </div>
   </div>
@@ -1926,6 +2094,7 @@
         SENİN TURUN <span id="turn-count">· TUR 1</span>
       </div>
       <div id="mana-row"></div>
+      <div id="avx-hud"><img src="/assets/avxcoin.png" class="avx-hud-icon" alt="AVX"><span id="avx-counter">0</span></div>
     </div>
 
     <!-- Sağ: Buz üssü -->
@@ -1990,7 +2159,13 @@
   <div id="enemy-status">Düşman birim sürüyor...</div>
 
   <!-- Surge indicator -->
-  <div id="surge-indicator">◈ DENGE DALGASI — Bonus Mana!</div>
+  <div id="surge-indicator"><span data-i18n="surgeBanner">◈ DENGE DALGASI — Bonus Mana!</span></div>
+
+  <!-- Audio Controls -->
+  <div id="audio-controls">
+    <button id="bgm-toggle" title="Music">🎵</button>
+    <input type="range" id="bgm-volume" min="0" max="100" value="30">
+  </div>
 
   <!-- Debug (sol alt, minimal) -->
   <div id="debug-ui">
@@ -2085,29 +2260,29 @@
 
   <!-- MOD SEÇİM EKRANI -->
   <div id="mode-select">
-    <button class="screen-back-btn" id="mode-back">← Geri</button>
+    <button class="screen-back-btn" id="mode-back"><span data-i18n="back">← Geri</span></button>
 
     <div class="mode-select-header">
       <div class="mode-select-logo">A2</div>
-      <div class="mode-select-subtitle">ALAZ & AYAZ · OYUN MODU SEÇ</div>
+      <div class="mode-select-subtitle" data-i18n="modeTitle">ALAZ & AYAZ · OYUN MODU SEÇ</div>
     </div>
 
     <div class="mode-cards-row">
 
       <!-- GERÇEK ZAMANLI -->
       <button class="mode-btn realtime" data-mode="realtime">
-        <div class="mode-recommended-badge">ÖNERİLEN</div>
+        <div class="mode-recommended-badge" data-i18n="recommended">ÖNERİLEN</div>
         <div class="mode-btn-icon">
           <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <path d="M24 5L11 22h10L14 35L29 18H19L24 5z" fill="currentColor" fill-opacity="0.15"/>
             <path d="M24 5L11 22h10L14 35L29 18H19L24 5z"/>
           </svg>
         </div>
-        <div class="mode-btn-label">GERÇEK ZAMANLI</div>
+        <div class="mode-btn-label" data-i18n="realtime">GERÇEK ZAMANLI</div>
         <div class="mode-btn-desc">
-          Mana otomatik dolar.<br>İstediğin an birim yolla.<br>Hızlı tempolu savaş.
+          <span data-i18n-html="realtimeDesc">Mana otomatik dolar.<br>İstediğin an birim yolla.<br>Hızlı tempolu savaş.</span>
         </div>
-        <div class="mode-btn-tag">VS AI</div>
+        <div class="mode-btn-tag" data-i18n="vsAi">VS AI</div>
       </button>
 
       <!-- 2 OYUNCULU -->
@@ -2124,17 +2299,40 @@
             <path d="M22 36c0-5 3-9 8-9s8 4 8 9"/>
           </svg>
         </div>
-        <div class="mode-btn-label">2 OYUNCULU</div>
+        <div class="mode-btn-label" data-i18n="twoPlayerLabel">2 OYUNCULU</div>
         <div class="mode-btn-desc">
-          Aynı ekran, iki oyuncu.<br>Ateş → Mouse · Buz → Klavye<br>Arkadaşına karşı oyna.
+          <span data-i18n-html="twoPlayerDesc">Aynı ekran, iki oyuncu.<br>Ateş → Mouse · Buz → Klavye<br>Arkadaşına karşı oyna.</span>
         </div>
-        <div class="mode-btn-tag">LOCAL 2P</div>
+        <div class="mode-btn-tag" data-i18n="localPvp">LOCAL 2P</div>
       </button>
 
     </div>
 
     <div class="mode-footer-hint">
       2 Oyunculu modda: Buz oyuncusu klavye kullanır &nbsp;·&nbsp; 1-4 = Kart seç &nbsp;·&nbsp; Z/X/C = Lane (Sol/Orta/Sağ)
+    </div>
+  </div>
+
+  <!-- DIFFICULTY SELECT (7 Kat) -->
+  <div id="difficulty-select" style="display:none">
+    <button class="screen-back-btn" id="diff-back"><span data-i18n="back">← Geri</span></button>
+    <div class="diff-header">
+      <div class="diff-title">YERİN YEDİ KATI</div>
+      <div class="diff-lore">
+        Bize göre gökyüzünde 7, yerin altında 7 kat vardır.<br>
+        Artık bu dünya için gökyüzünü hayal etmek zordur...<br>
+        Bu yüzden yerin altındaki hangi cehennemde savaşmak istersin?<br>
+        <span class="diff-warning">Unutma — en alttaki katta, Tamag'ın en dibinde, Erlik Han vardır.</span>
+      </div>
+    </div>
+    <div class="diff-levels">
+      <button class="diff-btn" data-diff="1"><span class="diff-num">I</span><span class="diff-name">Birinci Kat</span><span class="diff-sub">Gölge Geçidi</span></button>
+      <button class="diff-btn" data-diff="2"><span class="diff-num">II</span><span class="diff-name">İkinci Kat</span><span class="diff-sub">Kara Bozkır</span></button>
+      <button class="diff-btn" data-diff="3"><span class="diff-num">III</span><span class="diff-name">Üçüncü Kat</span><span class="diff-sub">Kemik Ormanı</span></button>
+      <button class="diff-btn" data-diff="4"><span class="diff-num">IV</span><span class="diff-name">Dördüncü Kat</span><span class="diff-sub">Demir Çöl</span></button>
+      <button class="diff-btn" data-diff="5"><span class="diff-num">V</span><span class="diff-name">Beşinci Kat</span><span class="diff-sub">Ateş Uçurumu</span></button>
+      <button class="diff-btn" data-diff="6"><span class="diff-num">VI</span><span class="diff-name">Altıncı Kat</span><span class="diff-sub">Kan Nehri</span></button>
+      <button class="diff-btn" data-diff="7"><span class="diff-num">VII</span><span class="diff-name">Yedinci Kat</span><span class="diff-sub">Erlik Han'ın Tahtı</span></button>
     </div>
   </div>
 
@@ -2180,6 +2378,20 @@
     font-family:'Cinzel',serif; font-size:18px; font-weight:700;
     color:#fff; letter-spacing:2px;
   ">20</div>
+
+  <!-- LOADING SCREEN -->
+  <div id="loading-screen" style="
+    display:none; position:fixed; inset:0; z-index:10000;
+    background:radial-gradient(ellipse at center, #0a0818 0%, #03020c 100%);
+    flex-direction:column; align-items:center; justify-content:center; gap:20px;
+  ">
+    <div style="font-family:'Cinzel',serif; font-size:42px; font-weight:900; color:#fff; letter-spacing:4px; text-shadow:0 0 30px rgba(155,95,230,0.5);">A2</div>
+    <div data-i18n="loading" style="font-family:'Inter',sans-serif; font-size:14px; color:rgba(200,180,255,0.7); letter-spacing:1px;">YÜKLENIYOR</div>
+    <div style="width:240px; height:4px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden;">
+      <div id="loading-bar" style="width:0%; height:100%; background:linear-gradient(90deg,#9b5fe6,#ff5520); border-radius:2px; transition:width 0.3s ease;"></div>
+    </div>
+    <div id="loading-status" style="font-family:'Inter',sans-serif; font-size:11px; color:rgba(200,180,255,0.4);"></div>
+  </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
   <script type="module" src="/src/main.ts"></script>
