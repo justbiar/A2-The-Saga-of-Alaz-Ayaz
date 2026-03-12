@@ -44,8 +44,8 @@ export class CameraSystem {
         this.camera.lowerBetaLimit = 0.15;
         this.camera.upperBetaLimit = Math.PI / 2.05;
         this.camera.wheelDeltaPercentage = 0.05;
-        this.camera.minZ = 0.5;
-        this.camera.maxZ = 500;
+        this.camera.minZ = 2;
+        this.camera.maxZ = 300;
 
         scene.activeCamera = this.camera;
 

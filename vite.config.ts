@@ -1,10 +1,43 @@
 import { defineConfig } from 'vite';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 export default defineConfig({
-    server: { port: 5173 },
-    build: { assetsInlineLimit: 0 },
+    server: {
+        port: 5173,
+        proxy: {
+            '/api': {
+                target: 'http://127.0.0.1:3001',
+                changeOrigin: true,
+            },
+        },
+    },
+    build: {
+        assetsInlineLimit: 0,
+        chunkSizeWarningLimit: 1000,
+        rollupOptions: {
+            output: {
+                manualChunks(id: string) {
+                    if (id.includes('@babylonjs/loaders')) return 'babylon-loaders';
+                    if (id.includes('@babylonjs/core')) return 'babylon-core';
+                    if (id.includes('node_modules')) return 'vendor';
+                },
+            },
+        },
+    },
+    plugins: [
+        viteStaticCopy({
+            targets: [
+                { src: 'assets/images',              dest: 'assets' },
+                { src: 'assets/sound',               dest: 'assets' },
+                { src: 'assets/sfx',                 dest: 'assets' },
+                { src: 'assets/character animation',  dest: 'assets' },
+                { src: 'assets/*.glb',               dest: 'assets' },
+                { src: 'assets/base',                dest: 'assets' },
+                { src: 'assets/video',               dest: 'assets' },
+            ],
+        }),
+    ],
     optimizeDeps: {
-        noDiscovery: true,
         include: [
             'earcut',
             '@babylonjs/core/Engines/engine',

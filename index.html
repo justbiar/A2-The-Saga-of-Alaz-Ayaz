@@ -7,6 +7,8 @@
   <link rel="icon" type="image/png" href="/assets/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- GLB prefetch kaldırıldı — batch loading ile çakışıp timeout'a neden oluyordu -->
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -84,71 +86,125 @@
       pointer-events: none;
     }
 
-    /* Sol blok — Ateş üssü */
-    .hud-base {
+    /* ═══════════════════════════════════════
+       MK-STYLE BASE HP BARS
+    ═══════════════════════════════════════ */
+
+    .mk-side {
       display: flex;
-      align-items: center;
-      gap: 10px;
+      flex-direction: column;
+      gap: 3px;
+      padding: 6px 10px 6px 14px;
     }
+    .mk-side.ice { padding: 6px 14px 6px 10px; }
 
-    .hud-base.fire { flex-direction: row; }
-    .hud-base.ice  { flex-direction: row-reverse; }
-
-    .base-icon {
-      font-size: 22px;
-      flex-shrink: 0;
-      filter: drop-shadow(0 0 6px currentColor);
+    /* ── İsim satırı ── */
+    .mk-name-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
     }
+    .ice-row { flex-direction: row-reverse; }
 
-    .base-info { flex: 1; }
-
-    .base-label {
-      font-size: 9px;
-      font-weight: 700;
-      letter-spacing: 1.5px;
+    .mk-name {
+      font-family: 'Cinzel', serif;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 3px;
       text-transform: uppercase;
-      margin-bottom: 3px;
+      text-shadow: 0 0 12px currentColor;
     }
+    .fire-name { color: #ff5520; }
+    .ice-name  { color: #38aaff; }
 
-    .hud-base.fire .base-label { color: #ff7030; }
-    .hud-base.ice  .base-label { color: #50b8ff; text-align: right; }
-
-    .base-bar-track {
-      width: 100%;
-      height: 8px;
-      background: rgba(255,255,255,0.07);
-      border-radius: 4px;
-      overflow: hidden;
-      position: relative;
-    }
-
-    .base-bar-fill {
-      height: 100%;
-      border-radius: 4px;
-      transition: width 0.4s ease;
-      position: absolute;
-    }
-
-    .hud-base.fire .base-bar-fill {
-      left: 0;
-      background: linear-gradient(90deg, #aa2200, #ff5520);
-      box-shadow: 0 0 8px rgba(255,80,20,0.6);
-    }
-
-    .hud-base.ice .base-bar-fill {
-      right: 0;
-      background: linear-gradient(90deg, #50b8ff, #0066cc);
-      box-shadow: 0 0 8px rgba(40,140,255,0.6);
-    }
-
-    .base-hp-num {
-      font-size: 9px;
-      color: rgba(255,255,255,0.45);
-      margin-top: 2px;
+    .mk-hp-num {
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      font-weight: 700;
       font-variant-numeric: tabular-nums;
+      color: rgba(255,255,255,0.75);
+      letter-spacing: 1px;
+      min-width: 40px;
+    }
+    .ice-row .mk-hp-num { text-align: left; }
+
+    /* ── Bar wrapper ── */
+    .mk-bar-wrap {
+      position: relative;
+      width: 100%;
+      height: 14px;
+      background: #0a0007;
+      border: 1px solid rgba(255,255,255,0.08);
+      overflow: hidden;
+      /* MK kesik köşe — sol üst + sağ alt */
+      clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%);
+    }
+    .mk-side.ice .mk-bar-wrap {
+      clip-path: polygon(0% 0%, calc(100% - 10px) 0%, 100% 100%, 10px 100%);
     }
 
-    .hud-base.ice .base-hp-num { text-align: right; }
+    /* Ghost — hasar izi (sarı, yavaş erir) */
+    .mk-bar-ghost {
+      position: absolute;
+      top: 0; bottom: 0;
+      left: 0;
+      background: #c8a000;
+      transition: width 1.2s cubic-bezier(0.1, 0, 0.3, 1);
+      z-index: 1;
+    }
+    .mk-side.ice .mk-bar-ghost { right: 0; left: auto; }
+
+    /* Canlı HP bar */
+    .mk-bar-live {
+      position: absolute;
+      top: 0; bottom: 0;
+      left: 0;
+      z-index: 2;
+      transition: width 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    .mk-side.ice .mk-bar-live { right: 0; left: auto; }
+
+    .fire-live {
+      background: linear-gradient(90deg, #8b1500, #ff5520, #ff8040);
+      box-shadow: inset 0 1px 0 rgba(255,160,80,0.4), 0 0 10px rgba(255,80,20,0.7);
+    }
+    .ice-live {
+      background: linear-gradient(90deg, #38aaff, #80d4ff, #004f99);
+      box-shadow: inset 0 1px 0 rgba(160,220,255,0.4), 0 0 10px rgba(40,140,255,0.7);
+    }
+
+    /* Segment çizgileri (her %10'da dikey çizgi) */
+    .mk-bar-segments {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+      background-image: repeating-linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent calc(10% - 1px),
+        rgba(0,0,0,0.4) calc(10% - 1px),
+        rgba(0,0,0,0.4) 10%
+      );
+    }
+
+    /* Düşük HP — kırmızı yanıp sönme */
+    @keyframes mkDanger {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.35; }
+    }
+    .mk-bar-live.mk-danger {
+      animation: mkDanger 0.55s ease-in-out infinite;
+    }
+
+    /* Hasar flash */
+    @keyframes mkHit {
+      0%   { filter: brightness(3); }
+      100% { filter: brightness(1); }
+    }
+    .mk-bar-live.mk-hit {
+      animation: mkHit 0.25s ease-out forwards;
+    }
 
     /* Orta blok — tur + mana */
     #hud-center {
@@ -192,6 +248,28 @@
       letter-spacing: 1px;
       display: inline;
       margin-left: 8px;
+    }
+
+    /* Bet HUD indicator */
+    #bet-hud {
+      margin-top: 4px;
+      padding: 3px 14px;
+      border-radius: 16px;
+      background: rgba(255,215,0,0.12);
+      border: 1px solid rgba(255,215,0,0.35);
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      color: #ffd700;
+      letter-spacing: 1px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      animation: pulse-gold 2s ease-in-out infinite;
+    }
+    @keyframes pulse-gold {
+      0%, 100% { box-shadow: 0 0 6px rgba(255,215,0,0.15); }
+      50% { box-shadow: 0 0 14px rgba(255,215,0,0.35); }
     }
 
     /* Mana gems */
@@ -517,6 +595,58 @@
       z-index: 2;
     }
 
+    /* Kart kısayol rozeti */
+    .card-hotkey {
+      position: absolute;
+      top: 6px; right: 7px;
+      width: 18px; height: 18px;
+      border-radius: 4px;
+      background: rgba(255,220,50,0.12);
+      border: 1px solid rgba(255,220,50,0.35);
+      color: rgba(255,220,50,0.75);
+      font-size: 10px; font-weight: 700;
+      font-family: 'Cinzel', serif;
+      display: flex; align-items: center; justify-content: center;
+      letter-spacing: 0;
+      z-index: 2;
+      transition: all 0.15s;
+    }
+    .game-card:hover .card-hotkey,
+    .game-card[style*="outline"] .card-hotkey {
+      background: rgba(255,220,50,0.22);
+      border-color: rgba(255,220,50,0.7);
+      color: #ffe040;
+    }
+
+    /* Multiplayer: rakip bekleniyor overlay */
+    #mp-wait-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.78);
+      z-index: 9500;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .mp-wait-box {
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+      background: linear-gradient(145deg, #0d1b2a, #1a2d45);
+      border: 2px solid rgba(255,180,0,0.4);
+      border-radius: 18px;
+      padding: 40px 56px;
+    }
+    .mp-wait-spinner {
+      width: 48px; height: 48px;
+      border: 5px solid rgba(255,180,0,0.2);
+      border-top-color: #ffb400;
+      border-radius: 50%;
+      animation: mpSpin 0.85s linear infinite;
+    }
+    @keyframes mpSpin { to { transform: rotate(360deg); } }
+    .mp-wait-text {
+      color: #ffd060;
+      font-family: 'Cinzel', serif;
+      font-size: 18px;
+      letter-spacing: 0.05em;
+    }
+
     .card-avx-badge {
       position: absolute;
       top: 7px; left: 7px;
@@ -772,6 +902,223 @@
       cursor: pointer;
     }
 
+    /* ─── SETTINGS SCREEN ─── */
+    #settings-screen {
+      position: fixed; inset: 0;
+      z-index: 2500;
+      flex-direction: column;
+      background: #0a0a0f;
+      overflow-y: auto;
+    }
+    #settings-screen::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: radial-gradient(circle, rgba(255,255,255,0.015) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    #settings-back {
+      top: auto;
+      bottom: 32px;
+      left: 32px;
+    }
+    .stg-inner {
+      position: relative;
+      z-index: 1;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 90px 32px 80px;
+    }
+    .stg-title {
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      color: rgba(255,255,255,0.2);
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .stg-tabs {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 28px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .stg-tab {
+      padding: 8px 20px;
+      font-family: 'Inter', sans-serif;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.25);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .stg-tab:hover { color: rgba(255,255,255,0.5); }
+    .stg-tab.active {
+      color: rgba(255,255,255,0.7);
+      border-bottom-color: rgba(255,255,255,0.2);
+    }
+    .stg-section-label {
+      font-family: 'Cinzel', serif;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: rgba(255,255,255,0.2);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .stg-keybind-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .stg-bind-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+    .stg-bind-label {
+      font-size: 10px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0.5px;
+    }
+    .stg-bind-key {
+      min-width: 48px;
+      padding: 4px 10px;
+      text-align: center;
+      font-family: 'Inter', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,0.6);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .stg-bind-key:hover {
+      border-color: rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.8);
+    }
+    .stg-bind-key.listening {
+      border-color: rgba(255,160,80,0.5);
+      color: rgba(255,160,80,0.8);
+      background: rgba(255,160,80,0.08);
+      animation: stgPulse 1s ease infinite;
+    }
+    @keyframes stgPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,160,80,0); }
+      50%      { box-shadow: 0 0 12px rgba(255,160,80,0.15); }
+    }
+    .stg-btn-row {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 28px;
+    }
+    .stg-btn {
+      padding: 8px 24px;
+      border-radius: 4px;
+      font-family: 'Inter', sans-serif;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .stg-btn-ghost {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.3);
+    }
+    .stg-btn-ghost:hover {
+      border-color: rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.5);
+    }
+    .stg-btn-primary {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.6);
+    }
+    .stg-btn-primary:hover {
+      background: rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.8);
+    }
+    .stg-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 0;
+    }
+    .stg-row-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.35);
+      min-width: 100px;
+    }
+    .stg-slider {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 3px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      outline: none;
+    }
+    .stg-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.3);
+      border: 1px solid rgba(255,255,255,0.15);
+      cursor: pointer;
+    }
+    .stg-slider::-webkit-slider-thumb:hover {
+      background: rgba(255,255,255,0.5);
+    }
+    .stg-slider-val {
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.3);
+      min-width: 28px;
+      text-align: right;
+    }
+    .stg-toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      padding: 8px 24px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.6);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 9999;
+      pointer-events: none;
+    }
+    .stg-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
     /* ─── DIFFICULTY SELECT ─── */
     #difficulty-select {
       position: fixed; inset: 0;
@@ -785,15 +1132,12 @@
     }
 
     /* ── Arkaplan görseller ── */
-    #difficulty-select .diff-bg-sky,
-    #difficulty-select .diff-bg-ground {
+    #difficulty-select .diff-bg-sky {
       position: fixed;
       left: 0; right: 0;
       width: 100%;
       pointer-events: none;
       z-index: 0;
-    }
-    #difficulty-select .diff-bg-sky {
       top: 0;
       height: 42%;
       background: url('assets/images/textures/ice_color.jpg') center top / cover no-repeat;
@@ -802,9 +1146,14 @@
       -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.9) 40%, transparent 100%);
     }
     #difficulty-select .diff-bg-ground {
+      position: fixed;
+      left: 0; right: 0;
+      width: 100%;
+      pointer-events: none;
+      z-index: 0;
       bottom: 0;
       height: 62%;
-      background: url('assets/images/textures/lava_color.png') center bottom / cover no-repeat;
+      background: url('assets/images/textures/lava.jpg') center bottom / cover no-repeat;
       filter: blur(22px) brightness(0.12) saturate(1.6);
       mask-image: linear-gradient(to top, rgba(0,0,0,0.9) 40%, transparent 100%);
       -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,0.9) 40%, transparent 100%);
@@ -863,11 +1212,6 @@
     .diff-sky-btn:hover {
       background: rgba(100,180,255,0.08);
       border-color: rgba(100,180,255,0.3);
-    }
-    .diff-sky-icon {
-      font-size: 22px;
-      width: 36px; text-align: center;
-      opacity: 0.5;
     }
     .diff-sky-name {
       font-family: 'Cinzel', serif;
@@ -1136,6 +1480,46 @@
     #win-stats-table td.stat-dead { color: #ff5555; }
     #win-stats-table td.stat-alive { color: #55ff99; }
 
+    /* ── Bet Result on Win Screen ── */
+    #bet-result-row {
+      margin: 14px auto 6px;
+      padding: 14px 24px;
+      border-radius: 12px;
+      text-align: center;
+      max-width: 400px;
+      animation: fadeInScale 0.5s ease 0.3s both;
+    }
+    #bet-result-row.bet-win {
+      background: linear-gradient(135deg, rgba(74,222,128,0.15), rgba(34,197,94,0.08));
+      border: 1px solid rgba(74,222,128,0.4);
+    }
+    #bet-result-row.bet-loss {
+      background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(220,38,38,0.08));
+      border: 1px solid rgba(239,68,68,0.4);
+    }
+    #bet-result-icon {
+      font-size: 28px;
+      margin-bottom: 4px;
+    }
+    #bet-result-text {
+      font-family: 'Cinzel', serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    #bet-result-row.bet-win #bet-result-text { color: #4ade80; }
+    #bet-result-row.bet-loss #bet-result-text { color: #ef4444; }
+    #bet-result-tx {
+      margin-top: 6px;
+      font-size: 10px;
+      color: rgba(255,255,255,0.35);
+      font-family: 'Fira Code', monospace;
+    }
+    #bet-result-tx a {
+      color: rgba(255,255,255,0.5);
+      text-decoration: underline;
+    }
+
     /* ═══════════════════════════════════════════
        PROFILE MODAL
     ═══════════════════════════════════════════ */
@@ -1287,6 +1671,105 @@
     .lb-rank { font-weight: 700; color: #ffc94d; }
     .lb-rank-1 { font-size: 14px; }
     .lb-winrate { color: rgba(255,255,255,0.5); font-size: 11px; }
+    .lb-col-prize { color: rgba(255,185,50,0.5) !important; }
+    .lb-prize-cell { color: #ffc94d; font-weight: 700; font-size: 11px; }
+    .lb-prize-none { color: rgba(255,255,255,0.15); font-size: 10px; }
+
+    /* Leaderboard sort tabs */
+    .lb-tabs {
+      display: flex; gap: 4px;
+      margin: 8px 0 6px;
+    }
+    .lb-tab {
+      flex: 1; padding: 6px 4px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: transparent;
+      color: rgba(255,255,255,0.3);
+      font-family: 'Inter', sans-serif;
+      font-size: 9px; letter-spacing: 1px;
+      cursor: pointer; transition: all .2s;
+      text-transform: uppercase;
+    }
+    .lb-tab:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.6); }
+    .lb-tab.active {
+      border-color: rgba(255,185,50,0.4);
+      background: rgba(255,185,50,0.08);
+      color: #ffc94d;
+    }
+
+    /* Weekly Prize Banner */
+    .weekly-prize-banner {
+      margin: 8px 0 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,185,50,0.2);
+      background: linear-gradient(160deg, rgba(20,14,0,0.9), rgba(12,8,0,0.95));
+      overflow: hidden;
+    }
+    .wpb-inner {
+      padding: 14px 16px;
+      text-align: center;
+    }
+    .wpb-title {
+      font-family: 'Cinzel', serif;
+      font-size: 8px; letter-spacing: 4px;
+      color: rgba(255,185,50,0.5);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .wpb-pool {
+      display: flex; align-items: baseline;
+      justify-content: center; gap: 6px;
+      margin-bottom: 10px;
+    }
+    .wpb-amount {
+      font-family: 'Cinzel', serif;
+      font-size: 24px; font-weight: 700;
+      color: #ffc94d;
+      text-shadow: 0 0 20px rgba(255,185,50,0.5);
+    }
+    .wpb-avax {
+      font-family: 'Cinzel', serif;
+      font-size: 12px; font-weight: 700;
+      color: rgba(255,185,50,0.5);
+      letter-spacing: 2px;
+    }
+    .wpb-prizes {
+      display: flex; justify-content: center; gap: 8px;
+      margin-bottom: 8px;
+    }
+    .wpb-prize-item {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 8px 10px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.03);
+      min-width: 60px;
+    }
+    .wpb-1st { border-color: rgba(255,215,0,0.25); background: rgba(255,215,0,0.05); }
+    .wpb-2nd { border-color: rgba(192,192,192,0.2); background: rgba(192,192,192,0.04); }
+    .wpb-3rd { border-color: rgba(205,127,50,0.2); background: rgba(205,127,50,0.04); }
+    .wpb-rank { font-size: 18px; }
+    .wpb-prize-avax {
+      font-family: 'Cinzel', serif;
+      font-size: 12px; font-weight: 700;
+      color: #ffc94d; letter-spacing: 1px;
+    }
+    .wpb-prize-label {
+      font-size: 8px; letter-spacing: 1px;
+      color: rgba(255,255,255,0.25);
+      text-transform: uppercase;
+    }
+    .wpb-note {
+      font-size: 9px; letter-spacing: 0.5px;
+      color: rgba(255,255,255,0.18);
+    }
+    .wpb-disabled {
+      opacity: 0.35;
+    }
+    .wpb-disabled .wpb-title::after {
+      content: ' · KAPALI';
+      color: rgba(239,68,68,0.5);
+    }
 
     /* ═══════════════════════════════════════════
        WALLET SELECT MODAL
@@ -1296,74 +1779,141 @@
       z-index: 6000;
       display: none;
       align-items: center; justify-content: center;
-      background: rgba(0,0,0,0.82);
-      backdrop-filter: blur(14px);
+      background: rgba(3, 2, 12, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
     }
     #wallet-modal.show { display: flex; animation: fadeInScale 0.3s ease; }
 
     .wallet-panel {
       width: 360px;
-      background: linear-gradient(170deg, rgba(18,8,42,0.98), rgba(8,3,22,0.98));
-      border: 1px solid rgba(140,90,255,0.3);
-      border-radius: 16px;
-      padding: 28px 24px;
+      background: linear-gradient(170deg, rgba(10, 8, 18, 0.98), rgba(5, 3, 12, 0.99));
+      border: 1px solid rgba(255, 201, 77, 0.15);
+      border-radius: 14px;
+      padding: 28px 24px 24px;
       position: relative;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 30px rgba(120,60,255,0.15);
+      box-shadow:
+        0 24px 80px rgba(0, 0, 0, 0.7),
+        0 0 30px rgba(255, 201, 77, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .wallet-panel::before {
+      content: '';
+      position: absolute;
+      top: -1px; left: 25%; right: 25%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      opacity: 0.6;
     }
 
     .wallet-panel-close {
-      position: absolute; top: 12px; right: 14px;
-      background: none; border: none; color: rgba(255,255,255,0.4);
-      font-size: 22px; cursor: pointer; line-height: 1;
+      position: absolute; top: 10px; right: 12px;
+      background: none; border: none; color: rgba(255,255,255,0.25);
+      font-size: 18px; cursor: pointer; line-height: 1;
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%;
+      transition: all 0.2s;
     }
-    .wallet-panel-close:hover { color: #fff; }
+    .wallet-panel-close:hover {
+      color: #fff;
+      background: rgba(255,255,255,0.06);
+    }
 
     .wallet-panel-title {
       font-family: 'Cinzel', serif;
-      font-size: 18px; font-weight: 700;
-      color: #fff; letter-spacing: 2px;
-      text-align: center; margin-bottom: 20px;
+      font-size: 14px; font-weight: 700;
+      color: var(--gold); letter-spacing: 3px;
+      text-align: center; margin-bottom: 6px;
     }
 
-    .wallet-options { display: flex; flex-direction: column; gap: 10px; }
+    .wallet-panel-subtitle {
+      font-size: 10px;
+      color: rgba(255,255,255,0.3);
+      text-align: center;
+      margin-bottom: 20px;
+      letter-spacing: 0.3px;
+    }
+
+    .wallet-options { display: flex; flex-direction: column; gap: 6px; }
 
     .wallet-option {
-      display: flex; align-items: center; gap: 14px;
-      padding: 14px 16px; border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.08);
-      background: rgba(255,255,255,0.04);
-      cursor: pointer; transition: all 0.2s;
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.025);
+      cursor: pointer; transition: all 0.2s ease;
     }
     .wallet-option:hover {
-      background: rgba(255,255,255,0.1);
-      border-color: rgba(232,65,66,0.4);
-      box-shadow: 0 0 16px rgba(232,65,66,0.15);
+      background: rgba(255, 201, 77, 0.06);
+      border-color: rgba(255, 201, 77, 0.25);
     }
 
     .wallet-option-icon {
       width: 36px; height: 36px; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 22px; flex-shrink: 0;
+      flex-shrink: 0;
     }
 
     .wallet-option-info { flex: 1; }
     .wallet-option-name {
-      font-size: 14px; font-weight: 700; color: #fff;
-      letter-spacing: 0.5px;
-    }
-    .wallet-option-desc {
-      font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px;
+      font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.85);
+      letter-spacing: 0.3px;
     }
 
     .wallet-option-arrow {
-      color: rgba(255,255,255,0.2); font-size: 16px;
+      color: rgba(255,255,255,0.12); font-size: 16px;
+      transition: all 0.2s;
+    }
+    .wallet-option:hover .wallet-option-arrow {
+      color: var(--gold);
+      transform: translateX(2px);
     }
 
     .wallet-option.detected .wallet-option-name::after {
-      content: '✓';
-      margin-left: 8px;
-      color: #50c878;
+      content: '';
+      display: inline-block;
+      width: 5px; height: 5px;
+      background: #50c878;
+      border-radius: 50%;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    .wallet-no-wallets {
+      text-align: center;
+      padding: 20px 0;
+    }
+    .wallet-no-wallets-icon {
+      font-size: 36px;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+    .wallet-no-wallets-text {
+      color: rgba(255,255,255,0.35);
       font-size: 12px;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .wallet-install-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 20px;
+      background: rgba(255, 201, 77, 0.08);
+      border: 1px solid rgba(255, 201, 77, 0.2);
+      border-radius: 8px;
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .wallet-install-btn:hover {
+      background: rgba(255, 201, 77, 0.14);
+      border-color: rgba(255, 201, 77, 0.35);
+      color: #fff;
     }
 
     /* ─── ACTIVE EFFECTS BAR ─── */
@@ -1473,6 +2023,11 @@
       background: none; border: none; padding: 0;
     }
     .header-nav-item:hover { color: #fff; }
+    .header-nav-item.active {
+      color: #fff;
+      border-bottom: 2px solid rgba(255,255,255,0.35);
+      padding-bottom: 2px;
+    }
 
     .header-right {
       margin-left: auto;
@@ -1510,6 +2065,51 @@
       color: #50c878;
     }
 
+    /* ── WALLET DROPDOWN ── */
+    .wallet-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      min-width: 180px;
+      background: rgba(12, 10, 24, 0.95);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      padding: 4px;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      z-index: 9999;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .wallet-dropdown.show {
+      display: flex;
+    }
+    .wallet-dd-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: none;
+      background: transparent;
+      color: rgba(255,255,255,0.7);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .wallet-dd-item:hover {
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+    }
+    .wallet-dd-item.dd-disconnect:hover {
+      background: rgba(255, 60, 60, 0.12);
+      color: #ff5555;
+    }
+
     /* ═══════════════════════════════════════════
        HOME SCREEN
     ═══════════════════════════════════════════ */
@@ -1524,14 +2124,35 @@
       overflow: hidden;
     }
 
-    /* Subtle fire/ice ambient */
+    /* Video background container */
+    .home-video-wrap {
+      position: absolute; inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .home-video {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      opacity: 0.15;
+    }
+    .home-video-fire {
+      width: 130%; left: -21%;
+      mask-image: linear-gradient(to right, rgba(0,0,0,1) 25%, rgba(0,0,0,0.4) 42%, transparent 52%);
+      -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,1) 25%, rgba(0,0,0,0.4) 42%, transparent 52%);
+    }
+    .home-video-snow {
+      mask-image: linear-gradient(to left, rgba(0,0,0,1) 15%, rgba(0,0,0,0.3) 35%, transparent 48%);
+      -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,1) 15%, rgba(0,0,0,0.3) 35%, transparent 48%);
+    }
+
+    /* Dark overlay for readability */
     #home-screen::before {
       content: '';
       position: absolute; inset: 0;
-      background:
-        radial-gradient(ellipse 60% 50% at 20% 50%, rgba(255,77,0,0.08) 0%, transparent 60%),
-        radial-gradient(ellipse 60% 50% at 80% 50%, rgba(0,229,255,0.06) 0%, transparent 60%);
+      background: radial-gradient(ellipse 80% 80% at 50% 50%, rgba(10,10,15,0.3) 0%, rgba(10,10,15,0.7) 100%);
       pointer-events: none;
+      z-index: 1;
     }
 
     /* Noise */
@@ -1541,6 +2162,7 @@
       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
       background-size: 200px 200px;
       pointer-events: none;
+      z-index: 1;
     }
 
     /* Outer frame */
@@ -1753,9 +2375,10 @@
     .cs-hero-center {
       position: absolute;
       left: 50%;
-      bottom: 100px;
+      bottom: 0;
       transform: translateX(-50%);
-      height: 80vh;
+      width: 480px;
+      height: 85vh;
       z-index: 4;
       pointer-events: none;
     }
@@ -1935,6 +2558,11 @@
       opacity: 1;
       filter: grayscale(0);
       transform: scale(1.08);
+      z-index: 1;
+    }
+
+    .cs-carousel-item:not(.active) {
+      z-index: 2;
     }
 
     .cs-carousel-item.active.fire { border-color: #FF4D00; box-shadow: 0 0 14px rgba(255,77,0,0.45); }
@@ -1974,7 +2602,7 @@
       color: rgba(255, 255, 255, 0.82);
     }
 
-    #mode-back {
+    #mode-back, #team-back {
       top: auto;
       bottom: 32px;
       left: 32px;
@@ -1985,6 +2613,544 @@
       bottom: 32px;
       left: 32px;
     }
+
+    /* ═══════════════════════════════════════════
+       LEADERBOARD SCREEN
+    ═══════════════════════════════════════════ */
+    #leaderboard-screen {
+      position: fixed; inset: 0;
+      z-index: 2500;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      background: #08060f;
+      overflow-y: auto;
+      padding: 80px 20px 100px;
+    }
+    /* Ambient glow */
+    #leaderboard-screen::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 50% 40% at 50% 0%, rgba(255,185,50,0.07) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 50% at 20% 60%, rgba(255,77,0,0.04) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 50% at 80% 60%, rgba(0,200,255,0.03) 0%, transparent 60%);
+      pointer-events: none; z-index: 0;
+    }
+
+    .lb-screen-header {
+      width: 100%; max-width: 960px;
+      text-align: center;
+      margin-bottom: 48px;
+      position: relative; z-index: 1;
+    }
+    .lb-screen-eyebrow {
+      font-family: 'Inter', sans-serif;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 6px; text-transform: uppercase;
+      color: rgba(255,185,50,0.4);
+      margin-bottom: 14px;
+    }
+    .lb-screen-title {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(28px, 5vw, 52px);
+      font-weight: 900; letter-spacing: 6px;
+      color: #fff;
+      text-shadow: 0 0 60px rgba(255,185,50,0.2);
+    }
+    .lb-screen-title span { color: #ffc94d; }
+
+    /* ── PODIUM — top 3 cards ── */
+    .lb-podium {
+      width: 100%; max-width: 960px;
+      display: flex; align-items: flex-end; justify-content: center;
+      gap: 16px;
+      margin-bottom: 40px;
+      position: relative; z-index: 1;
+    }
+    .lb-podium-card {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 28px 20px 24px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(255,255,255,0.025);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      position: relative;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      width: 200px;
+      overflow: hidden;
+    }
+    .lb-podium-card::before {
+      content: '';
+      position: absolute; inset: 0;
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 40%);
+      pointer-events: none;
+    }
+    .lb-podium-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    }
+
+    /* 1st place — bigger + gold border */
+    .lb-podium-card.p1 {
+      width: 230px;
+      padding: 36px 24px 28px;
+      border-color: rgba(255,200,50,0.3);
+      background: linear-gradient(170deg, rgba(255,200,50,0.06) 0%, rgba(255,255,255,0.02) 50%, transparent 100%);
+      box-shadow: 0 0 60px rgba(255,185,50,0.08);
+      order: 2;
+    }
+    /* 2nd place — silver */
+    .lb-podium-card.p2 {
+      border-color: rgba(192,210,230,0.2);
+      background: linear-gradient(170deg, rgba(192,210,230,0.04) 0%, rgba(255,255,255,0.02) 50%, transparent 100%);
+      order: 1;
+      margin-bottom: 16px;
+    }
+    /* 3rd place — bronze */
+    .lb-podium-card.p3 {
+      border-color: rgba(205,140,60,0.2);
+      background: linear-gradient(170deg, rgba(205,140,60,0.04) 0%, rgba(255,255,255,0.02) 50%, transparent 100%);
+      order: 3;
+      margin-bottom: 16px;
+    }
+
+    .lb-podium-rank {
+      font-family: 'Cinzel', serif;
+      font-size: 14px; font-weight: 900;
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%;
+      margin-bottom: 14px;
+    }
+    .p1 .lb-podium-rank {
+      font-size: 18px;
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, rgba(255,200,50,0.25), rgba(255,150,0,0.15));
+      border: 2px solid rgba(255,200,50,0.5);
+      color: #ffc94d;
+      box-shadow: 0 0 24px rgba(255,185,50,0.3);
+    }
+    .p2 .lb-podium-rank {
+      background: linear-gradient(135deg, rgba(192,210,230,0.2), rgba(160,180,200,0.1));
+      border: 2px solid rgba(192,210,230,0.35);
+      color: #c0d2e6;
+    }
+    .p3 .lb-podium-rank {
+      background: linear-gradient(135deg, rgba(205,140,60,0.2), rgba(180,120,50,0.1));
+      border: 2px solid rgba(205,140,60,0.35);
+      color: #cd8c3c;
+    }
+
+    .lb-podium-avatar {
+      width: 56px; height: 56px; border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.05);
+      margin-bottom: 12px;
+    }
+    .p1 .lb-podium-avatar {
+      width: 72px; height: 72px;
+      border-color: rgba(255,200,50,0.35);
+      box-shadow: 0 0 30px rgba(255,185,50,0.15);
+    }
+
+    .lb-podium-name {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px; font-weight: 700; color: #fff;
+      margin-bottom: 2px;
+      text-align: center;
+      max-width: 100%;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .p1 .lb-podium-name { font-size: 16px; }
+
+    .lb-podium-addr {
+      font-size: 9px; color: rgba(255,255,255,0.25);
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+
+    .lb-podium-stats {
+      display: flex; gap: 16px; align-items: center;
+      margin-bottom: 10px;
+    }
+    .lb-podium-stat {
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .lb-podium-stat-val {
+      font-family: 'Cinzel', serif;
+      font-size: 18px; font-weight: 900;
+      color: #55ff99;
+    }
+    .p1 .lb-podium-stat-val { font-size: 22px; }
+    .lb-podium-stat-lbl {
+      font-size: 8px; font-weight: 700;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      color: rgba(255,255,255,0.3);
+      margin-top: 2px;
+    }
+
+    .lb-podium-winrate {
+      font-size: 10px; font-weight: 700;
+      color: rgba(255,255,255,0.35);
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .lb-podium-prize {
+      margin-top: 10px;
+      font-family: 'Cinzel', serif;
+      font-size: 13px; font-weight: 700;
+      color: #ffc94d;
+      text-shadow: 0 0 12px rgba(255,185,50,0.3);
+    }
+    .lb-podium-prize-lbl {
+      font-size: 8px; letter-spacing: 1px;
+      color: rgba(255,185,50,0.4);
+      text-transform: uppercase;
+    }
+
+    .lb-podium-empty {
+      color: rgba(255,255,255,0.12);
+      font-size: 12px;
+      padding: 20px 0;
+    }
+
+    /* ── Prize Pool Compact Banner ── */
+    .lb-prize-pool {
+      width: 100%; max-width: 960px;
+      margin-bottom: 28px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,185,50,0.15);
+      background: linear-gradient(160deg, rgba(24,16,2,0.85), rgba(10,6,0,0.95));
+      padding: 18px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      position: relative; z-index: 1;
+    }
+    .lb-pp-left { display: flex; flex-direction: column; gap: 3px; }
+    .lb-pp-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 9px; font-weight: 700; letter-spacing: 4px;
+      text-transform: uppercase; color: rgba(255,185,50,0.5);
+    }
+    .lb-pp-amount {
+      font-family: 'Cinzel', serif;
+      font-size: 32px; font-weight: 900; color: #ffc94d;
+      text-shadow: 0 0 20px rgba(255,185,50,0.4);
+      line-height: 1;
+    }
+    .lb-pp-amount span { font-size: 14px; color: rgba(255,185,50,0.45); margin-left: 6px; }
+    .lb-pp-note {
+      font-size: 10px; color: rgba(255,255,255,0.18); margin-top: 3px; letter-spacing: 0.5px;
+    }
+    .lb-pp-podium { display: none; }
+
+    /* ── Sort tabs ── */
+    .lb-sort-tabs {
+      width: 100%; max-width: 960px;
+      display: flex; gap: 6px; margin-bottom: 16px;
+      position: relative; z-index: 1;
+    }
+    .lb-sort-tab {
+      padding: 9px 20px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(255,255,255,0.02);
+      color: rgba(255,255,255,0.3);
+      font-family: 'Inter', sans-serif;
+      font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+      cursor: pointer; transition: all 0.25s; text-transform: uppercase;
+    }
+    .lb-sort-tab:hover { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.55); }
+    .lb-sort-tab.active {
+      border-color: rgba(255,185,50,0.35);
+      background: rgba(255,185,50,0.07);
+      color: #ffc94d;
+      box-shadow: 0 0 16px rgba(255,185,50,0.06);
+    }
+
+    /* ── Table ── */
+    .lb-table-wrap {
+      width: 100%; max-width: 960px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.018);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      overflow: hidden;
+      position: relative; z-index: 1;
+    }
+    .lb-full-table {
+      width: 100%; border-collapse: collapse;
+    }
+    .lb-full-table thead tr {
+      background: rgba(255,255,255,0.035);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .lb-full-table th {
+      padding: 14px 16px;
+      font-family: 'Inter', sans-serif;
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 2px; text-transform: uppercase;
+      color: rgba(255,255,255,0.3); text-align: center;
+    }
+    .lb-full-table th:first-child { text-align: center; width: 50px; }
+    .lb-full-table th:nth-child(2) { text-align: left; padding-left: 20px; }
+    .lb-full-table td {
+      padding: 14px 16px; text-align: center;
+      color: rgba(255,255,255,0.65);
+      border-bottom: 1px solid rgba(255,255,255,0.025);
+      font-size: 13px;
+      transition: background 0.15s;
+    }
+    .lb-full-table td:first-child { text-align: center; width: 50px; }
+    .lb-full-table td:nth-child(2) { text-align: left; padding-left: 20px; }
+    .lb-full-table tbody tr {
+      transition: background 0.2s;
+    }
+    .lb-full-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+    .lb-full-table tbody tr.lb-me {
+      background: rgba(232,65,66,0.06);
+      border-left: 3px solid rgba(232,65,66,0.5);
+    }
+    .lb-full-table tbody tr.lb-me td { color: #ff7b7b; font-weight: 600; }
+    .lb-full-table tbody tr:last-child td { border-bottom: none; }
+
+    .lb-rank-num {
+      font-family: 'Cinzel', serif; font-weight: 700;
+      color: rgba(255,255,255,0.35); font-size: 12px;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 8px;
+    }
+    .lb-rank-4up { background: rgba(255,255,255,0.03); }
+
+    .lb-player-cell { display: flex; align-items: center; gap: 12px; }
+    .lb-player-avatar {
+      width: 36px; height: 36px; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      object-fit: cover; background: rgba(255,255,255,0.04);
+      flex-shrink: 0;
+    }
+    .lb-player-name { font-size: 13px; font-weight: 600; color: #fff; }
+    .lb-player-addr { font-size: 9px; color: rgba(255,255,255,0.22); margin-top: 2px; letter-spacing: 0.3px; }
+    .lb-win-count {
+      font-family: 'Cinzel', serif; font-size: 16px; font-weight: 700; color: #55ff99;
+    }
+    .lb-games-count { color: rgba(255,255,255,0.4); }
+    .lb-rate-pill {
+      display: inline-block; padding: 4px 10px; border-radius: 20px;
+      font-size: 10px; font-weight: 700;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.4);
+    }
+    .lb-rate-pill.high { color: #55ff99; border-color: rgba(85,255,153,0.15); background: rgba(85,255,153,0.04); }
+    .lb-rate-pill.mid  { color: #ffc94d; border-color: rgba(255,200,50,0.12); background: rgba(255,200,50,0.03); }
+    .lb-prize-val { font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: #ffc94d; }
+    .lb-prize-empty { color: rgba(255,255,255,0.1); font-size: 10px; }
+
+    /* Empty state */
+    .lb-empty-state {
+      text-align: center; padding: 60px 20px;
+      color: rgba(255,255,255,0.15); font-size: 13px;
+    }
+    .lb-empty-state-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
+
+    @media (max-width: 700px) {
+      .lb-podium { flex-direction: column; align-items: center; gap: 12px; }
+      .lb-podium-card { width: 100% !important; max-width: 300px; margin-bottom: 0 !important; }
+      .lb-podium-card.p1 { order: 1; }
+      .lb-podium-card.p2 { order: 2; }
+      .lb-podium-card.p3 { order: 3; }
+      .lb-prize-pool { padding: 16px 20px; }
+      .lb-pp-amount { font-size: 24px; }
+    }
+
+    /* ═══════════════════════════════════════════
+       PROFILE SCREEN
+    ═══════════════════════════════════════════ */
+    #profile-screen {
+      position: fixed; inset: 0;
+      z-index: 2500;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      background: #08060f;
+      overflow-y: auto;
+      padding: 80px 20px 100px;
+    }
+
+    .pfs-header {
+      width: 100%; max-width: 760px;
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .pfs-eyebrow {
+      font-family: 'Inter', sans-serif;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 5px; text-transform: uppercase;
+      color: rgba(232,65,66,0.45);
+      margin-bottom: 10px;
+    }
+    .pfs-title {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(26px, 4.5vw, 44px);
+      font-weight: 900; letter-spacing: 4px; color: #fff;
+      text-shadow: 0 0 40px rgba(232,65,66,0.2);
+    }
+
+    /* Not connected state */
+    .pfs-not-connected {
+      width: 100%; max-width: 440px;
+      text-align: center;
+      padding: 60px 32px;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 20px;
+      background: rgba(255,255,255,0.02);
+    }
+    .pfs-not-connected-text {
+      font-size: 14px; color: rgba(255,255,255,0.4);
+      margin-bottom: 24px; line-height: 1.6;
+    }
+    .pfs-connect-btn {
+      padding: 12px 32px; border-radius: 10px;
+      border: 1px solid rgba(232,65,66,0.4);
+      background: rgba(232,65,66,0.1);
+      color: #e84142; font-family: 'Cinzel', serif;
+      font-size: 13px; font-weight: 700; letter-spacing: 1.5px;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .pfs-connect-btn:hover { background: rgba(232,65,66,0.2); }
+
+    /* Avatar card */
+    .pfs-card {
+      width: 100%; max-width: 760px;
+      display: grid; grid-template-columns: 200px 1fr;
+      gap: 0;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(255,255,255,0.02);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .pfs-avatar-col {
+      background: linear-gradient(170deg, rgba(80,0,160,0.15), rgba(20,0,40,0.4));
+      border-right: 1px solid rgba(255,255,255,0.06);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 36px 24px; gap: 14px;
+    }
+    .pfs-avatar-img {
+      width: 96px; height: 96px; border-radius: 50%;
+      border: 2px solid rgba(232,65,66,0.35);
+      object-fit: cover; background: rgba(255,255,255,0.05);
+    }
+    .pfs-avatar-name {
+      font-family: 'Cinzel', serif;
+      font-size: 18px; font-weight: 700; color: #fff;
+      text-align: center; letter-spacing: 1px;
+    }
+    .pfs-avatar-addr {
+      font-size: 10px; color: rgba(255,255,255,0.3);
+      letter-spacing: 0.5px; text-align: center;
+    }
+    .pfs-info-col {
+      padding: 32px 32px;
+      display: flex; flex-direction: column; gap: 20px;
+    }
+    .pfs-stats-row {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    }
+    .pfs-stat {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px; padding: 14px 8px;
+      text-align: center;
+    }
+    .pfs-stat-val {
+      font-family: 'Cinzel', serif;
+      font-size: 24px; font-weight: 700; color: #fff;
+    }
+    .pfs-stat-lbl {
+      font-size: 9px; color: rgba(255,255,255,0.35);
+      letter-spacing: 1px; text-transform: uppercase; margin-top: 4px;
+    }
+    .pfs-stat.wins .pfs-stat-val  { color: #55ff99; }
+    .pfs-stat.losses .pfs-stat-val { color: #ff5555; }
+    .pfs-stat.draws .pfs-stat-val  { color: #ffcc44; }
+
+    /* Rename row */
+    .pfs-rename-row {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .pfs-rename-input {
+      flex: 1; padding: 8px 14px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.05);
+      color: #fff; font-size: 12px; outline: none;
+      font-family: 'Inter', sans-serif; letter-spacing: 0.5px;
+      transition: border-color 0.2s;
+    }
+    .pfs-rename-input:focus { border-color: rgba(176,106,255,0.4); }
+    .pfs-rename-btn {
+      padding: 8px 16px; border-radius: 8px;
+      border: 1px solid rgba(176,106,255,0.4);
+      background: rgba(176,106,255,0.08);
+      color: #c87eff; font-size: 11px; font-weight: 700;
+      letter-spacing: 1px; cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.2s;
+    }
+    .pfs-rename-btn:hover { background: rgba(176,106,255,0.18); }
+
+    /* Register form */
+    .pfs-register-wrap {
+      width: 100%; max-width: 440px;
+      border-radius: 20px;
+      border: 1px solid rgba(232,65,66,0.2);
+      background: rgba(232,65,66,0.03);
+      padding: 36px 32px;
+    }
+    .pfs-register-title {
+      font-family: 'Cinzel', serif;
+      font-size: 18px; font-weight: 700; color: #fff;
+      letter-spacing: 2px; text-align: center; margin-bottom: 24px;
+    }
+    .pfs-form { display: flex; flex-direction: column; gap: 14px; }
+    .pfs-form label {
+      font-size: 10px; font-weight: 700;
+      color: rgba(255,255,255,0.5); letter-spacing: 1px; text-transform: uppercase;
+    }
+    .pfs-form input {
+      width: 100%; padding: 10px 14px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.05); color: #fff;
+      font-size: 13px; outline: none;
+      transition: border-color 0.2s;
+    }
+    .pfs-form input:focus { border-color: rgba(232,65,66,0.4); }
+    .pfs-form-avatar-preview {
+      width: 72px; height: 72px; border-radius: 50%;
+      border: 2px solid rgba(232,65,66,0.3);
+      object-fit: cover; display: block; margin: 4px auto;
+      background: rgba(255,255,255,0.05);
+    }
+    .pfs-register-btn {
+      padding: 12px 0; border-radius: 10px;
+      border: 1px solid rgba(232,65,66,0.4);
+      background: rgba(232,65,66,0.12);
+      color: #e84142; font-family: 'Cinzel', serif;
+      font-size: 13px; font-weight: 700; letter-spacing: 1.5px;
+      cursor: pointer; transition: all 0.2s; text-transform: uppercase;
+    }
+    .pfs-register-btn:hover { background: rgba(232,65,66,0.25); }
+    .pfs-register-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
     /* ═══════════════════════════════════════════
        STORY SCREEN
@@ -2226,9 +3392,9 @@
     .team-half.fire-half::before {
       content: '';
       position: absolute; inset: 0;
-      background: url('/assets/images/characters/korhan.png') center/cover no-repeat;
-      opacity: 0.08;
-      filter: blur(2px);
+      background: url('/assets/images/characters/korhan.png') center/contain no-repeat;
+      opacity: 0.25;
+      filter: blur(0px);
       pointer-events: none;
     }
     .team-half.fire-half:hover {
@@ -2246,9 +3412,9 @@
     .team-half.ice-half::before {
       content: '';
       position: absolute; inset: 0;
-      background: url('/assets/images/characters/ayaz.png') center/cover no-repeat;
-      opacity: 0.08;
-      filter: blur(2px);
+      background: url('/assets/images/characters/ayaz.png') center/contain no-repeat;
+      opacity: 0.25;
+      filter: blur(0px);
       pointer-events: none;
     }
     .team-half.ice-half:hover {
@@ -2414,63 +3580,38 @@
     }
 
     .mode-btn {
-      width: 240px;
-      padding: 36px 24px 28px;
-      border-radius: 4px;
+      width: 220px;
+      padding: 32px 22px 24px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.02);
       color: #fff;
       cursor: pointer;
       text-align: center;
-      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transition: all 0.25s ease;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 12px;
       position: relative;
       overflow: hidden;
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
     }
 
-    .mode-btn::after {
-      content: '';
-      position: absolute;
-      top: 0; bottom: 0;
-      width: 45%;
-      background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent);
-      transform: translateX(-120%) skewX(-15deg);
-    }
-    .mode-btn:hover::after {
-      transform: translateX(300%) skewX(-15deg);
-      transition: transform 0.55s ease;
-    }
+    .mode-btn::after { display: none; }
 
-    .mode-btn.realtime {
-      border: 1px solid rgba(255, 77, 0, 0.25);
-      background: rgba(20, 8, 0, 0.75);
-      box-shadow: 0 8px 48px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,77,0,0.08);
-    }
-    .mode-btn.realtime:hover {
-      transform: translateY(-8px) scale(1.03);
-      border-color: rgba(255, 77, 0, 0.55);
-      box-shadow: 0 0 48px rgba(255, 77, 0, 0.15), 0 20px 60px rgba(0,0,0,0.8);
-    }
-
-    .mode-btn.twoplayer {
-      border: 1px solid rgba(0, 229, 255, 0.2);
-      background: rgba(0, 6, 22, 0.75);
-      box-shadow: 0 8px 48px rgba(0,0,0,0.7), inset 0 1px 0 rgba(0,229,255,0.05);
-    }
-    .mode-btn.twoplayer:hover {
-      transform: translateY(-8px) scale(1.03);
-      border-color: rgba(0, 229, 255, 0.45);
-      box-shadow: 0 0 48px rgba(0, 229, 255, 0.12), 0 20px 60px rgba(0,0,0,0.8);
+    .mode-btn:hover {
+      transform: translateY(-4px);
+      border-color: rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
     }
 
     .mode-btn-icon {
-      width: 48px; height: 48px;
+      width: 36px; height: 36px;
       display: flex; align-items: center; justify-content: center;
-      transition: filter 0.3s ease;
+      opacity: 0.5;
+      transition: opacity 0.25s ease;
     }
+    .mode-btn:hover .mode-btn-icon { opacity: 0.8; }
     .mode-btn-icon svg { width: 100%; height: 100%; }
 
     .stat-lbl {
@@ -2480,47 +3621,50 @@
       opacity: 0.75;
       margin-right: 2px;
     }
-    .mode-btn.realtime  .mode-btn-icon { filter: drop-shadow(0 0 14px rgba(255,77,0,0.7)); color: #FF4D00; }
-    .mode-btn.twoplayer .mode-btn-icon { filter: drop-shadow(0 0 14px rgba(0,229,255,0.7)); color: #00E5FF; }
+    .mode-btn.realtime  .mode-btn-icon { color: rgba(255,120,50,0.7); }
+    .mode-btn.twoplayer .mode-btn-icon { color: rgba(100,200,230,0.7); }
+    .mode-btn.multiplayer .mode-btn-icon { color: rgba(170,130,220,0.7); }
 
     .mode-btn-label {
       font-family: 'Cinzel', serif;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       letter-spacing: 3px;
     }
-    .mode-btn.realtime  .mode-btn-label { color: #FF4D00; }
-    .mode-btn.twoplayer .mode-btn-label { color: #00E5FF; }
+    .mode-btn.realtime  .mode-btn-label { color: rgba(255,160,100,0.7); }
+    .mode-btn.twoplayer .mode-btn-label { color: rgba(140,210,230,0.7); }
+    .mode-btn.multiplayer .mode-btn-label { color: rgba(180,150,220,0.7); }
 
     .mode-btn-desc {
       font-size: 10px;
       line-height: 1.9;
       letter-spacing: 0.3px;
+      color: rgba(255,255,255,0.25);
     }
-    .mode-btn.realtime  .mode-btn-desc { color: rgba(255, 140, 80, 0.5); }
-    .mode-btn.twoplayer .mode-btn-desc { color: rgba(0, 229, 255, 0.4); }
 
     .mode-btn-tag {
       margin-top: 4px;
-      padding: 5px 16px;
+      padding: 4px 14px;
       border-radius: 3px;
       font-size: 9px;
-      font-weight: 700;
+      font-weight: 600;
       letter-spacing: 2px;
       text-transform: uppercase;
+      border: 1px solid rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.3);
+      background: transparent;
     }
-    .mode-btn.realtime  .mode-btn-tag { border: 1px solid rgba(255,77,0,0.3);   color: #FF4D00; background: rgba(255,77,0,0.06); }
-    .mode-btn.twoplayer .mode-btn-tag { border: 1px solid rgba(0,229,255,0.25); color: #00E5FF; background: rgba(0,229,255,0.05); }
 
     .mode-recommended-badge {
       position: absolute;
       top: -11px;
       left: 50%;
       transform: translateX(-50%);
-      background: linear-gradient(90deg, #d47000, #ff6a00);
-      color: #fff;
+      background: rgba(255,120,50,0.15);
+      border: 1px solid rgba(255,120,50,0.2);
+      color: rgba(255,160,100,0.7);
       font-size: 8px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: 1.5px;
       padding: 3px 14px;
       border-radius: 3px;
@@ -2530,11 +3674,690 @@
 
     .mode-footer-hint {
       margin-top: 36px;
-      color: rgba(255, 255, 255, 0.12);
+      color: rgba(255, 255, 255, 0.1);
       font-size: 9px;
       letter-spacing: 1.2px;
       text-align: center;
       line-height: 2;
+    }
+
+    /* ══════════════ LOBİ EKRANI ══════════════ */
+    #lobby-screen {
+      position: fixed; inset: 0; z-index: 2500;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a0f;
+      overflow: hidden;
+    }
+    /* mode-select ile aynı grid nokta deseni */
+    #lobby-screen::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+    /* ateş + buz ambiyans gradyanları */
+    #lobby-screen::after {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 15% 80%, rgba(255,77,0,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 85% 20%, rgba(0,229,255,0.05) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    #lobby-back {
+      top: auto;
+      bottom: 32px;
+      left: 32px;
+    }
+    .lobby-inner {
+      position: relative; z-index: 1;
+      width: min(560px, 92vw);
+      display: flex; flex-direction: column;
+      gap: 0;
+    }
+    .lobby-header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .lobby-title {
+      font-family: 'Cinzel', serif;
+      font-size: 18px; font-weight: 700;
+      letter-spacing: 6px;
+      color: rgba(255,255,255,0.88);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .lobby-subtitle {
+      font-family: 'Inter', sans-serif;
+      font-size: 10px; letter-spacing: 3px;
+      color: rgba(255,255,255,0.18);
+      text-transform: uppercase;
+    }
+    /* ── Online Info Bar ── */
+    .lobby-info-bar {
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 14px 16px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.02);
+      margin-bottom: 24px;
+    }
+    .lib-item {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Inter', sans-serif;
+      font-size: 10px; letter-spacing: 1px;
+    }
+    .lib-text { color: rgba(255,255,255,0.35); }
+    .lib-item.lib-wallet-connected .lib-text { color: rgba(74,222,128,0.7); }
+    .lib-bet-hint .lib-text { color: rgba(255,185,50,0.45); }
+    .lib-item #lib-balance-text { color: rgba(255,185,50,0.7); font-weight: 700; }
+    /* ── Bölüm başlığı (diff-surface-label stili) ── */
+    .lobby-section-label {
+      font-family: 'Cinzel', serif;
+      font-size: 8px; font-weight: 700;
+      letter-spacing: 4px;
+      color: rgba(255,255,255,0.2);
+      text-align: center;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    /* ── Takım seçim ── */
+    .lobby-team-pick { margin-bottom: 20px; }
+    .lobby-team-btns { display: flex; gap: 12px; }
+    .lobby-team-btn {
+      flex: 1;
+      padding: 16px 10px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      cursor: pointer; transition: all .2s;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .lobby-team-btn:hover { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
+    .lobby-team-btn.selected-fire {
+      border-color: rgba(255,77,0,0.55);
+      background: rgba(20,8,0,0.75);
+      box-shadow: 0 0 32px rgba(255,77,0,0.12), inset 0 1px 0 rgba(255,77,0,0.08);
+    }
+    .lobby-team-btn.selected-ice {
+      border-color: rgba(0,229,255,0.45);
+      background: rgba(0,6,22,0.75);
+      box-shadow: 0 0 32px rgba(0,229,255,0.10), inset 0 1px 0 rgba(0,229,255,0.06);
+    }
+    .ltb-name {
+      font-family: 'Cinzel', serif;
+      font-size: 12px; font-weight: 700;
+      letter-spacing: 3px; color: rgba(255,255,255,0.7);
+    }
+    .lobby-team-btn.selected-fire  .ltb-name { color: #FF4D00; }
+    .lobby-team-btn.selected-ice   .ltb-name { color: #00E5FF; }
+    /* ── Eylem butonları ── */
+    .lobby-actions { display: flex; flex-direction: column; gap: 12px; margin-bottom: 0; }
+    .lobby-action-btn {
+      width: 100%; padding: 16px 20px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      cursor: pointer; transition: all .2s;
+      display: flex; align-items: center; gap: 14px;
+      text-align: left; font-family: 'Inter', sans-serif;
+    }
+    .lobby-action-btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.18); }
+    .lobby-action-btn.create-btn {
+      border-color: rgba(255,77,0,0.25);
+      background: rgba(20,8,0,0.5);
+    }
+    .lobby-action-btn.create-btn:hover {
+      border-color: rgba(255,77,0,0.5);
+      background: rgba(20,8,0,0.75);
+      box-shadow: 0 0 32px rgba(255,77,0,0.1);
+    }
+    .lobby-action-btn.join-btn {
+      padding: 14px 18px; width: auto;
+      border-color: rgba(0,229,255,0.2);
+      background: rgba(0,6,22,0.5);
+    }
+    .lobby-action-btn.join-btn:hover {
+      border-color: rgba(0,229,255,0.45);
+      background: rgba(0,6,22,0.75);
+      box-shadow: 0 0 28px rgba(0,229,255,0.08);
+    }
+    .lab-text {
+      font-family: 'Cinzel', serif;
+      font-size: 13px; font-weight: 700;
+      letter-spacing: 2px; color: rgba(255,255,255,0.8); flex: 1;
+    }
+    .lab-sub {
+      font-size: 10px; letter-spacing: 1px;
+      color: rgba(255,255,255,0.2);
+    }
+    .lobby-or {
+      font-family: 'Cinzel', serif;
+      font-size: 9px; letter-spacing: 3px;
+      color: rgba(255,255,255,0.15);
+      text-align: center;
+    }
+    .lobby-join-row { display: flex; gap: 10px; width: 100%; }
+    .lobby-code-input {
+      flex: 1; padding: 13px 16px;
+      background: rgba(0,6,22,0.5);
+      border: 1px solid rgba(0,229,255,0.2);
+      border-radius: 4px; color: #fff;
+      font-family: 'Cinzel', serif;
+      font-size: 16px; font-weight: 700;
+      letter-spacing: 6px; text-align: center;
+      text-transform: uppercase;
+      outline: none; transition: border-color .2s;
+    }
+    .lobby-code-input:focus {
+      border-color: rgba(0,229,255,0.5);
+      box-shadow: 0 0 20px rgba(0,229,255,0.08);
+    }
+    .lobby-code-input::placeholder {
+      letter-spacing: 3px; color: rgba(255,255,255,0.15);
+      font-size: 10px;
+    }
+    /* ── Bekleme odası ── */
+    .lobby-waiting { text-align: center; padding: 12px 0; }
+    .lobby-code-display {
+      display: inline-flex; flex-direction: column; align-items: center; gap: 10px;
+      background: rgba(255,77,0,0.04);
+      border: 1px dashed rgba(255,77,0,0.25);
+      border-radius: 4px; padding: 20px 32px;
+      margin-bottom: 24px;
+    }
+    .lcd-label {
+      font-family: 'Cinzel', serif;
+      font-size: 8px; letter-spacing: 4px;
+      color: rgba(255,255,255,0.2);
+      text-transform: uppercase;
+    }
+    .lcd-code {
+      font-family: 'Cinzel', serif;
+      font-size: 36px; font-weight: 700;
+      letter-spacing: 10px; color: #FF4D00;
+      text-shadow: 0 0 28px rgba(255,77,0,0.4);
+    }
+    .lcd-copy-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 16px; border-radius: 3px;
+      border: 1px solid rgba(255,77,0,0.25);
+      background: rgba(255,77,0,0.06);
+      color: rgba(255,120,60,0.8);
+      font-family: 'Inter', sans-serif;
+      font-size: 10px; letter-spacing: 1.5px;
+      cursor: pointer; transition: all .2s;
+      text-transform: uppercase;
+    }
+    .lcd-copy-btn:hover { background: rgba(255,77,0,0.14); border-color: rgba(255,77,0,0.45); }
+    .lcd-copy-btn svg { width: 13px; height: 13px; }
+    .lobby-waiting-anim { display: flex; justify-content: center; gap: 8px; margin: 16px 0; }
+    .lwa-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      animation: lwaBounce 1.4s ease-in-out infinite;
+    }
+    .lwa-dot:nth-child(2) { animation-delay: .22s; }
+    .lwa-dot:nth-child(3) { animation-delay: .44s; }
+    @keyframes lwaBounce {
+      0%,80%,100% { transform: scaleY(0.5); opacity:.2; }
+      40%          { transform: scaleY(1.0); opacity:.8; }
+    }
+    .lobby-status-text {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px; letter-spacing: 2px;
+      color: rgba(255,255,255,0.25);
+      text-transform: uppercase;
+    }
+    /* ── Bağlı odası ── */
+    .lobby-connected { text-align: center; }
+    .lc-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 5px 18px; border-radius: 3px;
+      background: rgba(74,222,128,0.06);
+      border: 1px solid rgba(74,222,128,0.2);
+      margin-bottom: 24px;
+    }
+    .lc-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #4ade80; box-shadow: 0 0 8px #4ade80;
+    }
+    .lc-label {
+      font-family: 'Cinzel', serif;
+      font-size: 10px; letter-spacing: 2px;
+      color: rgba(74,222,128,0.8); font-weight: 700;
+    }
+    .lc-teams-row {
+      display: flex; align-items: center; justify-content: center;
+      gap: 20px; margin-bottom: 16px;
+    }
+    .lc-team {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 4px; padding: 14px 24px;
+    }
+    .lct-name {
+      font-family: 'Inter', sans-serif;
+      font-size: 9px; letter-spacing: 2px;
+      color: rgba(255,255,255,0.35);
+      text-transform: uppercase;
+    }
+    .lc-vs {
+      font-family: 'Cinzel', serif;
+      font-size: 14px; font-weight: 700;
+      color: rgba(255,255,255,0.12); letter-spacing: 4px;
+    }
+    .lc-ping {
+      font-family: 'Inter', sans-serif;
+      font-size: 10px; letter-spacing: 2px;
+      color: rgba(255,255,255,0.2);
+      margin-bottom: 24px;
+    }
+    .lobby-start-btn {
+      width: 100%; padding: 17px;
+      border-radius: 4px;
+      border: 1px solid rgba(74,222,128,0.3);
+      background: rgba(74,222,128,0.05);
+      color: rgba(74,222,128,0.85);
+      font-family: 'Cinzel', serif;
+      font-size: 13px; font-weight: 700;
+      letter-spacing: 3px; cursor: pointer;
+      transition: all .2s;
+      text-transform: uppercase;
+    }
+    .lobby-start-btn:hover {
+      background: rgba(74,222,128,0.12);
+      border-color: rgba(74,222,128,0.5);
+      box-shadow: 0 0 32px rgba(74,222,128,0.1);
+      color: #4ade80;
+    }
+    /* ── Hata ── */
+    .lobby-error {
+      margin-top: 16px; padding: 10px 18px;
+      border-radius: 4px;
+      background: rgba(239,68,68,0.06);
+      border: 1px solid rgba(239,68,68,0.25);
+      color: rgba(248,113,113,0.9);
+      font-family: 'Inter', sans-serif;
+      font-size: 11px; letter-spacing: 1px;
+      text-align: center; text-transform: uppercase;
+    }
+
+    /* ─────────────────────────────────────────────
+       LOBBY CREATE FORM
+    ───────────────────────────────────────────── */
+    .lobby-create-form {
+      border: 1px solid rgba(255,77,0,0.18);
+      background: rgba(20,8,0,0.45);
+      border-radius: 6px; padding: 16px 18px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .lcf-label {
+      font-family: 'Cinzel', serif;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 3px; color: rgba(255,77,0,0.5);
+      text-transform: uppercase;
+    }
+    .lcf-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .lcf-avax-group {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,185,50,0.2);
+      border-radius: 4px; padding: 8px 12px; flex: 1; min-width: 140px;
+    }
+    .lcf-avax-input {
+      flex: 1; background: none; border: none; outline: none;
+      color: #ffc94d; font-family: 'Cinzel', serif;
+      font-size: 16px; font-weight: 700; width: 60px;
+      text-align: center;
+    }
+    .lcf-avax-input::placeholder { color: rgba(255,185,50,0.2); }
+    .lcf-avax-unit { font-size: 10px; color: rgba(255,185,50,0.5); letter-spacing: 2px; }
+    .lcf-privacy-group { display: flex; gap: 6px; }
+    .lcf-privacy-btn {
+      padding: 8px 12px; border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.03);
+      color: rgba(255,255,255,0.4);
+      font-family: 'Inter', sans-serif;
+      font-size: 10px; letter-spacing: 1px;
+      cursor: pointer; transition: all .2s;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .lcf-privacy-btn:hover { border-color: rgba(255,255,255,0.2); }
+    .lcf-privacy-btn.active {
+      border-color: rgba(255,77,0,0.4);
+      background: rgba(255,77,0,0.1);
+      color: rgba(255,120,60,0.9);
+    }
+
+    /* ── Quick Match Button ── */
+    .lobby-action-btn.qm-btn {
+      border-color: rgba(255,185,50,0.25);
+      background: rgba(30,20,0,0.5);
+    }
+    .lobby-action-btn.qm-btn:hover {
+      border-color: rgba(255,185,50,0.5);
+      background: rgba(30,20,0,0.75);
+      box-shadow: 0 0 32px rgba(255,185,50,0.1);
+    }
+
+    /* ── QM Waiting ── */
+    .lobby-qm-waiting {
+      text-align: center; padding: 24px 0;
+    }
+    .qmw-text {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px; letter-spacing: 2px;
+      color: rgba(255,185,50,0.5);
+      text-transform: uppercase; margin: 12px 0 20px;
+    }
+    .qmw-cancel-btn {
+      padding: 10px 28px; border-radius: 4px;
+      border: 1px solid rgba(239,68,68,0.3);
+      background: rgba(239,68,68,0.06);
+      color: rgba(248,113,113,0.8);
+      font-family: 'Cinzel', serif;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 2px; cursor: pointer;
+      transition: all .2s;
+    }
+    .qmw-cancel-btn:hover {
+      background: rgba(239,68,68,0.14);
+      border-color: rgba(239,68,68,0.5);
+    }
+
+    /* ── QM Notification Popup ── */
+    .qm-notification {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 9999;
+      background: rgba(2,1,8,0.85);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .qmn-inner {
+      background: rgba(8,6,20,0.97);
+      border: 1px solid rgba(255,185,50,0.35);
+      border-radius: 10px; padding: 32px 40px;
+      text-align: center; min-width: 280px;
+      box-shadow: 0 0 60px rgba(255,185,50,0.1);
+      animation: qmnPop .3s ease;
+    }
+    @keyframes qmnPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .qmn-title {
+      font-family: 'Cinzel', serif;
+      font-size: 16px; font-weight: 700;
+      letter-spacing: 4px; color: #ffc94d;
+      margin-bottom: 12px;
+    }
+    .qmn-opponent {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px; color: rgba(255,255,255,0.5);
+      letter-spacing: 1px; margin-bottom: 16px;
+    }
+    .qmn-timer {
+      width: 44px; height: 44px; line-height: 44px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,185,50,0.4);
+      color: #ffc94d;
+      font-family: 'Cinzel', serif;
+      font-size: 18px; font-weight: 700;
+      margin: 0 auto 16px;
+    }
+    .qmn-btns { display: flex; gap: 10px; justify-content: center; }
+    .qmn-accept {
+      padding: 10px 24px; border-radius: 4px;
+      border: 1px solid rgba(74,222,128,0.4);
+      background: rgba(74,222,128,0.08);
+      color: #4ade80;
+      font-family: 'Cinzel', serif;
+      font-size: 12px; font-weight: 700;
+      letter-spacing: 2px; cursor: pointer;
+      transition: all .2s;
+    }
+    .qmn-accept:hover { background: rgba(74,222,128,0.18); border-color: rgba(74,222,128,0.6); }
+    .qmn-decline {
+      padding: 10px 24px; border-radius: 4px;
+      border: 1px solid rgba(239,68,68,0.3);
+      background: rgba(239,68,68,0.06);
+      color: rgba(248,113,113,0.8);
+      font-family: 'Cinzel', serif;
+      font-size: 12px; font-weight: 700;
+      letter-spacing: 2px; cursor: pointer;
+      transition: all .2s;
+    }
+    .qmn-decline:hover { background: rgba(239,68,68,0.14); border-color: rgba(239,68,68,0.5); }
+
+    /* ── Lobby Browser (Public Lobbies) ── */
+    .lobby-browser {
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.02);
+      border-radius: 6px; margin-top: 4px;
+      overflow: hidden;
+    }
+    .lb-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.02);
+    }
+    .lb-title {
+      font-family: 'Cinzel', serif;
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 3px; color: rgba(255,255,255,0.3);
+    }
+    .lb-refresh-btn {
+      width: 26px; height: 26px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.03);
+      color: rgba(255,255,255,0.4);
+      font-size: 14px; cursor: pointer;
+      transition: all .2s;
+    }
+    .lb-refresh-btn:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
+    .lb-list {
+      max-height: 200px; overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.1) transparent;
+    }
+    .lb-empty {
+      padding: 18px; text-align: center;
+      font-family: 'Inter', sans-serif;
+      font-size: 11px; color: rgba(255,255,255,0.15);
+      letter-spacing: 1px;
+    }
+    .lb-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background .15s;
+    }
+    .lb-item:hover { background: rgba(255,255,255,0.04); }
+    .lb-item:last-child { border-bottom: none; }
+    .lb-item-team { font-size: 16px; }
+    .lb-item-info { flex: 1; }
+    .lb-item-nick {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px; color: rgba(255,255,255,0.5);
+      letter-spacing: 0.5px;
+    }
+    .lb-item-meta {
+      font-family: 'Inter', sans-serif;
+      font-size: 9px; color: rgba(255,255,255,0.2);
+      margin-top: 2px;
+    }
+    .lb-item-avax {
+      font-family: 'Cinzel', serif;
+      font-size: 11px; font-weight: 700;
+      color: #ffc94d; letter-spacing: 1px;
+      min-width: 55px; text-align: right;
+    }
+    .lb-item-join {
+      padding: 6px 14px; border-radius: 3px;
+      border: 1px solid rgba(0,229,255,0.25);
+      background: rgba(0,229,255,0.05);
+      color: rgba(0,229,255,0.8);
+      font-family: 'Cinzel', serif;
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 2px; cursor: pointer;
+      transition: all .2s;
+    }
+    .lb-item-join:hover {
+      background: rgba(0,229,255,0.12);
+      border-color: rgba(0,229,255,0.45);
+    }
+
+    /* ─────────────────────────────────────────────
+       BET PANEL
+    ───────────────────────────────────────────── */
+    .bet-panel {
+      margin: 0 0 20px;
+      padding: 16px 18px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,185,50,0.18);
+      background: rgba(255,165,0,0.04);
+    }
+    .bet-panel-label {
+      font-family: 'Cinzel', serif;
+      font-size: 9px; letter-spacing: 3px;
+      color: rgba(255,185,50,0.55);
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .bet-optional {
+      font-family: 'Inter', sans-serif;
+      font-size: 8px; letter-spacing: 1px;
+      color: rgba(255,255,255,0.2);
+      text-transform: lowercase;
+      font-weight: 400;
+    }
+    .bet-input-row {
+      display: flex; align-items: center; gap: 8px;
+      justify-content: center; margin-bottom: 6px;
+    }
+    .bet-amount-input {
+      width: 110px; padding: 10px 12px;
+      background: rgba(255,185,50,0.06);
+      border: 1px solid rgba(255,185,50,0.25);
+      border-radius: 8px; color: #ffc94d;
+      font-family: 'Cinzel', serif;
+      font-size: 18px; font-weight: 700;
+      letter-spacing: 1px; text-align: center;
+      outline: none; transition: border-color .2s;
+    }
+    .bet-amount-input:focus {
+      border-color: rgba(255,185,50,0.6);
+      box-shadow: 0 0 14px rgba(255,185,50,0.12);
+    }
+    .bet-amount-input::-webkit-outer-spin-button,
+    .bet-amount-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .bet-avax-label {
+      font-family: 'Cinzel', serif;
+      font-size: 13px; font-weight: 700;
+      letter-spacing: 2px; color: rgba(255,185,50,0.5);
+    }
+    .bet-fee-note {
+      font-size: 9px; letter-spacing: 0.5px;
+      color: rgba(255,255,255,0.2);
+      text-align: center; margin-bottom: 10px;
+    }
+    .bet-send-btn {
+      width: 100%; padding: 11px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,185,50,0.3);
+      background: rgba(255,185,50,0.08);
+      color: #ffc94d;
+      font-family: 'Cinzel', serif;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 2px; cursor: pointer;
+      transition: all .2s;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .bet-send-btn:hover {
+      background: rgba(255,185,50,0.16);
+      border-color: rgba(255,185,50,0.55);
+      box-shadow: 0 0 20px rgba(255,185,50,0.12);
+    }
+    /* Offer sent */
+    .bet-offer-sent, .bet-locked { text-align: center; }
+    .bet-status-row, .bet-locked-row {
+      display: flex; align-items: center; gap: 8px;
+      justify-content: center;
+      font-size: 11px; letter-spacing: 1px;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 10px;
+    }
+    .bet-cancel-btn {
+      padding: 7px 20px; border-radius: 6px;
+      border: 1px solid rgba(239,68,68,0.3);
+      background: rgba(239,68,68,0.06);
+      color: rgba(248,113,113,0.8);
+      font-size: 10px; letter-spacing: 1px;
+      cursor: pointer; transition: all .2s;
+    }
+    .bet-cancel-btn:hover { background: rgba(239,68,68,0.14); }
+    /* Incoming */
+    .bet-incoming { text-align: center; }
+    .bet-incoming-label {
+      font-family: 'Cinzel', serif;
+      font-size: 9px; letter-spacing: 3px;
+      color: rgba(255,255,255,0.3);
+      text-transform: uppercase; margin-bottom: 6px;
+    }
+    .bet-incoming-amount {
+      font-family: 'Cinzel', serif;
+      font-size: 28px; font-weight: 700;
+      color: #ffc94d;
+      text-shadow: 0 0 20px rgba(255,185,50,0.5);
+      margin-bottom: 4px;
+    }
+    .bet-incoming-btns {
+      display: flex; gap: 10px; justify-content: center;
+      margin-top: 10px;
+    }
+    .bet-accept-btn {
+      flex: 1; padding: 11px;
+      border-radius: 8px;
+      border: 1px solid rgba(74,222,128,0.35);
+      background: rgba(74,222,128,0.08);
+      color: #4ade80;
+      font-family: 'Cinzel', serif;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 2px; cursor: pointer;
+      transition: all .2s;
+    }
+    .bet-accept-btn:hover { background: rgba(74,222,128,0.18); border-color: rgba(74,222,128,0.6); }
+    .bet-decline-btn {
+      flex: 1; padding: 11px;
+      border-radius: 8px;
+      border: 1px solid rgba(239,68,68,0.3);
+      background: rgba(239,68,68,0.05);
+      color: rgba(248,113,113,0.8);
+      font-family: 'Cinzel', serif;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 2px; cursor: pointer;
+      transition: all .2s;
+    }
+    .bet-decline-btn:hover { background: rgba(239,68,68,0.14); }
+    /* Locked */
+    .bet-locked-amount {
+      font-family: 'Cinzel', serif;
+      font-size: 13px; font-weight: 700;
+      color: rgba(255,185,50,0.7);
+      letter-spacing: 2px;
+    }
+    .bet-skip-note {
+      font-size: 10px; letter-spacing: 1px;
+      color: rgba(255,255,255,0.18);
+      text-align: center;
     }
   </style>
 </head>
@@ -2545,6 +4368,10 @@
     <nav class="header-nav">
       <button class="header-nav-item" id="nav-characters-header" data-i18n="characters">KARAKTERLER</button>
       <button class="header-nav-item" id="nav-story-header" data-i18n="story">HİKAYE</button>
+      <button class="header-nav-item" id="nav-map-header" data-i18n="mapNav">HARİTA</button>
+      <button class="header-nav-item" id="nav-leaderboard-header" data-i18n="navLeaderboard">LİDER TABLOSU</button>
+      <button class="header-nav-item" id="nav-profile-header" data-i18n="navProfile">PROFİL</button>
+      <button class="header-nav-item" id="nav-settings-header" data-i18n="navSettings">AYARLAR</button>
     </nav>
     <div class="header-right">
       <div id="lang-selector" style="display:flex;gap:4px;align-items:center;">
@@ -2552,19 +4379,40 @@
         <button class="lang-btn" data-lang="en" style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid rgba(255,255,255,0.08);border-radius:3px;color:rgba(255,255,255,0.4);cursor:pointer;">EN</button>
         <button class="lang-btn" data-lang="es" style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid rgba(255,255,255,0.08);border-radius:3px;color:rgba(255,255,255,0.4);cursor:pointer;">ES</button>
       </div>
-      <button id="wallet-btn">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0">
-          <rect x="1" y="4" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/>
-          <path d="M4 4V3a2 2 0 012-2h4a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.5" fill="none"/>
-          <circle cx="11" cy="9" r="1.5" fill="currentColor"/>
-        </svg>
-        <span id="wallet-label" data-i18n="connectWallet">Cüzdan Bağla</span>
-      </button>
+      <div id="wallet-wrapper" style="position:relative;">
+        <button id="wallet-btn">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0">
+            <rect x="1" y="4" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            <path d="M4 4V3a2 2 0 012-2h4a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            <circle cx="11" cy="9" r="1.5" fill="currentColor"/>
+          </svg>
+          <span id="wallet-label" data-i18n="connectWallet">Cüzdan Bağla</span>
+        </button>
+        <div id="wallet-dropdown" class="wallet-dropdown">
+          <button class="wallet-dd-item" id="dd-profile">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+            <span data-i18n="viewProfile">Profil</span>
+          </button>
+          <button class="wallet-dd-item dd-disconnect" id="dd-disconnect">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 2H4a2 2 0 00-2 2v8a2 2 0 002 2h2M10 12l4-4-4-4M14 8H6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span data-i18n="disconnectWallet">Bağlantıyı Kes</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- ═══ HOME SCREEN ═══ -->
   <div id="home-screen">
+    <!-- Video backgrounds: fire left, snow right -->
+    <div class="home-video-wrap">
+      <video class="home-video home-video-fire" muted loop playsinline preload="none">
+        <source data-src="/assets/video/fire.mp4" type="video/mp4">
+      </video>
+      <video class="home-video home-video-snow" muted loop playsinline preload="none">
+        <source data-src="/assets/video/snow.mp4" type="video/mp4">
+      </video>
+    </div>
     <div class="home-frame"></div>
     <img class="home-logo-img" src="/assets/images/logo.png" alt="A2 — Alaz & Ayaz" />
     <div class="home-subtitle">THE SAGA OF ALAZ & AYAZ</div>
@@ -2640,6 +4488,7 @@
           <div class="cs-carousel-item merc" data-char="albasti"><img src="/assets/images/characters/albasti.png" alt="Albastı" /></div>
           <div class="cs-carousel-item merc" data-char="tepegoz"><img src="/assets/images/characters/tepegoz.png" alt="Tepegöz" /></div>
           <div class="cs-carousel-item merc" data-char="sahmeran"><img src="/assets/images/characters/sahmeran.png" alt="Şahmeran" /></div>
+          <div class="cs-carousel-item merc" data-char="boru"><img src="/assets/images/characters/boru.png" alt="Börü" /></div>
         </div>
       </div>
     </div>
@@ -2740,8 +4589,124 @@ ama dondurduğu kalp çözülmez.</div>
 
   </div>
 
+  <!-- ═══ LEADERBOARD SCREEN ═══ -->
+  <div id="leaderboard-screen">
+
+    <div class="lb-screen-header">
+      <div class="lb-screen-eyebrow" data-i18n="lbEyebrow">Avaland · Haftalık Ödül Sistemi</div>
+      <div class="lb-screen-title" data-i18n="lbTitle">LİDER <span>TABLOSU</span></div>
+    </div>
+
+    <!-- Top 3 Podium Cards -->
+    <div class="lb-podium" id="lb-podium"></div>
+
+    <!-- Prize Pool Banner -->
+    <div class="lb-prize-pool">
+      <div class="lb-pp-left">
+        <div class="lb-pp-label" data-i18n="lbPrizeLabel">Haftalık Ödül Havuzu</div>
+        <div class="lb-pp-amount"><span id="lb-screen-total">0.0000</span><span>AVAX</span></div>
+        <div class="lb-pp-note" data-i18n="lbPrizeNote">Her oyundaki %2 platform ücreti bu havuza gider · Haftalık dağıtılır</div>
+      </div>
+    </div>
+
+    <!-- Sort Tabs -->
+    <div class="lb-sort-tabs">
+      <button class="lb-sort-tab active" data-sort="wins" id="lb-screen-tab-wins" data-i18n="lbTabWins">Galibiyet</button>
+      <button class="lb-sort-tab" data-sort="weeklyWins" id="lb-screen-tab-weekly" data-i18n="lbTabWeekly">Bu Hafta</button>
+      <button class="lb-sort-tab" data-sort="betWon" id="lb-screen-tab-bet" data-i18n="lbTabBet">Bahis Kazancı</button>
+    </div>
+
+    <!-- Table (4th place and beyond) -->
+    <div class="lb-table-wrap">
+      <table class="lb-full-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th style="text-align:left;padding-left:20px" data-i18n="lbColPlayer">OYUNCU</th>
+            <th data-i18n="lbColWins">GALİBİYET</th>
+            <th data-i18n="lbColGames">OYUN</th>
+            <th data-i18n="lbColWR">W/R</th>
+            <th data-i18n="lbColPrize">ÖDÜL</th>
+          </tr>
+        </thead>
+        <tbody id="lb-screen-body"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ═══ PROFILE SCREEN ═══ -->
+  <div id="profile-screen">
+
+    <div class="pfs-header">
+      <div class="pfs-eyebrow" data-i18n="pfsEyebrow">Savaşçı Kimliği · Avalanche Fuji</div>
+      <div class="pfs-title" data-i18n="pfsTitle">PROFİL</div>
+    </div>
+
+    <!-- Not connected -->
+    <div class="pfs-not-connected" id="pfs-not-connected">
+      <div class="pfs-not-connected-text" data-i18n-html="pfsNotConnText">Profilini görüntülemek için<br>cüzdanını bağla.</div>
+      <button class="pfs-connect-btn" id="pfs-connect-btn" data-i18n="pfsConnectBtn">CÜZDAN BAĞLA</button>
+    </div>
+
+    <!-- Register form (shown when connected but no profile) -->
+    <div class="pfs-register-wrap" id="pfs-register" style="display:none;">
+      <div class="pfs-register-title" data-i18n="pfsRegisterTitle">SAVAŞÇI KAYDOL</div>
+      <div class="pfs-form">
+        <label data-i18n="pfsLabelName">Kullanıcı Adı</label>
+        <input type="text" id="pfs-name-input" maxlength="32" data-i18n-placeholder="pfsNamePlaceholder" placeholder="Savaşçı adını gir..." />
+        <label data-i18n="pfsLabelAvatar">Avatar URL</label>
+        <input type="text" id="pfs-avatar-input" data-i18n-placeholder="pfsAvatarPlaceholder" placeholder="https://... (opsiyonel)" />
+        <img class="pfs-form-avatar-preview" id="pfs-avatar-preview" src="/assets/images/logo.png" alt="avatar" />
+        <button class="pfs-register-btn" id="pfs-register-btn" data-i18n="pfsRegisterBtn">KAYIT OL</button>
+      </div>
+    </div>
+
+    <!-- Profile view (registered) -->
+    <div class="pfs-card" id="pfs-view" style="display:none;">
+      <div class="pfs-avatar-col">
+        <img class="pfs-avatar-img" id="pfs-avatar-img" src="/assets/images/logo.png" alt="avatar" />
+        <div class="pfs-avatar-name" id="pfs-display-name">—</div>
+        <div class="pfs-avatar-addr" id="pfs-display-addr">0x...</div>
+      </div>
+      <div class="pfs-info-col">
+        <div class="pfs-stats-row">
+          <div class="pfs-stat">
+            <div class="pfs-stat-val" id="pfs-games">0</div>
+            <div class="pfs-stat-lbl" data-i18n="pfsStatGames">OYUN</div>
+          </div>
+          <div class="pfs-stat wins">
+            <div class="pfs-stat-val" id="pfs-wins">0</div>
+            <div class="pfs-stat-lbl" data-i18n="pfsStatWins">GALİBİYET</div>
+          </div>
+          <div class="pfs-stat losses">
+            <div class="pfs-stat-val" id="pfs-losses">0</div>
+            <div class="pfs-stat-lbl" data-i18n="pfsStatLosses">MAĞLUBİYET</div>
+          </div>
+          <div class="pfs-stat draws">
+            <div class="pfs-stat-val" id="pfs-draws">0</div>
+            <div class="pfs-stat-lbl" data-i18n="pfsStatDraws">BERABERLİK</div>
+          </div>
+        </div>
+        <div class="pfs-rename-row">
+          <input type="text" class="pfs-rename-input" id="pfs-rename-input" maxlength="32" data-i18n-placeholder="pfsRenamePlaceholder" placeholder="İsim değiştir..." />
+          <button class="pfs-rename-btn" id="pfs-rename-btn" data-i18n="pfsSaveBtn">KAYDET</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ MAP SCREEN ═══ -->
+  <div id="map-screen" style="display:none; position:fixed; inset:0; background:#0a0a0f; z-index:2500; flex-direction:column; align-items:center; justify-content:center;">
+    <div style="font-family:'Cinzel',serif; font-size:13px; letter-spacing:4px; color:rgba(255,255,255,0.35); text-transform:uppercase; margin-bottom:16px;" data-i18n="mapPreviewLabel">HARİTA ÖNİZLEME</div>
+    <canvas id="map-preview-canvas" style="width:min(90vw,900px); height:min(80vh,700px); border:1px solid rgba(255,255,255,0.07); border-radius:8px; display:block;"></canvas>
+    <div style="margin-top:14px; font-family:'Inter',sans-serif; font-size:11px; color:rgba(255,255,255,0.3); letter-spacing:1px;" data-i18n="mapControlHint">Sol tık: döndür · Scroll: zoom · Sağ tık: kaydır</div>
+  </div>
+
   <!-- ═══ TEAM SELECT SCREEN ═══ -->
   <div id="team-select-screen">
+    <button class="screen-back-btn" id="team-back"><span data-i18n="back">← Geri</span></button>
     <div class="team-select-title" data-i18n="chooseTeam">TARAFINI SEÇ</div>
     <div class="team-split">
       <div class="team-half fire-half" data-team="fire">
@@ -2788,53 +4753,51 @@ ama dondurduğu kalp çözülmez.</div>
 
   <canvas id="renderCanvas"></canvas>
 
-  <!-- TOP HUD -->
+  <!-- TOP HUD — Mortal Kombat style -->
   <div id="top-hud">
-    <!-- Sol: Ateş üssü -->
-    <div class="hud-base fire">
-      <div class="base-icon" style="color:#ff7030">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 3c0 0 5 5 5 9 0 4-3 7-5 8 1-2 1-5-1-6-1 1-1 4 0 6-2-1-5-4-5-8C6 8 12 3 12 3z" fill="currentColor" fill-opacity="0.2"/>
-          <path d="M12 3c0 0 5 5 5 9 0 4-3 7-5 8 1-2 1-5-1-6-1 1-1 4 0 6-2-1-5-4-5-8C6 8 12 3 12 3z"/>
-        </svg>
+
+    <!-- ── FIRE (sol) ── -->
+    <div class="mk-side fire">
+      <div class="mk-name-row">
+        <span class="mk-name fire-name">ALAZ</span>
+        <span class="mk-hp-num" id="fire-base-hp">1000</span>
       </div>
-      <div class="base-info">
-        <div class="base-label" data-i18n="fireBase">Ateş Üssü</div>
-        <div class="base-bar-track">
-          <div class="base-bar-fill" id="fire-base-fill" style="width:100%"></div>
-        </div>
-        <div class="base-hp-num" id="fire-base-hp">1000 / 1000</div>
+      <div class="mk-bar-wrap">
+        <!-- Ghost (hasar izi) -->
+        <div class="mk-bar-ghost" id="fire-base-ghost" style="width:100%"></div>
+        <!-- Canlı HP -->
+        <div class="mk-bar-live fire-live" id="fire-base-fill" style="width:100%"></div>
+        <!-- Segment çizgileri -->
+        <div class="mk-bar-segments"></div>
       </div>
     </div>
 
-    <!-- Orta: Tur + Mana -->
+    <!-- ── ORTA ── -->
     <div id="hud-center">
       <div id="turn-banner" class="player-turn">
         SENİN TURUN <span id="turn-count">· TUR 1</span>
+      </div>
+      <!-- Bet HUD indicator (multiplayer only) -->
+      <div id="bet-hud" style="display:none">
+        <span id="bet-hud-text">0 AVAX</span>
       </div>
       <div id="mana-row"></div>
       <div id="avx-hud"><img src="/assets/avxcoin.png" class="avx-hud-icon" alt="AVX"><span id="avx-counter">0</span></div>
     </div>
 
-    <!-- Sağ: Buz üssü -->
-    <div class="hud-base ice">
-      <div class="base-icon" style="color:#38aaff">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-          <line x1="12" y1="2" x2="12" y2="22"/>
-          <line x1="2" y1="12" x2="22" y2="12"/>
-          <line x1="5" y1="5" x2="19" y2="19"/>
-          <line x1="19" y1="5" x2="5" y2="19"/>
-          <circle cx="12" cy="12" r="2.5" fill="currentColor" fill-opacity="0.35" stroke="none"/>
-        </svg>
+    <!-- ── ICE (sağ) ── -->
+    <div class="mk-side ice">
+      <div class="mk-name-row ice-row">
+        <span class="mk-hp-num" id="ice-base-hp">1000</span>
+        <span class="mk-name ice-name">AYAZ</span>
       </div>
-      <div class="base-info">
-        <div class="base-label" data-i18n="iceBase">Buz Üssü</div>
-        <div class="base-bar-track">
-          <div class="base-bar-fill" id="ice-base-fill" style="width:100%"></div>
-        </div>
-        <div class="base-hp-num" id="ice-base-hp">1000 / 1000</div>
+      <div class="mk-bar-wrap">
+        <div class="mk-bar-ghost" id="ice-base-ghost" style="width:100%"></div>
+        <div class="mk-bar-live ice-live" id="ice-base-fill" style="width:100%"></div>
+        <div class="mk-bar-segments"></div>
       </div>
     </div>
+
   </div>
 
   <!-- Board Control Bar (4px şerit, hud altında) -->
@@ -2945,25 +4908,25 @@ ama dondurduğu kalp çözülmez.</div>
       border-radius:16px; padding:14px 20px;
       box-shadow:0 0 40px rgba(255,180,0,0.2);
     ">
-      <div style="color:rgba(255,220,100,0.8);font-size:11px;font-weight:700;letter-spacing:1px;align-self:center;margin-right:4px;">LANE SEÇ</div>
+      <div style="color:rgba(255,220,100,0.8);font-size:11px;font-weight:700;letter-spacing:1px;align-self:center;margin-right:4px;" data-i18n="lanePickTitle">LANE SEÇ</div>
       <button class="lane-btn" data-lane="0" style="
         width:80px;height:56px;border-radius:10px;border:1px solid rgba(255,140,0,0.5);
         background:linear-gradient(160deg,rgba(180,60,0,0.8),rgba(100,30,0,0.9));
         color:#ffaa50;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px;
-        transition:all 0.15s ease;
-      ">SOL</button>
+        transition:all 0.15s ease; position:relative;
+      " data-i18n-html="laneLeftBtn"><span data-i18n="laneLeft">SOL</span><span style="position:absolute;top:4px;right:6px;font-size:9px;opacity:0.55;font-weight:400;">Q</span></button>
       <button class="lane-btn" data-lane="1" style="
         width:80px;height:56px;border-radius:10px;border:1px solid rgba(255,220,50,0.5);
         background:linear-gradient(160deg,rgba(120,100,0,0.85),rgba(60,50,0,0.9));
         color:#ffe066;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px;
-        transition:all 0.15s ease;
-      ">ORTA</button>
+        transition:all 0.15s ease; position:relative;
+      " data-i18n-html="laneMidBtn"><span data-i18n="laneMid">ORTA</span><span style="position:absolute;top:4px;right:6px;font-size:9px;opacity:0.55;font-weight:400;">W</span></button>
       <button class="lane-btn" data-lane="2" style="
         width:80px;height:56px;border-radius:10px;border:1px solid rgba(80,160,255,0.5);
         background:linear-gradient(160deg,rgba(0,50,140,0.85),rgba(0,25,80,0.9));
         color:#80c8ff;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px;
-        transition:all 0.15s ease;
-      ">SAĞ</button>
+        transition:all 0.15s ease; position:relative;
+      " data-i18n-html="laneRightBtn"><span data-i18n="laneRight">SAĞ</span><span style="position:absolute;top:4px;right:6px;font-size:9px;opacity:0.55;font-weight:400;">E</span></button>
       <button id="lane-cancel" style="
         width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);
         background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.4);
@@ -2978,12 +4941,14 @@ ama dondurduğu kalp çözülmez.</div>
     <div class="wallet-panel">
       <button class="wallet-panel-close" id="wallet-modal-close">✕</button>
       <div class="wallet-panel-title" data-i18n="connectWallet">CÜZDAN BAĞLA</div>
+      <div class="wallet-panel-subtitle" data-i18n="walletSubtitle">Devam etmek için cüzdanını seç</div>
       <div class="wallet-options"></div>
     </div>
   </div>
 
   <!-- ═══ PROFILE MODAL ═══ -->
-  <div id="profile-modal">
+  <!-- profile-modal: artık profile-screen kullanılıyor, gizli tutuyoruz -->
+  <div id="profile-modal" style="display:none!important">
     <div class="profile-panel">
       <button class="profile-close" id="profile-close">✕</button>
       <div class="profile-title" data-i18n="profileTitle">PROFİL</div>
@@ -3006,6 +4971,19 @@ ama dondurduğu kalp çözülmez.</div>
           <img class="profile-avatar" id="profile-avatar" src="/assets/images/logo.png" alt="avatar" />
           <div class="profile-username" id="profile-display-name">—</div>
           <div class="profile-address" id="profile-display-addr">0x...</div>
+          <div id="profile-rename-row" style="margin-top:8px;display:flex;gap:8px;justify-content:center;">
+            <input type="text" id="profile-rename-input" maxlength="32"
+              style="padding:6px 12px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);
+                     background:rgba(255,255,255,0.06);color:#fff;font-size:12px;
+                     font-family:'Rajdhani',sans-serif;letter-spacing:1px;width:140px;outline:none;"
+              placeholder="İsim değiştir..." />
+            <button id="profile-rename-btn"
+              style="padding:6px 14px;border-radius:6px;border:1px solid rgba(176,106,255,0.4);
+                     background:rgba(176,106,255,0.1);color:#c87eff;font-size:11px;
+                     font-weight:700;letter-spacing:1px;cursor:pointer;font-family:'Rajdhani',sans-serif;">
+              KAYDET
+            </button>
+          </div>
 
           <div class="profile-stats-grid">
             <div class="profile-stat-box">
@@ -3028,6 +5006,43 @@ ama dondurduğu kalp çözülmez.</div>
         </div>
 
         <div class="profile-section-title" data-i18n="profileLeaderboard">LİDER TABLOSU</div>
+
+        <!-- Haftalık ödül havuzu banner -->
+        <div class="weekly-prize-banner" id="weekly-prize-banner">
+          <div class="wpb-inner">
+            <div class="wpb-title">HAFTALIK ÖDÜL HAVUZU</div>
+            <div class="wpb-pool">
+              <span class="wpb-amount" id="wpb-total-amount">0.0000</span>
+              <span class="wpb-avax">AVAX</span>
+            </div>
+            <div class="wpb-prizes" id="wpb-prizes">
+              <div class="wpb-prize-item wpb-1st">
+                <span class="wpb-rank">1.</span>
+                <span class="wpb-prize-avax" id="wpb-prize-1">—</span>
+                <span class="wpb-prize-label">AVAX</span>
+              </div>
+              <div class="wpb-prize-item wpb-2nd">
+                <span class="wpb-rank">2.</span>
+                <span class="wpb-prize-avax" id="wpb-prize-2">—</span>
+                <span class="wpb-prize-label">AVAX</span>
+              </div>
+              <div class="wpb-prize-item wpb-3rd">
+                <span class="wpb-rank">3.</span>
+                <span class="wpb-prize-avax" id="wpb-prize-3">—</span>
+                <span class="wpb-prize-label">AVAX</span>
+              </div>
+            </div>
+            <div class="wpb-note" id="wpb-note">Her oyundaki %2 platform ücreti bu havuza gider · Haftalık dağıtılır</div>
+          </div>
+        </div>
+
+        <!-- Leaderboard sort tabs -->
+        <div class="lb-tabs" id="lb-tabs">
+          <button class="lb-tab active" data-sort="wins">Galibiyet</button>
+          <button class="lb-tab" data-sort="weeklyWins">Bu Hafta</button>
+          <button class="lb-tab" data-sort="betWon">Bahis Kazancı</button>
+        </div>
+
         <table class="leaderboard-table">
           <thead>
             <tr>
@@ -3036,6 +5051,7 @@ ama dondurduğu kalp çözülmez.</div>
               <th data-i18n="profileWins">GALİBİYET</th>
               <th data-i18n="profileGames">OYUN</th>
               <th data-i18n="profileWinRate">ORAN</th>
+              <th class="lb-col-prize">ÖDÜL</th>
             </tr>
           </thead>
           <tbody id="leaderboard-body"></tbody>
@@ -3044,7 +5060,6 @@ ama dondurduğu kalp çözülmez.</div>
 
       <!-- Not connected state -->
       <div id="profile-not-connected" style="text-align:center;padding:30px 0;">
-        <div style="font-size:40px;margin-bottom:12px;">🔗</div>
         <div style="color:rgba(255,255,255,0.5);font-size:13px;margin-bottom:16px;" data-i18n="profileConnectFirst">Önce cüzdanını bağla</div>
         <button class="profile-btn" id="profile-connect-btn" data-i18n="connectWallet">CÜZDAN BAĞLA</button>
       </div>
@@ -3055,6 +5070,14 @@ ama dondurduğu kalp çözülmez.</div>
   <div id="win-overlay">
     <div id="win-title" class="fire-win" data-i18n="victory">ZAFER!</div>
     <div id="win-message"></div>
+
+    <!-- Bet Result (multiplayer) -->
+    <div id="bet-result-row" style="display:none">
+      <div id="bet-result-icon"></div>
+      <div id="bet-result-text"></div>
+      <div id="bet-result-tx"></div>
+    </div>
+
     <div id="win-stats-wrap">
       <table id="win-stats-table">
         <thead>
@@ -3129,10 +5152,279 @@ ama dondurduğu kalp çözülmez.</div>
           <div class="mode-btn-tag" data-i18n="localPvp">LOCAL 2P</div>
         </button>
 
+        <!-- ONLİNE MULTİPLAYER -->
+        <button class="mode-btn multiplayer" data-mode="multiplayer">
+          <div class="mode-btn-icon">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="20" cy="20" r="14" fill="currentColor" fill-opacity="0.08"/>
+              <circle cx="20" cy="20" r="14"/>
+              <path d="M6 20h28M20 6c-4 4-6 9-6 14s2 10 6 14M20 6c4 4 6 9 6 14s-2 10-6 14"/>
+            </svg>
+          </div>
+          <div class="mode-btn-label" data-i18n="onlineModeLabel">ONLİNE</div>
+          <div class="mode-btn-desc">
+            <span data-i18n-html="onlineModeDesc">Lobi oluştur veya<br>koda girerek katıl.<br>İnternetten düello.</span>
+          </div>
+          <div class="mode-btn-tag" data-i18n="onlinePvp">ONLİNE PvP</div>
+        </button>
+
       </div>
 
       <div class="mode-footer-hint" data-i18n="twoPlayerHintFull">
         2 Oyunculu modda: Buz oyuncusu klavye kullanır · 1-4 = Kart seç · Z/X/C = Lane (Sol/Orta/Sağ)
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ONLİNE LOBİ EKRANI ===== -->
+  <div id="lobby-screen" style="display:none">
+    <button class="screen-back-btn" id="lobby-back"><span data-i18n="back">← Geri</span></button>
+
+    <div class="lobby-inner">
+      <div class="lobby-header">
+        <div class="lobby-title" data-i18n="lobbyTitle">ONLİNE DÜELLO</div>
+        <div class="lobby-subtitle" data-i18n="lobbySubtitle">P2P · Arkadaşınla oyna</div>
+      </div>
+
+      <!-- ONLINE INFO BAR -->
+      <div class="lobby-info-bar" id="lobby-info-bar">
+        <div class="lib-item" id="lib-wallet-status">
+          <span class="lib-text" id="lib-wallet-text">Cüzdan bağlı değil</span>
+        </div>
+        <div class="lib-item" id="lib-balance" style="display:none">
+          <span class="lib-text" id="lib-balance-text">0 AVAX</span>
+        </div>
+        <div class="lib-item lib-bet-hint">
+          <span class="lib-text">Bahis: 0.01 – 100 AVAX · %2 fee · Kazanan %98 alır</span>
+        </div>
+      </div>
+
+      <!-- TAKIM SEÇİMİ -->
+      <div class="lobby-team-pick" id="lobby-team-pick">
+        <div class="lobby-section-label" data-i18n="lobbyPickTeam">TARAFINI SEÇ</div>
+        <div class="lobby-team-btns">
+          <button class="lobby-team-btn fire-pick" id="lobby-pick-fire">
+            <span class="ltb-name" data-i18n="lobbyFireName">ALAZ</span>
+          </button>
+          <button class="lobby-team-btn ice-pick" id="lobby-pick-ice">
+            <span class="ltb-name" data-i18n="lobbyIceName">AYAZ</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ANA SEÇİM: OLUŞTUR / KATIL / QUICK MATCH -->
+      <div class="lobby-actions" id="lobby-actions" style="display:none">
+
+        <!-- ── LOBİ OLUŞTURMA FORMU ── -->
+        <div class="lobby-create-form">
+          <div class="lcf-label">LOBİ OLUŞTUR</div>
+          <div class="lcf-row">
+            <div class="lcf-avax-group">
+              <input class="lcf-avax-input" id="lobby-avax-input" type="number"
+                     min="0" max="100" step="0.01" placeholder="0.00" />
+              <span class="lcf-avax-unit">AVAX</span>
+            </div>
+            <div class="lcf-privacy-group">
+              <button class="lcf-privacy-btn active" id="lobby-privacy-public" data-val="public">
+                Herkese Açık
+              </button>
+              <button class="lcf-privacy-btn" id="lobby-privacy-private" data-val="private">
+                Özel
+              </button>
+            </div>
+          </div>
+          <button class="lobby-action-btn create-btn" id="lobby-create-btn">
+            <span class="lab-text">LOBİ OLUŞTUR</span>
+            <span class="lab-sub">Kod al · rakip bul</span>
+          </button>
+        </div>
+
+        <div class="lobby-or">— veya —</div>
+
+        <!-- ── KOD İLE KATIL ── -->
+        <div class="lobby-join-row">
+          <input class="lobby-code-input" id="lobby-code-input" type="text"
+                 maxlength="6" spellcheck="false" autocomplete="off"
+                 placeholder="LOBİ KODU"/>
+          <button class="lobby-action-btn join-btn" id="lobby-join-btn">
+            <span class="lab-text">KATIL</span>
+          </button>
+        </div>
+
+        <div class="lobby-or">— veya —</div>
+
+        <!-- ── QUICK MATCH ── -->
+        <button class="lobby-action-btn qm-btn" id="lobby-qm-btn">
+          <span class="lab-text">HIZLI EŞLEŞME</span>
+          <span class="lab-sub">Otomatik rakip bul</span>
+        </button>
+
+        <!-- ── AKTİF LOBİLER LİSTESİ ── -->
+        <div class="lobby-browser" id="lobby-browser">
+          <div class="lb-header">
+            <span class="lb-title">AKTİF LOBİLER</span>
+            <button class="lb-refresh-btn" id="lobby-refresh-btn">↻</button>
+          </div>
+          <div class="lb-list" id="lobby-list">
+            <div class="lb-empty">Yükleniyor…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── QUICK MATCH BEKLENİYOR ── -->
+      <div class="lobby-qm-waiting" id="lobby-qm-waiting" style="display:none">
+        <div class="qmw-anim">
+          <span class="lwa-dot"></span><span class="lwa-dot"></span><span class="lwa-dot"></span>
+        </div>
+        <div class="qmw-text">Rakip aranıyor…</div>
+        <button class="qmw-cancel-btn" id="lobby-qm-cancel">İPTAL</button>
+      </div>
+
+      <!-- ── QUICK MATCH EŞLEŞME BİLDİRİMİ ── -->
+      <div class="qm-notification" id="qm-notification" style="display:none">
+        <div class="qmn-inner">
+          <div class="qmn-title">RAKİP BULUNDU!</div>
+          <div class="qmn-opponent" id="qmn-opponent-name">—</div>
+          <div class="qmn-timer" id="qmn-timer">15</div>
+          <div class="qmn-btns">
+            <button class="qmn-accept" id="qm-accept-btn">✓ KABUL ET</button>
+            <button class="qmn-decline" id="qm-decline-btn">✕ REDDET</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- BEKLEME ODASI -->
+      <div class="lobby-waiting" id="lobby-waiting" style="display:none">
+        <div class="lobby-code-display">
+          <div class="lcd-label" data-i18n="lobbyCodeLabel">LOBİ KODUN</div>
+          <div class="lcd-code" id="lobby-display-code">------</div>
+          <button class="lcd-copy-btn" id="lobby-copy-btn">
+            <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 2a2 2 0 00-2 2v10a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H8zm0 1.5h6a.5.5 0 01.5.5v10a.5.5 0 01-.5.5H8a.5.5 0 01-.5-.5V4a.5.5 0 01.5-.5z"/><path d="M5 5.5H4a2 2 0 00-2 2V16a2 2 0 002 2h6a2 2 0 002-2v-1h-1.5v1a.5.5 0 01-.5.5H4a.5.5 0 01-.5-.5V7.5a.5.5 0 01.5-.5h1V5.5z"/></svg>
+            <span data-i18n="lobbyCopy">Kopyala</span>
+          </button>
+        </div>
+        <div class="lobby-waiting-anim">
+          <span class="lwa-dot"></span><span class="lwa-dot"></span><span class="lwa-dot"></span>
+        </div>
+        <div class="lobby-status-text" id="lobby-status-text" data-i18n="lobbyWaiting">Rakip bekleniyor…</div>
+      </div>
+
+      <!-- BAĞLANDI ODASI -->
+      <div class="lobby-connected" id="lobby-connected" style="display:none">
+        <div class="lc-badge">
+          <span class="lc-dot"></span>
+          <span class="lc-label" id="lc-opp-label" data-i18n="lobbyConnected">Rakip bağlandı!</span>
+        </div>
+        <div class="lc-teams-row">
+          <div class="lc-team" id="lc-my-team">
+            <span class="lct-name">—</span>
+          </div>
+          <div class="lc-vs">VS</div>
+          <div class="lc-team" id="lc-opp-team">
+            <span class="lct-name">—</span>
+          </div>
+        </div>
+        <div class="lc-ping" id="lc-ping" data-i18n="lobbyPing">Ping: — ms</div>
+
+        <!-- ─── BET PANEL ─────────────────────────────── -->
+        <div class="bet-panel" id="bet-panel">
+          <div class="bet-panel-label">AVAX BAHSİ <span class="bet-optional">(opsiyonel)</span></div>
+
+          <!-- Wallet not connected notice -->
+          <div class="bet-no-wallet" id="bet-no-wallet" style="display:none">
+            <div style="font-size:12px; color:rgba(255,255,255,0.5); margin-top:4px">Bahis için önce cüzdanını bağla</div>
+          </div>
+
+          <!-- Guest: host'un teklifi bekleniyor -->
+          <div class="bet-guest-wait" id="bet-guest-wait" style="display:none">
+            <div style="font-size:12px; color:rgba(255,255,255,0.5)">Host bahis teklif ederse burada görünecek</div>
+          </div>
+
+          <!-- Host: bahis teklifi gönder -->
+          <div class="bet-host-section" id="bet-host-section">
+            <div class="bet-input-row">
+              <input id="bet-amount-input" class="bet-amount-input"
+                     type="number" min="0.01" max="100" step="0.01"
+                     placeholder="0.00" />
+              <span class="bet-avax-label">AVAX</span>
+            </div>
+            <div class="bet-fee-note">%2 platform ücreti kesilir · Kazanan %98 alır</div>
+            <button class="bet-send-btn" id="bet-send-btn">
+              Bahis Teklif Et
+            </button>
+          </div>
+
+          <!-- Host: teklif gönderildi, guest'in yanıtı bekleniyor -->
+          <div class="bet-offer-sent" id="bet-offer-sent" style="display:none">
+            <div class="bet-status-row">
+              <span id="bet-offer-sent-text">Rakipin bahsi kabul etmesi bekleniyor…</span>
+            </div>
+            <button class="bet-cancel-btn" id="bet-cancel-btn">İptal</button>
+          </div>
+
+          <!-- Guest: bahis teklifi geldi -->
+          <div class="bet-incoming" id="bet-incoming" style="display:none">
+            <div class="bet-incoming-label">Rakip bahis teklif etti</div>
+            <div class="bet-incoming-amount" id="bet-incoming-amount">— AVAX</div>
+            <div class="bet-fee-note">Kabul edersen sen de aynı miktarı yatırırsın. Kazanan %98 alır.</div>
+            <div class="bet-incoming-btns">
+              <button class="bet-accept-btn" id="bet-accept-btn">✓ Kabul Et</button>
+              <button class="bet-decline-btn" id="bet-decline-btn">✕ Reddet</button>
+            </div>
+          </div>
+
+          <!-- Her iki taraf: bahis kilitlendi -->
+          <div class="bet-locked" id="bet-locked" style="display:none">
+            <div class="bet-locked-row">
+              <span id="bet-locked-text">Bahis kilitlendi</span>
+            </div>
+            <div class="bet-locked-amount" id="bet-locked-amount"></div>
+          </div>
+
+          <!-- Bahis yok (host deposit yapmadı, boş geç) -->
+          <div class="bet-skip-note" id="bet-skip-note" style="display:none">
+            Bahissiz oynuyorsunuz.
+          </div>
+        </div>
+        <!-- ─────────────────────────────────────────── -->
+
+        <button class="lobby-start-btn" id="lobby-start-btn" data-i18n="lobbyStartBtn">OYUNU BAŞLAT &rarr;</button>
+      </div>
+
+      <!-- HATA -->
+      <div class="lobby-error" id="lobby-error" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- ═══ SETTINGS SCREEN ═══ -->
+  <div id="settings-screen" style="display:none">
+    <button class="screen-back-btn" id="settings-back"><span data-i18n="back">← Geri</span></button>
+    <div class="stg-inner">
+      <div class="stg-title" data-i18n="settingsTitle">AYARLAR</div>
+      <div class="stg-tabs">
+        <button class="stg-tab active" data-stg-tab="keybinds" data-i18n="settingsKeybinds">TUŞ ATAMALARI</button>
+        <button class="stg-tab" data-stg-tab="general" data-i18n="settingsGeneral">GENEL</button>
+      </div>
+      <div id="stg-panel-keybinds">
+        <div style="margin-bottom:16px;">
+          <div style="font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:3px;color:rgba(255,100,30,0.6);margin-bottom:8px;">ATES</div>
+          <div id="stg-fire-binds"></div>
+        </div>
+        <div>
+          <div style="font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:3px;color:rgba(56,170,255,0.6);margin-bottom:8px;">BUZ</div>
+          <div id="stg-ice-binds"></div>
+        </div>
+      </div>
+      <div id="stg-panel-general" style="display:none;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <label style="font-family:'Inter',sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;color:rgba(255,255,255,0.5);min-width:80px;" data-i18n="settingsVolume">SES</label>
+          <input type="range" id="stg-volume" min="0" max="100" value="50" style="flex:1;accent-color:#aa66ff;cursor:pointer;" />
+          <span id="stg-volume-val" style="font-family:'Inter',sans-serif;font-size:11px;color:rgba(255,255,255,0.5);min-width:30px;text-align:right;">50</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:24px;">
+        <button id="stg-save-btn" style="flex:1;padding:10px 20px;border-radius:8px;border:1px solid rgba(170,102,255,0.4);background:rgba(170,102,255,0.1);color:#c87eff;font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer;" data-i18n="settingsSave">KAYDET</button>
+        <button id="stg-reset-btn" style="flex:1;padding:10px 20px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.4);font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer;" data-i18n="settingsReset">SIFIRLA</button>
       </div>
     </div>
   </div>
@@ -3157,7 +5449,6 @@ ama dondurduğu kalp çözülmez.</div>
       <!-- GÖKYÜZÜ — tıklanınca açılan mesaj -->
       <div class="diff-sky-btn-wrap">
         <button class="diff-sky-btn" id="diff-sky">
-          <span class="diff-sky-icon">☁</span>
           <span class="diff-sky-name">GÖKYÜZÜ</span>
         </button>
         <div class="diff-sky-toast">
@@ -3279,9 +5570,33 @@ ama dondurduğu kalp çözülmez.</div>
     </div>
     <!-- Status text -->
     <div id="loading-status" data-i18n="loading" style="font-family:'Inter',sans-serif;font-size:10px;letter-spacing:2px;color:rgba(255,255,255,0.25);position:relative;z-index:1;">YÜKLENIYOR</div>
+    <!-- Slow load notice -->
+    <div id="loading-slow" style="
+      font-family:'Inter',sans-serif; font-size:11px; letter-spacing:0.5px;
+      color:rgba(255,255,255,0.3); position:relative; z-index:1;
+      margin-top:4px;
+    "></div>
+    <!-- Game tip -->
+    <div id="loading-tip" style="
+      position:absolute; bottom:60px; left:50%; transform:translateX(-50%);
+      width:80%; max-width:520px; text-align:center;
+      font-family:'Inter',sans-serif; font-size:13px; line-height:1.6;
+      color:rgba(255,255,255,0.35); letter-spacing:0.3px;
+      z-index:1;
+      transition: opacity 0.5s ease;
+    "></div>
+    <!-- Tip label -->
+    <div style="
+      position:absolute; bottom:40px; left:50%; transform:translateX(-50%);
+      font-family:'Cinzel',serif; font-size:8px; font-weight:700;
+      letter-spacing:4px; color:rgba(255,170,60,0.25);
+      z-index:1;
+    " id="loading-tip-label"></div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+  <!-- PeerJS P2P (CDN — npm esbuild bug workaround) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

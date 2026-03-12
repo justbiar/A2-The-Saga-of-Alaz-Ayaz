@@ -98,7 +98,7 @@ contract A2GameRegistry is Ownable, ReentrancyGuard {
             status: MatchStatus.Active,
             winner: address(0),
             turnsPlayed: 0,
-            winCondition: "",
+            winCondition: ""
         });
 
         playerMatches[msg.sender].push(matchId);

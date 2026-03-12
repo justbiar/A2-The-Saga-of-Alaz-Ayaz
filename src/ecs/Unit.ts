@@ -15,7 +15,8 @@ export type Team = 'fire' | 'ice';
 export type UnitType =
     | 'korhan' | 'erlik' | 'od'
     | 'ayaz' | 'tulpar' | 'umay'
-    | 'albasti' | 'tepegoz' | 'sahmeran';
+    | 'albasti' | 'tepegoz' | 'sahmeran'
+    | 'boru';
 
 export type CardTeam = 'fire' | 'ice' | 'mercenary';
 export type UnitState = 'walking' | 'fighting' | 'dead';
@@ -64,6 +65,7 @@ const MERC: Record<string, UnitStats> = {
     albasti:  { maxHp: 140, attack: 26, attackRange: 5, attackCooldown: 1.0, speed: 8,  armor: 2, magicResist: 0.10 }, // hızlı neutral
     tepegoz:  { maxHp: 300, attack: 20, attackRange: 4, attackCooldown: 2.0, speed: 3,  armor: 12, magicResist: 0.08 }, // dev — en yavaş, en zırhlı
     sahmeran: { maxHp: 130, attack: 32, attackRange: 7, attackCooldown: 1.1, speed: 7,  armor: 1, magicResist: 0.18 }, // hızlı zehirci
+    boru:     { maxHp: 180, attack: 28, attackRange: 4, attackCooldown: 0.9, speed: 6,  armor: 5, magicResist: 0.15 }, // ruh kurdu — kristalden çıkar
 };
 
 export const STATS_MAP: Record<UnitType, UnitStats> = {
@@ -82,6 +84,7 @@ export const AI_PROFILES_MAP: Record<UnitType, AIProfile> = {
     albasti:  { trait: 'adaptive',    targetPriority: 'nearest',    retreatThreshold: 0.20, aggressionRadius: 12 },
     tepegoz:  { trait: 'defensive',   targetPriority: 'highest_hp', retreatThreshold: 0.35, aggressionRadius: 8  },
     sahmeran: { trait: 'tactical',    targetPriority: 'lowest_hp',  retreatThreshold: 0.15, aggressionRadius: 10 },
+    boru:     { trait: 'aggressive',  targetPriority: 'nearest',    retreatThreshold: 0.10, aggressionRadius: 14 },
 };
 
 // ─── CARD DEFINITIONS ────────────────────────────────────────────────

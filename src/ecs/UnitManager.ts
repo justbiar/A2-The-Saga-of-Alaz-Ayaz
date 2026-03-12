@@ -25,6 +25,7 @@ import { tickPassives, tickStatusEffects, checkAbilityTrigger, applyStatusEffect
 import { UNIT_ABILITY_MAP } from './abilities/characterAbilities';
 import type { ShardBonus } from './types';
 import type { BaseBuilding } from '../scene/map/BaseBuilding';
+import { getCachedUrl, waitForCache, getOriginalFileName } from '../glbCache';
 
 let nextId = 1;
 
@@ -92,6 +93,11 @@ export class UnitManager {
     private sahmeranAttackContainer: AssetContainer | null = null;
     private sahmeranDieContainer:    AssetContainer | null = null;
     private sahmeranAnimMap = new Map<number, GLBAnimData>();
+    // Börü animation containers (walk + attack + die + run + buff)
+    private boruWalkContainer:   AssetContainer | null = null;
+    private boruAttackContainer: AssetContainer | null = null;
+    private boruDieContainer:    AssetContainer | null = null;
+    private boruAnimMap = new Map<number, GLBAnimData>();
     /** Shard bonuses — set from main.ts each frame */
     public fireShard: ShardBonus = { manaRegen: 0, attackBonus: 0, speedBonus: 0 };
     public iceShard: ShardBonus = { manaRegen: 0, attackBonus: 0, speedBonus: 0 };
@@ -130,6 +136,11 @@ export class UnitManager {
         const attackInst = attackC?.instantiateModelsToScene(mk('a'), true) ?? null;
         const dieInst    = dieC?.instantiateModelsToScene(mk('d'), true)    ?? null;
 
+        // Debug: mesh ve animasyon sayılarını logla
+        console.log(`[GLB] ${prefix} — walk: ${walkInst.rootNodes.length} roots, ${walkInst.rootNodes[0]?.getChildMeshes().length ?? 0} meshes, ${walkInst.animationGroups.length} anims`);
+        if (attackInst) console.log(`[GLB] ${prefix} — attack: ${attackInst.rootNodes.length} roots, ${attackInst.rootNodes[0]?.getChildMeshes().length ?? 0} meshes, ${attackInst.animationGroups.length} anims`);
+        if (dieInst) console.log(`[GLB] ${prefix} — die: ${dieInst.rootNodes.length} roots, ${dieInst.rootNodes[0]?.getChildMeshes().length ?? 0} meshes, ${dieInst.animationGroups.length} anims`);
+
         const walkRoot   = walkInst.rootNodes[0] as TransformNode;
         const attackRoot = (attackInst?.rootNodes[0] ?? walkRoot) as TransformNode;
         const dieRoot    = dieInst ? dieInst.rootNodes[0] as TransformNode : null;
@@ -160,9 +171,9 @@ export class UnitManager {
         if (attackInst) attackRoot.setEnabled(false);
         if (dieRoot)    dieRoot.setEnabled(false);
 
-        walkInst.animationGroups.forEach(ag => ag.play(true));
-        attackInst?.animationGroups.forEach(ag => ag.stop());
-        dieInst?.animationGroups.forEach(ag => ag.stop());
+        walkInst.animationGroups.forEach(ag => { ag.loopAnimation = true; ag.speedRatio = 1.0; ag.goToFrame(0); ag.play(true); });
+        attackInst?.animationGroups.forEach(ag => { ag.loopAnimation = true; ag.stop(); });
+        dieInst?.animationGroups.forEach(ag => { ag.loopAnimation = false; ag.stop(); });
 
         return {
             walkRoot, attackRoot, dieRoot,
@@ -187,6 +198,11 @@ export class UnitManager {
     }
 
     async preload(): Promise<void> {
+        // Önce warm-cache'in bitmesini bekle (zaten arka planda iniyor)
+        console.log('⏳ Warm-cache bekleniyor...');
+        await waitForCache();
+        console.log('✅ Warm-cache hazır — GLB parse başlıyor');
+
         // Korhan static template (fallback if animation GLBs fail)
         try {
             const result = await SceneLoader.ImportMeshAsync(
@@ -201,70 +217,110 @@ export class UnitManager {
 
         // ── Her dosya bağımsız yüklenir; biri başarısız olursa
         //    diğerleri etkilenmez, walk varsa GLB gösterilir. ──────────
-        const base = '/assets/character%20animation/';
-        const load = (file: string) => SceneLoader.LoadAssetContainerAsync(base, file, this.scene);
+        // Cache'deki objectURL'den yükle — network isteği sıfır.
+        const loadCached = (file: string, boru = false) => {
+            const url = getCachedUrl(file, boru);
+            // objectURL ise: rootUrl=blobURL, filename=orijinal dosya adı → plugin .glb'yi tanır
+            if (url.startsWith('blob:')) {
+                return SceneLoader.LoadAssetContainerAsync(url, '', this.scene, undefined, '.glb');
+            }
+            // Fallback: normal URL
+            const base = boru
+                ? '/assets/character%20animation/Meshy_AI_biped/'
+                : '/assets/character%20animation/';
+            return SceneLoader.LoadAssetContainerAsync(base, file, this.scene);
+        };
+
         let loaded = 0;
-        const totalFiles = 25;
-        const tryLoad = async (file: string): Promise<AssetContainer | null> => {
+        const totalFiles = 29;
+        const TIMEOUT_MS = 30_000; // Cache'den yükleme — 30s yeterli
+
+        type LoadEntry = { file: string; boru?: boolean };
+        const tryLoad = async (entry: LoadEntry): Promise<AssetContainer | null> => {
             try {
                 const timeout = new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('timeout')), 30000),
+                    setTimeout(() => reject(new Error('timeout')), TIMEOUT_MS),
                 );
-                const result = await Promise.race([load(file), timeout]) as AssetContainer;
+                const result = await Promise.race([loadCached(entry.file, entry.boru), timeout]) as AssetContainer;
                 loaded++;
                 if (this.onProgress) this.onProgress(loaded, totalFiles);
+                console.log(`✅ ${entry.file} parse edildi (cache)`);
                 return result;
-            } catch {
+            } catch (err) {
                 loaded++;
                 if (this.onProgress) this.onProgress(loaded, totalFiles);
-                console.warn(`⚠️ ${file} yüklenemedi/timeout`);
+                console.error(`❌ ${entry.file} yüklenemedi:`, err);
                 return null;
             }
         };
 
-        // Korhan
-        [this.korhanWalkContainer, this.korhanAttackContainer, this.korhanDieContainer] = await Promise.all([
-            tryLoad('korhanwalk.glb'), tryLoad('Korhanattack.glb'), tryLoad('korhandie.glb'),
-        ]);
-        this.korhanHammerContainer = await tryLoad('korhanhammer.glb');
+        // Cache'den parse — hepsi bellekte, paralel yükle (network yok)
+        const BATCH_SIZE = 6;
+        const allEntries: LoadEntry[] = [
+            { file: 'korhanwalk.glb' }, { file: 'Korhanattack.glb' }, { file: 'korhandie.glb' }, { file: 'korhanhammer.glb' },
+            { file: 'erlik.glb' }, { file: 'erlikattack.glb' }, { file: 'erlikdie.glb' },
+            { file: 'odwalk.glb' }, { file: 'odattack.glb' }, { file: 'oddie.glb' },
+            { file: 'tepegozwalk.glb' }, { file: 'tepegozattack.glb' }, { file: 'tepegozdie.glb' },
+            { file: 'albastiwalk.glb' }, { file: 'albastiattack.glb' }, { file: 'albastidie.glb' },
+            { file: 'umaywalk.glb' }, { file: 'umayattack.glb' }, { file: 'umaydie.glb' },
+            { file: 'ayazwalk.glb' }, { file: 'ayazattack.glb' }, { file: 'ayazdie.glb' },
+            { file: 'tulpar.glb' },
+            { file: 'sahmeranwalk.glb' }, { file: 'sahmeranattack.glb' }, { file: 'sahmerandie.glb' },
+            { file: 'boruwalk.glb', boru: true }, { file: 'boruattack.glb', boru: true }, { file: 'borudie.glb', boru: true },
+        ];
 
-        // Erlik
-        [this.erlikWalkContainer, this.erlikAttackContainer, this.erlikDieContainer] = await Promise.all([
-            tryLoad('erlik.glb'), tryLoad('erlikattack.glb'), tryLoad('erlikdie.glb'),
-        ]);
+        const results: (AssetContainer | null)[] = [];
+        for (let i = 0; i < allEntries.length; i += BATCH_SIZE) {
+            const batch = allEntries.slice(i, i + BATCH_SIZE);
+            const batchResults = await Promise.all(batch.map(e => tryLoad(e)));
+            results.push(...batchResults);
+        }
 
-        // Od
-        [this.odWalkContainer, this.odAttackContainer, this.odDieContainer] = await Promise.all([
-            tryLoad('odwalk.glb'), tryLoad('odattack.glb'), tryLoad('oddie.glb'),
-        ]);
+        const [
+            korhanW, korhanA, korhanD, korhanH,
+            erlikW, erlikA, erlikD,
+            odW, odA, odD,
+            tepegozW, tepegozA, tepegozD,
+            albastiW, albastiA, albastiD,
+            umayW, umayA, umayD,
+            ayazW, ayazA, ayazD,
+            tulparW,
+            sahmeranW, sahmeranA, sahmeranD,
+            boruW, boruA, boruD,
+        ] = results;
 
-        // Tepegöz
-        [this.tepegozWalkContainer, this.tepegozAttackContainer, this.tepegozDieContainer] = await Promise.all([
-            tryLoad('tepegozwalk.glb'), tryLoad('tepegozattack.glb'), tryLoad('tepegozdie.glb'),
-        ]);
+        this.korhanWalkContainer = korhanW; this.korhanAttackContainer = korhanA; this.korhanDieContainer = korhanD; this.korhanHammerContainer = korhanH;
+        this.erlikWalkContainer = erlikW; this.erlikAttackContainer = erlikA; this.erlikDieContainer = erlikD;
+        this.odWalkContainer = odW; this.odAttackContainer = odA; this.odDieContainer = odD;
+        this.tepegozWalkContainer = tepegozW; this.tepegozAttackContainer = tepegozA; this.tepegozDieContainer = tepegozD;
+        this.albastiWalkContainer = albastiW; this.albastiAttackContainer = albastiA; this.albastiDieContainer = albastiD;
+        this.umayWalkContainer = umayW; this.umayAttackContainer = umayA; this.umayDieContainer = umayD;
+        this.ayazWalkContainer = ayazW; this.ayazAttackContainer = ayazA; this.ayazDieContainer = ayazD;
+        this.tulparWalkContainer = tulparW;
+        this.sahmeranWalkContainer = sahmeranW; this.sahmeranAttackContainer = sahmeranA; this.sahmeranDieContainer = sahmeranD;
+        this.boruWalkContainer = boruW; this.boruAttackContainer = boruA; this.boruDieContainer = boruD;
 
-        // Albastı
-        [this.albastiWalkContainer, this.albastiAttackContainer, this.albastiDieContainer] = await Promise.all([
-            tryLoad('albastiwalk.glb'), tryLoad('albastiattack.glb'), tryLoad('albastidie.glb'),
-        ]);
-
-        // Umay
-        [this.umayWalkContainer, this.umayAttackContainer, this.umayDieContainer] = await Promise.all([
-            tryLoad('umaywalk.glb'), tryLoad('umayattack.glb'), tryLoad('umaydie.glb'),
-        ]);
-
-        // Ayaz
-        [this.ayazWalkContainer, this.ayazAttackContainer, this.ayazDieContainer] = await Promise.all([
-            tryLoad('ayazwalk.glb'), tryLoad('ayazattack.glb'), tryLoad('ayazdie.glb'),
-        ]);
-
-        // Tulpar (walk only — dosya adı tulpar.glb)
-        this.tulparWalkContainer = await tryLoad('tulpar.glb');
-
-        // Şahmeran
-        [this.sahmeranWalkContainer, this.sahmeranAttackContainer, this.sahmeranDieContainer] = await Promise.all([
-            tryLoad('sahmeranwalk.glb'), tryLoad('sahmeranattack.glb'), tryLoad('sahmerandie.glb'),
-        ]);
+        // Preload özet log
+        const summary = [
+            ['Korhan', korhanW, korhanA, korhanD],
+            ['Erlik', erlikW, erlikA, erlikD],
+            ['Od', odW, odA, odD],
+            ['Ayaz', ayazW, ayazA, ayazD],
+            ['Tulpar', tulparW, null, null],
+            ['Umay', umayW, umayA, umayD],
+            ['Albasti', albastiW, albastiA, albastiD],
+            ['Tepegöz', tepegozW, tepegozA, tepegozD],
+            ['Şahmeran', sahmeranW, sahmeranA, sahmeranD],
+            ['Börü', boruW, boruA, boruD],
+        ] as const;
+        let okCount = 0, failCount = 0;
+        for (const [name, w, a, d] of summary) {
+            const wOk = !!w, aOk = !!a, dOk = !!d;
+            const status = wOk ? '✅' : '❌';
+            console.log(`${status} ${name}: walk=${wOk} attack=${aOk} die=${dOk}`);
+            if (wOk) okCount++; else failCount++;
+        }
+        console.log(`📊 Preload sonucu: ${okCount}/10 karakter GLB yüklendi, ${failCount} başarısız`);
     }
 
     spawnUnit(type: UnitType, team: Team, lane?: number): Unit {
@@ -319,6 +375,67 @@ export class UnitManager {
         return unit;
     }
 
+    /**
+     * Spawn a unit at a specific position (e.g. from crystal shard).
+     * The unit walks toward the enemy base from its spawn point.
+     */
+    spawnUnitAt(type: UnitType, team: Team, position: Vector3, lane?: number): Unit {
+        const mesh = this.buildUnitMesh(type, team, position);
+        const chosenLane = lane ?? Math.floor(Math.random() * 3);
+
+        // Build full lane path, then trim to nearest point from spawn position
+        const fullPath = this.buildLanePath(0, 24, chosenLane, team);
+        const Y = position.y;
+        const fullQueue = fullPath.map(n => new Vector3(n.x, Y, n.z));
+
+        // Find the closest waypoint to spawn position and start from there
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < fullQueue.length; i++) {
+            const dx = fullQueue[i].x - position.x;
+            const dz = fullQueue[i].z - position.z;
+            const d = dx * dx + dz * dz;
+            if (d < bestDist) { bestDist = d; bestIdx = i; }
+        }
+        const pathQueue = fullQueue.slice(bestIdx);
+
+        const { bg, fill } = this.createHealthBar(mesh, type);
+        const stats = { ...STATS_MAP[type] };
+        const aiProfile = AI_PROFILES_MAP[type];
+
+        const unit: Unit = {
+            id: nextId++,
+            team, type, mesh,
+            hp: stats.maxHp, stats,
+            state: 'walking',
+            pathQueue,
+            targetUnit: null,
+            lastAttackTime: 0,
+            walkBobTime: Math.random() * Math.PI * 2,
+            baseY: Y,
+            healthBarBg: bg,
+            healthBarFill: fill,
+            aiProfile,
+            statusEffects: [],
+            poaiScore: 0,
+            abilityState: {},
+        };
+        (unit as any)._abilityId = UNIT_ABILITY_MAP[type] ?? '';
+        checkAbilityTrigger('on_deploy', unit);
+
+        // Spawn immunity — kristalden doğan birimler 3 saniye hasar almaz
+        unit.abilityState._spawnImmunity = 3.0;
+
+        this.units.push(unit);
+        this.spawnFlash(unit);
+
+        const key = `${type}_${team}`;
+        if (!this.stats[key]) this.stats[key] = { team, deployed: 0, deaths: 0, totalPoAI: 0, bestPoAI: 0 };
+        this.stats[key].deployed++;
+
+        return unit;
+    }
+
     private buildLanePath(_from: number, _to: number, lane: number, team: Team): Vector3[] {
         // lane 0 = SOL  (X: -4→-14→-4, diamond konturunu takip eder)
         // lane 1 = ORTA (X=0, nodes 25 & 26 for mid extensions)
@@ -351,6 +468,7 @@ export class UnitManager {
             case 'albasti': this.buildAlbasti(root, team, nextId); break;
             case 'tepegoz': this.buildTepegoz(root, team, nextId); break;
             case 'sahmeran': this.buildSahmeran(root, team); break;
+            case 'boru': this.buildBoru(root, team, nextId); break;
         }
 
         return root;
@@ -358,20 +476,24 @@ export class UnitManager {
 
     // ─── KORHAN — heavy fire warrior with walk / attack / die + hammer ─
     private buildKorhan(parent: Mesh, team: Team): void {
-        // Animated GLB version (preferred)
-        if (this.korhanWalkContainer && this.korhanAttackContainer && this.korhanDieContainer && team === 'fire') {
+        // Animated GLB version (preferred) — sadece walkContainer yeterli
+        if (this.korhanWalkContainer && team === 'fire') {
             const unitId = nextId;
             const mk = (prefix: string) => (n: string) => `${prefix}_${unitId}_${n}`;
 
             const walkInst   = this.korhanWalkContainer.instantiateModelsToScene(mk('kw'), true);
-            const attackInst = this.korhanAttackContainer.instantiateModelsToScene(mk('ka'), true);
-            const dieInst    = this.korhanDieContainer.instantiateModelsToScene(mk('kd'), true);
+            const attackInst = this.korhanAttackContainer?.instantiateModelsToScene(mk('ka'), true) ?? null;
+            const dieInst    = this.korhanDieContainer?.instantiateModelsToScene(mk('kd'), true)    ?? null;
 
             const walkRoot   = walkInst.rootNodes[0]   as TransformNode;
-            const attackRoot = attackInst.rootNodes[0] as TransformNode;
-            const dieRoot    = dieInst.rootNodes[0]    as TransformNode;
+            const attackRoot = (attackInst?.rootNodes[0] ?? walkRoot) as TransformNode;
+            const dieRoot    = dieInst ? dieInst.rootNodes[0] as TransformNode : null;
 
-            for (const root of [walkRoot, attackRoot, dieRoot]) {
+            const allRoots: TransformNode[] = [walkRoot];
+            if (attackInst) allRoots.push(attackRoot);
+            if (dieRoot)    allRoots.push(dieRoot);
+
+            for (const root of allRoots) {
                 root.parent   = parent;
                 root.position = Vector3.Zero();
                 root.setEnabled(true);
@@ -391,24 +513,24 @@ export class UnitManager {
             }
 
             // Only walk visible at start
-            attackRoot.setEnabled(false);
-            dieRoot.setEnabled(false);
+            if (attackInst) attackRoot.setEnabled(false);
+            if (dieRoot)    dieRoot.setEnabled(false);
 
             // Start walk loop, stop others
-            walkInst.animationGroups.forEach(ag => ag.play(true));
-            attackInst.animationGroups.forEach(ag => ag.stop());
-            dieInst.animationGroups.forEach(ag => ag.stop());
+            walkInst.animationGroups.forEach(ag => { ag.loopAnimation = true; ag.speedRatio = 1.0; ag.goToFrame(0); ag.play(true); });
+            attackInst?.animationGroups.forEach(ag => { ag.loopAnimation = true; ag.stop(); });
+            dieInst?.animationGroups.forEach(ag => { ag.loopAnimation = false; ag.stop(); });
 
             // Attach hammer to each pose's right hand bone
             this.attachHammerToHand(walkRoot, parent, unitId, 'walk');
-            this.attachHammerToHand(attackRoot, parent, unitId, 'attack');
-            this.attachHammerToHand(dieRoot, parent, unitId, 'die');
+            if (attackInst) this.attachHammerToHand(attackRoot, parent, unitId, 'attack');
+            if (dieRoot) this.attachHammerToHand(dieRoot, parent, unitId, 'die');
 
             this.korhanAnimMap.set(unitId, {
                 walkRoot, attackRoot, dieRoot,
                 walkAnims:   walkInst.animationGroups,
-                attackAnims: attackInst.animationGroups,
-                dieAnims:    dieInst.animationGroups,
+                attackAnims: attackInst?.animationGroups ?? [],
+                dieAnims:    dieInst?.animationGroups    ?? [],
                 lastState:   'walking',
                 dieStarted:  false,
             });
@@ -604,7 +726,7 @@ export class UnitManager {
                     'meshPos:', m.position, 'meshScale:', m.scaling);
             }
 
-            walkInst.animationGroups.forEach(ag => ag.play(true));
+            walkInst.animationGroups.forEach(ag => { ag.loopAnimation = true; ag.speedRatio = 1.0; ag.goToFrame(0); ag.play(true); });
 
             // attackRoot = walkRoot (Tulpar never enters fighting pose)
             this.tulparAnimMap.set(unitId, {
@@ -686,10 +808,17 @@ export class UnitManager {
 
     // ─── TEPEGÖZ — one-eyed giant with walk / attack / die animations ─
     private buildTepegoz(parent: Mesh, _team: Team, unitId: number): void {
-        if (!this.tepegozWalkContainer) { this.buildTepegozProcedural(parent); return; }
+        // tepegozwalk.glb mesh içermeyebilir (low-poly export sorunu);
+        // bu durumda attack GLB'sini walk yerine kullan
+        const walkC = this.tepegozWalkContainer;
+        const atkC  = this.tepegozAttackContainer;
+        const dieC  = this.tepegozDieContainer;
+        const walkHasMesh = walkC && walkC.meshes.length > 1;
+        const effectiveWalk = walkHasMesh ? walkC : atkC;
+        if (!effectiveWalk) { this.buildTepegozProcedural(parent); return; }
         this.tepegozAnimMap.set(unitId, this.buildGlbRoots(
             parent, `tw${unitId}`, 2.0,
-            this.tepegozWalkContainer, this.tepegozAttackContainer, this.tepegozDieContainer,
+            effectiveWalk, walkHasMesh ? atkC : null, dieC,
         ));
     }
 
@@ -771,6 +900,88 @@ export class UnitManager {
         crm.emissiveColor = new Color3(0.3, 0.25, 0.0); crown.material = crm;
     }
 
+    // ─── BÖRÜ — spirit wolf from crystal shards ─────────────────────
+    private buildBoru(parent: Mesh, _team: Team, unitId: number): void {
+        if (!this.boruWalkContainer) { this.buildBoruProcedural(parent); return; }
+
+        const mk = (tag: string) => (n: string) => `bw${unitId}_${tag}_${n}`;
+        const walkInst   = this.boruWalkContainer.instantiateModelsToScene(mk('w'), true);
+        const attackInst = this.boruAttackContainer?.instantiateModelsToScene(mk('a'), true) ?? null;
+        const dieInst    = this.boruDieContainer?.instantiateModelsToScene(mk('d'), true) ?? null;
+
+        const walkRoot   = walkInst.rootNodes[0] as TransformNode;
+        const attackRoot = (attackInst?.rootNodes[0] ?? walkRoot) as TransformNode;
+        const dieRoot    = dieInst ? dieInst.rootNodes[0] as TransformNode : null;
+
+        const allRoots: TransformNode[] = [walkRoot];
+        if (attackInst) allRoots.push(attackRoot);
+        if (dieRoot)    allRoots.push(dieRoot);
+
+        const scale = 2.5;
+        for (const root of allRoots) {
+            root.parent   = parent;
+            root.position = Vector3.Zero();
+            root.setEnabled(true);
+            (root as any).scaling = new Vector3(scale, scale, scale);
+            root.getChildMeshes().forEach(c => {
+                c.setEnabled(true);
+                c.isVisible = true;
+                if (c instanceof Mesh) {
+                    this.sg.addShadowCaster(c);
+                    if (c.material instanceof PBRMaterial) {
+                        c.material.directIntensity      = 1.5;
+                        c.material.environmentIntensity = 0.5;
+                        c.material.emissiveIntensity    = 0.2;
+                    }
+                }
+            });
+        }
+
+        if (attackInst) attackRoot.setEnabled(false);
+        if (dieRoot)    dieRoot.setEnabled(false);
+
+        walkInst.animationGroups.forEach(ag => { ag.loopAnimation = true; ag.speedRatio = 1.0; ag.goToFrame(0); ag.play(true); });
+        attackInst?.animationGroups.forEach(ag => { ag.loopAnimation = true; ag.stop(); });
+        dieInst?.animationGroups.forEach(ag => { ag.loopAnimation = false; ag.stop(); });
+
+        this.boruAnimMap.set(unitId, {
+            walkRoot, attackRoot, dieRoot,
+            walkAnims:   walkInst.animationGroups,
+            attackAnims: attackInst?.animationGroups ?? [],
+            dieAnims:    dieInst?.animationGroups    ?? [],
+            lastState:   'walking',
+            dieStarted:  false,
+        });
+    }
+
+    /** Procedural Börü mesh (fallback). */
+    private buildBoruProcedural(parent: Mesh): void {
+        // Wolf body
+        const body = MeshBuilder.CreateCapsule(`brb_${nextId}`, { height: 2.0, radius: 0.45, tessellation: 10 }, this.scene);
+        body.parent = parent; body.position = new Vector3(0, 1.0, 0);
+        body.scaling = new Vector3(1, 1, 1.3);
+        const bm = new StandardMaterial(`brbm_${nextId}`, this.scene);
+        bm.diffuseColor = new Color3(0.35, 0.35, 0.4);
+        bm.emissiveColor = new Color3(0.08, 0.08, 0.15);
+        body.material = bm; this.sg.addShadowCaster(body);
+
+        // Head
+        const head = MeshBuilder.CreateSphere(`brh_${nextId}`, { diameter: 0.65, segments: 8 }, this.scene);
+        head.parent = parent; head.position = new Vector3(0, 2.3, 0.3);
+        const hm = new StandardMaterial(`brhm_${nextId}`, this.scene);
+        hm.diffuseColor = new Color3(0.3, 0.3, 0.38);
+        hm.emissiveColor = new Color3(0.1, 0.1, 0.2); head.material = hm;
+
+        // Glowing eyes
+        for (const s of [-0.12, 0.12]) {
+            const eye = MeshBuilder.CreateSphere(`bre_${nextId}_${s}`, { diameter: 0.12, segments: 4 }, this.scene);
+            eye.parent = parent; eye.position = new Vector3(s, 2.4, 0.58);
+            const em = new StandardMaterial(`brem_${nextId}_${s}`, this.scene);
+            em.diffuseColor = new Color3(0.8, 0.6, 0.0);
+            em.emissiveColor = new Color3(0.9, 0.7, 0.0); eye.material = em;
+        }
+    }
+
     // ─── GENERIC WARRIOR BODY ───────────────────────────────────────
     private buildWarriorBody(parent: Mesh, color: Color3, weapon: 'sword' | 'shield'): void {
         const body = MeshBuilder.CreateCapsule(`wb_${nextId}`, { height: 2.4, radius: 0.52, tessellation: 12 }, this.scene);
@@ -835,6 +1046,13 @@ export class UnitManager {
         const alive = this.units.filter(u => u.state !== 'dead');
 
         for (const unit of alive) {
+            // Tick spawn immunity timer
+            if ((unit.abilityState._spawnImmunity as number) > 0) {
+                (unit.abilityState._spawnImmunity as number) -= dt;
+                if ((unit.abilityState._spawnImmunity as number) <= 0) {
+                    unit.abilityState._spawnImmunity = 0;
+                }
+            }
             // Tick passive abilities and status effects
             tickPassives(unit, dt);
             const dotDamage = tickStatusEffects(unit, dt);
@@ -982,6 +1200,7 @@ export class UnitManager {
             if (unit.type === 'albasti')  this.updateGLBAnim(unit, this.albastiAnimMap);
             if (unit.type === 'umay')     this.updateGLBAnim(unit, this.umayAnimMap);
             if (unit.type === 'sahmeran') this.updateGLBAnim(unit, this.sahmeranAnimMap);
+            if (unit.type === 'boru')     this.updateGLBAnim(unit, this.boruAnimMap);
         }
 
         // ── Unit collision separation — no unit walks through another ──
@@ -1041,9 +1260,10 @@ export class UnitManager {
     private static UNTARGETABLE: Set<string> = new Set(['tulpar', 'od']);
 
     private findNearestEnemy(unit: Unit, alive: Unit[]): Unit | null {
-        // Support units (tulpar, od) cannot be targeted
+        // Support units (tulpar, od) cannot be targeted; spawn-immune units skipped
         const enemies = alive.filter(o => o.team !== unit.team && o.state !== 'dead'
-            && !UnitManager.UNTARGETABLE.has(o.type));
+            && !UnitManager.UNTARGETABLE.has(o.type)
+            && !((o.abilityState._spawnImmunity as number) > 0));
         const inRange = enemies.filter(o => this.distXZ(unit, o) < 14);
         if (inRange.length === 0) return null;
 
@@ -1082,7 +1302,8 @@ export class UnitManager {
             || (u.type === 'tepegoz'  && !!this.tepegozWalkContainer)
             || (u.type === 'albasti'  && !!this.albastiWalkContainer)
             || (u.type === 'umay'     && !!this.umayWalkContainer)
-            || (u.type === 'sahmeran' && !!this.sahmeranWalkContainer);
+            || (u.type === 'sahmeran' && !!this.sahmeranWalkContainer)
+            || (u.type === 'boru'     && !!this.boruWalkContainer);
     }
 
     private distXZ(a: Unit, b: Unit): number {
@@ -1098,6 +1319,8 @@ export class UnitManager {
 
     private tryAttack(attacker: Unit, target: Unit): void {
         if (this.gameTime - attacker.lastAttackTime < attacker.stats.attackCooldown) return;
+        // Spawn immunity — can't be damaged
+        if ((target.abilityState._spawnImmunity as number) > 0) return;
         attacker.lastAttackTime = this.gameTime;
 
         // GDD §1.6 damage formula
@@ -1220,16 +1443,16 @@ export class UnitManager {
             data.walkRoot.setEnabled(true);
             data.attackRoot.setEnabled(false);
             if (data.dieRoot) data.dieRoot.setEnabled(false);
-            data.attackAnims.forEach(ag => ag.stop());
-            data.dieAnims.forEach(ag => ag.stop());
-            data.walkAnims.forEach(ag => ag.play(true));
+            data.attackAnims.forEach(ag => { ag.stop(); ag.reset(); });
+            data.dieAnims.forEach(ag => { ag.stop(); ag.reset(); });
+            data.walkAnims.forEach(ag => { ag.loopAnimation = true; ag.speedRatio = 1.0; ag.goToFrame(0); ag.play(true); });
         } else if (state === 'fighting') {
             data.walkRoot.setEnabled(false);
             data.attackRoot.setEnabled(true);
             if (data.dieRoot) data.dieRoot.setEnabled(false);
-            data.walkAnims.forEach(ag => ag.stop());
-            data.dieAnims.forEach(ag => ag.stop());
-            data.attackAnims.forEach(ag => ag.play(true));
+            data.walkAnims.forEach(ag => { ag.stop(); ag.reset(); });
+            data.dieAnims.forEach(ag => { ag.stop(); ag.reset(); });
+            data.attackAnims.forEach(ag => { ag.loopAnimation = true; ag.speedRatio = 1.0; ag.goToFrame(0); ag.play(true); });
         }
     }
 
@@ -1299,6 +1522,7 @@ export class UnitManager {
             albasti: new Color3(0.65, 0.55, 1.0),
             tepegoz: new Color3(0.8, 0.0, 0.75),
             sahmeran: new Color3(0.2, 0.9, 0.2),
+            boru: new Color3(0.7, 0.6, 1.0),
         };
         return map[unit.type] ?? new Color3(1, 1, 1);
     }
@@ -1326,7 +1550,7 @@ export class UnitManager {
         pos.x += (Math.random() - 0.5) * 1.5;
 
         if (isCrit) {
-            this.spawnFloatingText(`⚡ KRİTİK! -${rounded}`, pos, new Color3(1, 0.85, 0));
+            this.spawnFloatingText(`KRITIK! -${rounded}`, pos, new Color3(1, 0.85, 0));
         } else {
             this.spawnFloatingText(`-${rounded}`, pos, new Color3(1, 0.15, 0.1));
         }
@@ -1402,7 +1626,7 @@ export class UnitManager {
         }
 
         // GLB animated units: play die animation, then dispose
-        for (const animMap of [this.korhanAnimMap, this.erlikAnimMap, this.odAnimMap, this.tepegozAnimMap, this.albastiAnimMap, this.umayAnimMap, this.sahmeranAnimMap, this.tulparAnimMap, this.ayazAnimMap]) {
+        for (const animMap of [this.korhanAnimMap, this.erlikAnimMap, this.odAnimMap, this.tepegozAnimMap, this.albastiAnimMap, this.umayAnimMap, this.sahmeranAnimMap, this.tulparAnimMap, this.ayazAnimMap, this.boruAnimMap]) {
             const data = animMap.get(unit.id);
             if (data) {
                 this.killGLBUnit(unit, data, animMap);
@@ -1478,8 +1702,8 @@ export class UnitManager {
             unit.healthBarBg?.dispose();
             unit.healthBarFill?.dispose();
             [...data.walkAnims, ...data.attackAnims, ...data.dieAnims].forEach(ag => { try { ag.dispose(); } catch { } });
-            const roots = [data.walkRoot, data.attackRoot];
-            if (data.dieRoot) roots.push(data.dieRoot);
+            const roots = new Set<TransformNode>([data.walkRoot, data.attackRoot]);
+            if (data.dieRoot) roots.add(data.dieRoot);
             for (const root of roots) {
                 root.getChildMeshes().forEach(m => { try { m.dispose(); } catch { } });
                 root.dispose();

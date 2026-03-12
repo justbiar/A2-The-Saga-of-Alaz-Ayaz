@@ -1,11 +1,11 @@
 /**
- * ProfileService.ts — On-chain player profile, scores, leaderboard.
- * Avalanche Fuji testnet. ethers loaded from CDN.
+ * ProfileService.ts — Player profile with localStorage fallback.
+ * On-chain contract is optional (VITE_PROFILE_CONTRACT). Without it,
+ * profiles are stored locally and work fully offline.
  */
 const ethers = (globalThis as any).ethers;
 const _win = window as any;
 
-const FUJI_CHAIN_ID = 43113;
 const FUJI_RPC = 'https://api.avax-test.network/ext/bc/C/rpc';
 const FUJI_PARAMS = {
     chainId: '0xa869',
@@ -16,6 +16,7 @@ const FUJI_PARAMS = {
 };
 
 const CONTRACT_ADDRESS = import.meta.env?.VITE_PROFILE_CONTRACT ?? '';
+const LS_KEY = 'a2_profiles';
 
 const PROFILE_ABI = [
     'function registerProfile(string username, string avatarURI) external',
@@ -25,6 +26,25 @@ const PROFILE_ABI = [
     'function getAllPlayers() view returns (address[])',
     'function getPlayerCount() view returns (uint256)',
 ];
+
+// ── localStorage helpers ──────────────────────────────────────────────────
+function lsGetAll(): Record<string, any> {
+    try { return JSON.parse(localStorage.getItem(LS_KEY) ?? '{}'); } catch { return {}; }
+}
+function lsSave(profiles: Record<string, any>) {
+    localStorage.setItem(LS_KEY, JSON.stringify(profiles));
+}
+function lsGet(address: string): PlayerProfile | null {
+    const all = lsGetAll();
+    const p = all[address.toLowerCase()];
+    if (!p) return null;
+    return { ...p, exists: true };
+}
+function lsUpsert(profile: PlayerProfile) {
+    const all = lsGetAll();
+    all[profile.address.toLowerCase()] = { ...profile };
+    lsSave(all);
+}
 
 export interface PlayerProfile {
     address: string;
@@ -44,51 +64,61 @@ export interface LeaderboardEntry extends PlayerProfile {
 }
 
 class ProfileService {
-    private provider: any = null;
-    private signer: any = null;
     private contract: any = null;
     private readContract: any = null;
     public walletAddress: string | null = null;
     public currentProfile: PlayerProfile | null = null;
     public isConnected = false;
 
-    /** Connect wallet to Fuji testnet */
+    constructor() {
+        // Setup read-only contract immediately (no wallet needed)
+        if (CONTRACT_ADDRESS && ethers) {
+            try {
+                const readProvider = new ethers.JsonRpcProvider(FUJI_RPC);
+                this.readContract = new ethers.Contract(CONTRACT_ADDRESS, PROFILE_ABI, readProvider);
+            } catch (e) {
+                console.warn('[Profile] Read contract init failed:', e);
+            }
+        }
+    }
+
+    /** Connect MetaMask wallet, switch to Fuji */
     async connectWallet(): Promise<string | null> {
-        if (!ethers || !_win.ethereum) {
+        const _prov = _win.__activeProvider || _win.ethereum;
+        if (!ethers || !_prov) {
             console.warn('MetaMask not found');
             return null;
         }
         try {
-            this.provider = new ethers.BrowserProvider(_win.ethereum);
-            // Request accounts
-            await this.provider.send('eth_requestAccounts', []);
-            // Switch to Fuji if needed
+            const provider = new ethers.BrowserProvider(_prov);
+            await provider.send('eth_requestAccounts', []);
+
+            // Switch to Fuji
             try {
-                await _win.ethereum.request({
+                await _prov.request({
                     method: 'wallet_switchEthereumChain',
                     params: [{ chainId: FUJI_PARAMS.chainId }],
                 });
             } catch (switchErr: any) {
                 if (switchErr.code === 4902) {
-                    await _win.ethereum.request({
+                    await _prov.request({
                         method: 'wallet_addEthereumChain',
                         params: [FUJI_PARAMS],
                     });
                 }
             }
 
-            this.signer = await this.provider.getSigner();
-            this.walletAddress = await this.signer.getAddress();
+            const signer = await provider.getSigner();
+            this.walletAddress = await signer.getAddress();
             this.isConnected = true;
 
-            // Setup contracts
-            if (CONTRACT_ADDRESS) {
-                this.contract = new ethers.Contract(CONTRACT_ADDRESS, PROFILE_ABI, this.signer);
+            // Setup on-chain contract if address configured
+            if (CONTRACT_ADDRESS && ethers) {
+                this.contract = new ethers.Contract(CONTRACT_ADDRESS, PROFILE_ABI, signer);
                 const readProvider = new ethers.JsonRpcProvider(FUJI_RPC);
                 this.readContract = new ethers.Contract(CONTRACT_ADDRESS, PROFILE_ABI, readProvider);
             }
 
-            // Load profile
             await this.loadProfile();
             return this.walletAddress;
         } catch (e) {
@@ -97,97 +127,180 @@ class ProfileService {
         }
     }
 
-    /** Load current user's profile */
+    /** Load profile — on-chain first, fallback to localStorage */
     async loadProfile(): Promise<PlayerProfile | null> {
-        if (!this.readContract || !this.walletAddress) return null;
-        try {
-            const p = await this.readContract.getProfile(this.walletAddress);
-            if (!p.exists) { this.currentProfile = null; return null; }
-            this.currentProfile = {
-                address: this.walletAddress,
-                username: p.username,
-                avatarURI: p.avatarURI,
-                gamesPlayed: Number(p.gamesPlayed),
-                wins: Number(p.wins),
-                losses: Number(p.losses),
-                draws: Number(p.draws),
-                registeredAt: Number(p.registeredAt),
+        if (!this.walletAddress) return null;
+
+        // Try on-chain
+        if (this.readContract) {
+            try {
+                const p = await this.readContract.getProfile(this.walletAddress);
+                if (p.exists) {
+                    this.currentProfile = {
+                        address: this.walletAddress,
+                        username: p.username,
+                        avatarURI: p.avatarURI,
+                        gamesPlayed: Number(p.gamesPlayed),
+                        wins: Number(p.wins),
+                        losses: Number(p.losses),
+                        draws: Number(p.draws),
+                        registeredAt: Number(p.registeredAt),
+                        exists: true,
+                    };
+                    // Sync to localStorage
+                    lsUpsert(this.currentProfile);
+                    return this.currentProfile;
+                }
+            } catch (e) {
+                console.warn('[Profile] On-chain load failed, using localStorage:', e);
+            }
+        }
+
+        // Fallback: localStorage
+        const local = lsGet(this.walletAddress);
+        this.currentProfile = local;
+        return local;
+    }
+
+    /** Register profile — localStorage always, on-chain if contract configured */
+    async registerProfile(username: string, avatarURI: string): Promise<boolean> {
+        if (!this.walletAddress) return false;
+
+        const profile: PlayerProfile = {
+            address: this.walletAddress,
+            username,
+            avatarURI,
+            gamesPlayed: 0,
+            wins: 0,
+            losses: 0,
+            draws: 0,
+            registeredAt: Math.floor(Date.now() / 1000),
+            exists: true,
+        };
+
+        // Always save to localStorage first (instant, no gas)
+        lsUpsert(profile);
+        this.currentProfile = profile;
+
+        // Also try on-chain if contract available
+        if (this.contract) {
+            try {
+                const tx = await this.contract.registerProfile(username, avatarURI);
+                await tx.wait();
+                console.log('[Profile] Registered on-chain');
+            } catch (e) {
+                console.warn('[Profile] On-chain register failed (localStorage saved):', e);
+            }
+        }
+
+        return true;
+    }
+
+    /** Submit game result — localStorage always, on-chain if available */
+    async submitGameResult(result: 'win' | 'loss' | 'draw'): Promise<boolean> {
+        if (!this.walletAddress) return false;
+
+        // Update localStorage
+        const profile = lsGet(this.walletAddress) ?? {
+            address: this.walletAddress,
+            username: this.shortAddress(),
+            avatarURI: '',
+            gamesPlayed: 0, wins: 0, losses: 0, draws: 0,
+            registeredAt: Math.floor(Date.now() / 1000),
+            exists: true,
+        };
+
+        profile.gamesPlayed++;
+        if (result === 'win') profile.wins++;
+        else if (result === 'loss') profile.losses++;
+        else profile.draws++;
+
+        lsUpsert(profile);
+        this.currentProfile = profile;
+
+        // Also try on-chain
+        if (this.contract && this.currentProfile) {
+            const code = result === 'win' ? 1 : result === 'loss' ? 0 : 2;
+            try {
+                const tx = await this.contract.submitGameResult(code);
+                await tx.wait();
+            } catch (e) {
+                console.warn('[Profile] On-chain submit failed:', e);
+            }
+        }
+
+        return true;
+    }
+
+    /** Get leaderboard — on-chain first (all players), fallback to localStorage */
+    async getLeaderboard(): Promise<LeaderboardEntry[]> {
+        // Try on-chain: fetch all registered players
+        if (this.readContract) {
+            try {
+                const playerAddresses: string[] = await this.readContract.getAllPlayers();
+                if (playerAddresses.length > 0) {
+                    const onChainEntries: LeaderboardEntry[] = [];
+                    for (const addr of playerAddresses) {
+                        try {
+                            const p = await this.readContract.getProfile(addr);
+                            if (p.exists) {
+                                const gp = Number(p.gamesPlayed);
+                                const wins = Number(p.wins);
+                                const losses = Number(p.losses);
+                                const draws = Number(p.draws);
+                                const profile: PlayerProfile = {
+                                    address: addr,
+                                    username: p.username || addr.slice(0, 6) + '...' + addr.slice(-4),
+                                    avatarURI: p.avatarURI,
+                                    gamesPlayed: gp,
+                                    wins,
+                                    losses,
+                                    draws,
+                                    registeredAt: Number(p.registeredAt),
+                                    exists: true,
+                                };
+                                // Sync to localStorage
+                                lsUpsert(profile);
+                                onChainEntries.push({
+                                    ...profile,
+                                    winRate: gp > 0 ? Math.round((wins / gp) * 100) : 0,
+                                    rank: 0,
+                                });
+                            }
+                        } catch {
+                            // Skip individual failures
+                        }
+                    }
+                    if (onChainEntries.length > 0) {
+                        onChainEntries.sort((a, b) => b.wins - a.wins || b.winRate - a.winRate);
+                        onChainEntries.forEach((e, i) => e.rank = i + 1);
+                        return onChainEntries;
+                    }
+                }
+            } catch (e) {
+                console.warn('[Profile] On-chain leaderboard fetch failed, using localStorage:', e);
+            }
+        }
+
+        // Fallback: localStorage
+        const all = lsGetAll();
+        const entries: LeaderboardEntry[] = Object.values(all).map((p: any) => {
+            const gp = (p.wins ?? 0) + (p.losses ?? 0) + (p.draws ?? 0);
+            return {
+                ...p,
+                gamesPlayed: gp,
+                winRate: gp > 0 ? Math.round(((p.wins ?? 0) / gp) * 100) : 0,
+                rank: 0,
                 exists: true,
             };
-            return this.currentProfile;
-        } catch (e) {
-            console.warn('Load profile failed:', e);
-            return null;
-        }
+        });
+
+        entries.sort((a, b) => b.wins - a.wins || b.winRate - a.winRate);
+        entries.forEach((e, i) => e.rank = i + 1);
+        return entries;
     }
 
-    /** Register new profile on-chain */
-    async registerProfile(username: string, avatarURI: string): Promise<boolean> {
-        if (!this.contract) return false;
-        try {
-            const tx = await this.contract.registerProfile(username, avatarURI);
-            await tx.wait();
-            await this.loadProfile();
-            return true;
-        } catch (e) {
-            console.warn('Register failed:', e);
-            return false;
-        }
-    }
-
-    /** Submit game result: 'win' | 'loss' | 'draw' */
-    async submitGameResult(result: 'win' | 'loss' | 'draw'): Promise<boolean> {
-        if (!this.contract || !this.currentProfile) return false;
-        const code = result === 'win' ? 1 : result === 'loss' ? 0 : 2;
-        try {
-            const tx = await this.contract.submitGameResult(code);
-            await tx.wait();
-            await this.loadProfile();
-            return true;
-        } catch (e) {
-            console.warn('Submit result failed:', e);
-            return false;
-        }
-    }
-
-    /** Get leaderboard — all players sorted by wins */
-    async getLeaderboard(): Promise<LeaderboardEntry[]> {
-        if (!this.readContract) return [];
-        try {
-            const players: string[] = await this.readContract.getAllPlayers();
-            const entries: LeaderboardEntry[] = [];
-
-            for (const addr of players) {
-                const p = await this.readContract.getProfile(addr);
-                if (!p.exists) continue;
-                const gp = Number(p.gamesPlayed);
-                const w = Number(p.wins);
-                entries.push({
-                    address: addr,
-                    username: p.username,
-                    avatarURI: p.avatarURI,
-                    gamesPlayed: gp,
-                    wins: w,
-                    losses: Number(p.losses),
-                    draws: Number(p.draws),
-                    registeredAt: Number(p.registeredAt),
-                    exists: true,
-                    winRate: gp > 0 ? Math.round((w / gp) * 100) : 0,
-                    rank: 0,
-                });
-            }
-
-            // Sort by wins desc, then winRate desc
-            entries.sort((a, b) => b.wins - a.wins || b.winRate - a.winRate);
-            entries.forEach((e, i) => e.rank = i + 1);
-            return entries;
-        } catch (e) {
-            console.warn('Leaderboard failed:', e);
-            return [];
-        }
-    }
-
-    /** Short address display */
+    /** Short address for display */
     shortAddress(): string {
         if (!this.walletAddress) return '';
         return this.walletAddress.slice(0, 6) + '...' + this.walletAddress.slice(-4);
