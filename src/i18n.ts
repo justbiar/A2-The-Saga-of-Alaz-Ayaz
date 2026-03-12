@@ -280,6 +280,7 @@ const translations = {
         // Settings
         settingsTitle:   'AYARLAR',
         settingsKeybinds:'KISAYOLLAR',
+        settingsMusic:   'MÜZİK',
         settingsFireP:   'ATEŞ OYUNCUSU',
         settingsIceP:    'BUZ OYUNCUSU',
         settingsCard:    'Kart',
@@ -295,6 +296,7 @@ const translations = {
         settingsLang:    'Dil',
         settingsPressKey:'Bir tuşa bas...',
         settingsSaved:   'Ayarlar kaydedildi!',
+        playlistLabel:   'ŞARKI LİSTESİ',
     },
     en: {
         loading: 'LOADING',
@@ -564,6 +566,7 @@ const translations = {
         navSettings:     'SETTINGS',
         settingsTitle:   'SETTINGS',
         settingsKeybinds:'KEYBINDINGS',
+        settingsMusic:   'MUSIC',
         settingsFireP:   'FIRE PLAYER',
         settingsIceP:    'ICE PLAYER',
         settingsCard:    'Card',
@@ -579,6 +582,7 @@ const translations = {
         settingsLang:    'Language',
         settingsPressKey:'Press a key...',
         settingsSaved:   'Settings saved!',
+        playlistLabel:   'PLAYLIST',
     },
     es: {
         loading: 'CARGANDO',
@@ -848,6 +852,7 @@ const translations = {
         navSettings:     'AJUSTES',
         settingsTitle:   'AJUSTES',
         settingsKeybinds:'ATAJOS DE TECLADO',
+        settingsMusic:   'MÚSICA',
         settingsFireP:   'JUGADOR FUEGO',
         settingsIceP:    'JUGADOR HIELO',
         settingsCard:    'Carta',
@@ -863,6 +868,7 @@ const translations = {
         settingsLang:    'Idioma',
         settingsPressKey:'Pulsa una tecla...',
         settingsSaved:   '¡Ajustes guardados!',
+        playlistLabel:   'LISTA DE REPRODUCCIÓN',
     },
 } as const;
 
