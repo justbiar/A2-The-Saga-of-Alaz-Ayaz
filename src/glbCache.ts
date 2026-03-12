@@ -47,6 +47,12 @@ export function isCacheReady(): boolean {
     return _done;
 }
 
+/** Toplam dosya sayısı ve inmiş dosya sayısı */
+export function getCacheProgress(): { loaded: number; total: number } {
+    const total = GLB_FILES.length + BORU_FILES.length;
+    return { loaded: cache.size, total };
+}
+
 /** Cache promise — boot() bu bitmesini bekleyebilir */
 export function waitForCache(): Promise<void> {
     return _promise ?? Promise.resolve();
@@ -54,7 +60,7 @@ export function waitForCache(): Promise<void> {
 
 /** Sayfa açılınca çağır — arka planda tüm GLB'leri indirir */
 export function startGLBWarmCache(): void {
-    if (_promise) return; // Zaten başlatıldı
+    if (_promise) return; // Zaten başlatıldı (veya bitti)
     _promise = _downloadAll();
 }
 
@@ -74,8 +80,11 @@ async function _downloadAll(): Promise<void> {
     for (let i = 0; i < allEntries.length; i += BATCH) {
         const batch = allEntries.slice(i, i + BATCH);
         await Promise.all(batch.map(async ({ file, url }) => {
+            // Zaten cache'de varsa (sayfa reload olmadan tekrar çağrıldı) atla
+            if (cache.has(file)) { done++; return; }
             try {
-                const resp = await fetch(url);
+                // force-cache: tarayıcı disk cache'inde varsa network'e gitme
+                const resp = await fetch(url, { cache: 'force-cache' });
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const blob = await resp.blob();
                 const objectUrl = URL.createObjectURL(blob);
@@ -83,10 +92,10 @@ async function _downloadAll(): Promise<void> {
                 urlToFile.set(objectUrl, file);
                 done++;
                 const mb = (blob.size / 1024 / 1024).toFixed(1);
-                console.log(`  📥 [${done}/${total}] ${file} — ${mb} MB ✓`);
+                console.log(`  [${done}/${total}] ${file} — ${mb} MB`);
             } catch (err) {
                 done++;
-                console.warn(`  ❌ [${done}/${total}] ${file} başarısız:`, err);
+                console.warn(`  [${done}/${total}] ${file} basarisiz:`, err);
             }
         }));
     }

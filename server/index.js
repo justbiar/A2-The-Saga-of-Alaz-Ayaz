@@ -14,10 +14,10 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
-const cors    = require('cors');
+const cors = require('cors');
 const { ethers } = require('ethers');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT ?? 3001;
 
 // ── Config ────────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ const ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:4173',
 ];
-const FUJI_RPC        = 'https://api.avax-test.network/ext/bc/C/rpc';
+const FUJI_RPC = 'https://api.avax-test.network/ext/bc/C/rpc';
 const BET_FEE_PERCENT = 2;
 
 if (!HOUSE_WALLET_PK) {
@@ -47,7 +47,7 @@ app.use(cors({
 }));
 
 // ── Ethers setup ──────────────────────────────────────────────────────
-const provider    = new ethers.JsonRpcProvider(FUJI_RPC);
+const provider = new ethers.JsonRpcProvider(FUJI_RPC);
 const houseSigner = new ethers.Wallet(HOUSE_WALLET_PK, provider);
 
 console.log('[A2 API] House wallet:', houseSigner.address);
@@ -55,7 +55,7 @@ console.log('[A2 API] House wallet:', houseSigner.address);
 // ── Rate limit (basit, per-IP) ────────────────────────────────────────
 const recentRequests = new Map(); // ip → timestamp[]
 function rateLimit(req, res, next) {
-    const ip  = req.ip ?? req.socket?.remoteAddress ?? 'unknown';
+    const ip = req.ip ?? req.socket?.remoteAddress ?? 'unknown';
     const now = Date.now();
     const arr = (recentRequests.get(ip) ?? []).filter(t => now - t < 60_000);
     if (arr.length >= 10) {
@@ -364,7 +364,7 @@ app.post('/api/report-result', rateLimit, async (req, res) => {
     if (isHost) match.hostResult = result;
     if (isGuest) match.guestResult = result;
 
-    console.log(`[ReportResult] ${matchId} ${isHost ? 'host' : 'guest'}(${addr.slice(0,8)}) → ${result}`);
+    console.log(`[ReportResult] ${matchId} ${isHost ? 'host' : 'guest'}(${addr.slice(0, 8)}) → ${result}`);
 
     // Both reported?
     if (match.hostResult && match.guestResult) {
@@ -412,13 +412,13 @@ app.post('/api/report-result', rateLimit, async (req, res) => {
             match.status = 'settled';
             match.settledAt = Date.now();
             settledMatches.add(matchId);
-            console.log(`[Settle] ✅ ${matchId} → winner=${winnerAddr.slice(0,10)} prize=${prize} AVAX tx=${tx.hash}`);
+            console.log(`[Settle] ✅ ${matchId} → winner=${winnerAddr.slice(0, 10)} prize=${prize} AVAX tx=${tx.hash}`);
 
             res.json({ ok: true, status: 'settled', winnerAddress: winnerAddr, prizeAVAX: prize, txHash: tx.hash });
 
             // Background confirm
             tx.wait(1).then(r => console.log(`[Settle] Confirmed block=${r.blockNumber}`))
-              .catch(e => console.error('[Settle] Confirm err:', e.message));
+                .catch(e => console.error('[Settle] Confirm err:', e.message));
 
         } catch (e) {
             match.status = 'locked';
@@ -442,9 +442,9 @@ async function refundBothPlayers(matchId, match) {
                 to: addr,
                 value: refundWei,
             });
-            console.log(`[DisputeRefund] ${matchId} → ${addr.slice(0,10)} TX: ${tx.hash}`);
+            console.log(`[DisputeRefund] ${matchId} → ${addr.slice(0, 10)} TX: ${tx.hash}`);
         } catch (e) {
-            console.error(`[DisputeRefund] ${matchId} → ${addr.slice(0,10)} FAILED:`, e.message);
+            console.error(`[DisputeRefund] ${matchId} → ${addr.slice(0, 10)} FAILED:`, e.message);
         }
     }
     match.status = 'refunded';
@@ -476,8 +476,8 @@ const refundedMatches = new Set();
 app.post('/api/refund', rateLimit, async (req, res) => {
     const { hostAddress, betAmountPerPlayer, matchId } = req.body ?? {};
 
-    const host   = validateAddress(hostAddress);
-    if (!host)   return res.status(400).json({ error: 'Geçersiz hostAddress' });
+    const host = validateAddress(hostAddress);
+    if (!host) return res.status(400).json({ error: 'Geçersiz hostAddress' });
 
     const amount = validateAmount(betAmountPerPlayer);
     if (!amount) return res.status(400).json({ error: 'Geçersiz betAmountPerPlayer' });
@@ -528,7 +528,7 @@ app.post('/api/distribute', async (req, res) => {
     const results = [];
     for (const r of recipients.slice(0, 10)) { // max 10 kişi
         const addr = validateAddress(r.address);
-        const amt  = validateAmount(r.avax);
+        const amt = validateAmount(r.avax);
         if (!addr || !amt) { results.push({ address: r.address, error: 'Geçersiz' }); continue; }
 
         try {
@@ -649,7 +649,7 @@ app.post('/api/quickmatch/join', rateLimit, (req, res) => {
         const now = Date.now();
         quickMatchPairs.set(wallet, { opponentCode: opponent.code, opponentTeam: opponent.team, opponentNickname: opponent.nickname, matchedAt: now });
         quickMatchPairs.set(opponent.wallet, { opponentCode: code, opponentTeam: team, opponentNickname: (nickname || 'Anonim').slice(0, 20), matchedAt: now });
-        console.log(`[QuickMatch] Matched: ${wallet.slice(0,8)} ↔ ${opponent.wallet.slice(0,8)}`);
+        console.log(`[QuickMatch] Matched: ${wallet.slice(0, 8)} ↔ ${opponent.wallet.slice(0, 8)}`);
         res.json({ ok: true, matched: true, opponentCode: opponent.code, opponentTeam: opponent.team, opponentNickname: opponent.nickname });
     } else {
         quickMatchQueue.push({
@@ -659,7 +659,7 @@ app.post('/api/quickmatch/join', rateLimit, (req, res) => {
             nickname: (nickname || 'Anonim').slice(0, 20),
             joinedAt: Date.now(),
         });
-        console.log(`[QuickMatch] Queued: ${wallet.slice(0,8)} team=${team}`);
+        console.log(`[QuickMatch] Queued: ${wallet.slice(0, 8)} team=${team}`);
         res.json({ ok: true, matched: false, position: quickMatchQueue.length });
     }
 });

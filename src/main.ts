@@ -48,7 +48,7 @@ import { kiteService, KiteService } from './ai/KiteService';
 // Register character abilities at startup
 import './ecs/abilities/characterAbilities';
 import { t, setLang, getLang, Lang, TransKey } from './i18n';
-import { switchBGM, lowerBGMForGame, setBGMVolume, toggleBGMMute, getBGMVolume, isBGMMuted, setSFXVolume, toggleSFXMute, getSFXVolume, isSFXMuted, playCoinDrop, playCoinCollect, preloadSFX } from './audio/SoundManager';
+import { switchBGM, lowerBGMForGame, setBGMVolume, toggleBGMMute, getBGMVolume, isBGMMuted, setSFXVolume, toggleSFXMute, getSFXVolume, isSFXMuted, playCoinDrop, playCoinCollect, preloadSFX, getPlaylist, getCurrentTrack, playTrack, restoreTrackPreference } from './audio/SoundManager';
 import { profileService } from './chain/ProfileService';
 import { mpService } from './multiplayer/MultiplayerService';
 import { betService, BET_FEE_PERCENT, MIN_BET, MAX_BET } from './chain/BetService';
@@ -61,6 +61,18 @@ import { startGLBWarmCache, waitForCache, getCachedUrl } from './glbCache';
 // boot() → UnitManager.preload() cache'den objectURL ile yükler → sıfır network.
 startGLBWarmCache();
 
+// ─── RESTORE USER PREFERENCES ────────────────────────────────────────
+restoreTrackPreference();
+// Restore volume settings
+const savedMusicVol = parseFloat(localStorage.getItem('a2_music_volume') ?? '0.3');
+const savedSfxVol = parseFloat(localStorage.getItem('a2_sfx_volume') ?? '0.5');
+setBGMVolume(savedMusicVol);
+setSFXVolume(savedSfxVol);
+
+// ─── INIT MINI PLAYER ────────────────────────────────────────────────
+// Sayfa yüklendikten sonra mini player'ı başlat
+setTimeout(() => initMiniPlayer(), 100);
+
 // ─── LAZY VIDEO LOADER ───────────────────────────────────────────────
 // Videolari 2 saniye sonra yukle (sayfa hizli acilsin, sonra videolar gelsin)
 setTimeout(() => {
@@ -69,7 +81,7 @@ setTimeout(() => {
             s.src = s.dataset.src!;
         });
         v.load();
-        v.play().catch(() => {});
+        v.play().catch(() => { });
     });
 }, 2000);
 
@@ -139,7 +151,7 @@ function startMapPreview(): void {
     dir.intensity = 0.5;
 
     // Dummy shadow generator — createAvaxMap ShadowGenerator bekliyor
-    const dummySG = { addShadowCaster: () => {} } as any;
+    const dummySG = { addShadowCaster: () => { } } as any;
     createAvaxMap(mapScene, dummySG);
 
     // Base buildings (GLB modeller)
@@ -164,8 +176,8 @@ function stopMapPreview(): void {
 type Screen = 'home' | 'characters' | 'story' | 'map' | 'team-select' | 'mode-select' | 'lobby' | 'game' | 'leaderboard' | 'profile' | 'settings';
 
 const difficultyScreen = document.getElementById('difficulty-select') as HTMLElement;
-const lobbyScreen      = document.getElementById('lobby-screen')      as HTMLElement;
-const settingsScreen   = document.getElementById('settings-screen')   as HTMLElement;
+const lobbyScreen = document.getElementById('lobby-screen') as HTMLElement;
+const settingsScreen = document.getElementById('settings-screen') as HTMLElement;
 const MENU_SCREENS = [homeScreen, charactersScreen, storyScreen, mapScreen, teamSelectScreen, modeSelectEl, difficultyScreen, lobbyScreen, leaderboardScreen, profileScreen, settingsScreen].filter(Boolean) as HTMLElement[];
 const GAME_HUD = ['top-hud', 'board-control-meter', 'debug-ui', 'card-tray', 'surge-indicator', 'kite-panel'];
 
@@ -194,35 +206,42 @@ function showScreen(screen: Screen): void {
     document.querySelectorAll('.header-nav-item').forEach(btn => btn.classList.remove('active'));
     const navMap: Partial<Record<Screen, string>> = {
         characters: 'nav-characters-header',
-        story:      'nav-story-header',
-        map:        'nav-map-header',
+        story: 'nav-story-header',
+        map: 'nav-map-header',
         leaderboard: 'nav-leaderboard-header',
-        profile:    'nav-profile-header',
-        settings:   'nav-settings-header',
+        profile: 'nav-profile-header',
+        settings: 'nav-settings-header',
     };
     if (navMap[screen]) document.getElementById(navMap[screen]!)?.classList.add('active');
+
+    // Varsayılan menü müziği (Avaland Theme)
+    const playDefaultMusic = () => switchBGM('/assets/sound/storymusic.mp3', 0.25);
+    // Karakter sayfası müziği (Heroes of Fire & Ice)
+    const playCharacterMusic = () => switchBGM('/assets/sound/character.mp3', 0.25);
+    // Story sayfası müziği (Battle Drums)
+    const playStoryMusic = () => switchBGM('/assets/sound/war.mp3', 0.25);
 
     switch (screen) {
         case 'home':
             homeScreen.style.display = 'flex';
-            switchBGM('/assets/sound/storymusic.mp3', 0.25);
+            playDefaultMusic();
             break;
         case 'characters':
             charactersScreen.style.display = 'flex';
-            switchBGM('/assets/sound/character.mp3', 0.3);
+            playCharacterMusic();
             break;
         case 'story':
             storyScreen.style.display = 'flex';
-            switchBGM('/assets/sound/storymusic.mp3', 0.3);
+            playStoryMusic();
             break;
         case 'map':
             mapScreen.style.display = 'flex';
-            switchBGM('/assets/sound/storymusic.mp3', 0.2);
+            playDefaultMusic();
             startMapPreview();
             break;
         case 'team-select':
             teamSelectScreen.style.display = 'flex';
-            switchBGM('/assets/sound/storymusic.mp3', 0.25);
+            playDefaultMusic();
             break;
         case 'mode-select':
             modeSelectEl.style.display = 'flex';
@@ -234,13 +253,13 @@ function showScreen(screen: Screen): void {
             break;
         case 'leaderboard':
             leaderboardScreen.style.display = 'flex';
-            switchBGM('/assets/sound/storymusic.mp3', 0.2);
+            playDefaultMusic();
             // On-chain'den çek ve render et
             void renderLeaderboardScreen();
             break;
         case 'profile':
             profileScreen.style.display = 'flex';
-            switchBGM('/assets/sound/storymusic.mp3', 0.2);
+            playDefaultMusic();
             renderProfileScreen();
             break;
         case 'settings':
@@ -462,7 +481,7 @@ async function connectWithProvider(provider: any, silent = false, rdns = ''): Pr
         }
 
         // Sync on-chain leaderboard in background
-        syncOnChainLeaderboard().catch(() => {});
+        syncOnChainLeaderboard().catch(() => { });
 
         // Lobby açıksa wallet durumunu güncelle
         if (lobbyScreen.style.display !== 'none') {
@@ -971,7 +990,7 @@ async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'betWon' 
                 <div class="lb-podium-rank">${rankLabel}</div>
                 <img class="lb-podium-avatar" src="/assets/images/logo.png" alt="" onerror="this.src='/assets/images/logo.png'" />
                 <div class="lb-podium-name">${e.username}</div>
-                <div class="lb-podium-addr">${e.address.slice(0,6)}…${e.address.slice(-4)}</div>
+                <div class="lb-podium-addr">${e.address.slice(0, 6)}…${e.address.slice(-4)}</div>
                 <div class="lb-podium-stats">
                     <div class="lb-podium-stat">
                         <div class="lb-podium-stat-val">${winVal}</div>
@@ -1021,7 +1040,7 @@ async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'betWon' 
                 <img class="lb-player-avatar" src="/assets/images/logo.png" alt="" onerror="this.src='/assets/images/logo.png'" />
                 <div>
                   <div class="lb-player-name">${e.username}</div>
-                  <div class="lb-player-addr">${e.address.slice(0,6)}…${e.address.slice(-4)}</div>
+                  <div class="lb-player-addr">${e.address.slice(0, 6)}…${e.address.slice(-4)}</div>
                 </div>
               </div>
             </td>
@@ -1099,14 +1118,14 @@ function renderProfileScreen() {
     avatarImg.src = profile.avatarURI || '/assets/images/logo.png';
     document.getElementById('pfs-display-name')!.textContent = profile.username;
     document.getElementById('pfs-display-addr')!.textContent = profileService.shortAddress();
-    document.getElementById('pfs-games')!.textContent  = String(profile.gamesPlayed);
-    document.getElementById('pfs-wins')!.textContent   = String(profile.wins);
+    document.getElementById('pfs-games')!.textContent = String(profile.gamesPlayed);
+    document.getElementById('pfs-wins')!.textContent = String(profile.wins);
     document.getElementById('pfs-losses')!.textContent = String(profile.losses);
-    document.getElementById('pfs-draws')!.textContent  = String(profile.draws);
+    document.getElementById('pfs-draws')!.textContent = String(profile.draws);
 
     // Rename
     const renameInput = document.getElementById('pfs-rename-input') as HTMLInputElement;
-    const renameBtn   = document.getElementById('pfs-rename-btn')!;
+    const renameBtn = document.getElementById('pfs-rename-btn')!;
     renameBtn.onclick = async () => {
         const newName = renameInput.value.trim();
         if (!newName || newName.length > 32) return;
@@ -1152,16 +1171,16 @@ const CS_DATA: Record<string, {
     hp: number; atk: number; arm: number; spd: number;
     abilityNameKey: TransKey; abilityDescKey: TransKey; loreKey: TransKey;
 }> = {
-    korhan:   { name: 'KORHAN',   roleKey: 'roleWarrior', faction: 'fire', hp: 220, atk: 24, arm: 8,  spd: 4,  abilityNameKey: 'korhanAbilName',   abilityDescKey: 'korhanAbilDesc',   loreKey: 'korhanLore'   },
-    erlik:    { name: 'ERLİK',    roleKey: 'roleMage',    faction: 'fire', hp: 100, atk: 35, arm: 1,  spd: 7,  abilityNameKey: 'erlikAbilName',    abilityDescKey: 'erlikAbilDesc',    loreKey: 'erlikLore'    },
-    od:       { name: 'OD',       roleKey: 'roleSupport', faction: 'fire', hp: 70,  atk: 0,  arm: 2,  spd: 10, abilityNameKey: 'odAbilName',       abilityDescKey: 'odAbilDesc',       loreKey: 'odLore'       },
-    ayaz:     { name: 'AYAZ',     roleKey: 'roleWarrior', faction: 'ice',  hp: 240, atk: 18, arm: 10, spd: 3,  abilityNameKey: 'ayazAbilName',     abilityDescKey: 'ayazAbilDesc',     loreKey: 'ayazLore'     },
-    tulpar:   { name: 'TULPAR',   roleKey: 'roleSupport', faction: 'ice',  hp: 70,  atk: 0,  arm: 1,  spd: 10, abilityNameKey: 'tulparAbilName',   abilityDescKey: 'tulparAbilDesc',   loreKey: 'tulparLore'   },
-    umay:     { name: 'UMAY',     roleKey: 'roleMage',    faction: 'ice',  hp: 120, atk: 22, arm: 2,  spd: 5,  abilityNameKey: 'umayAbilName',     abilityDescKey: 'umayAbilDesc',     loreKey: 'umayLore'     },
-    albasti:  { name: 'ALBASTI',  roleKey: 'roleNeutral', faction: 'merc', hp: 140, atk: 26, arm: 2,  spd: 8,  abilityNameKey: 'albastiAbilName',  abilityDescKey: 'albastiAbilDesc',  loreKey: 'albastiLore'  },
-    tepegoz:  { name: 'TEPEGÖZ',  roleKey: 'roleTank',    faction: 'merc', hp: 300, atk: 20, arm: 12, spd: 3,  abilityNameKey: 'tepegozAbilName',  abilityDescKey: 'tepegozAbilDesc',  loreKey: 'tepegozLore'  },
-    sahmeran: { name: 'ŞAHMERAN', roleKey: 'rolePoisoner',faction: 'merc', hp: 130, atk: 32, arm: 1,  spd: 7,  abilityNameKey: 'sahmeranAbilName', abilityDescKey: 'sahmeranAbilDesc', loreKey: 'sahmeranLore' },
-    boru:     { name: 'BÖRÜ',    roleKey: 'roleSpiritWolf', faction: 'merc', hp: 180, atk: 28, arm: 5,  spd: 6,  abilityNameKey: 'boruAbilName',     abilityDescKey: 'boruAbilDesc',     loreKey: 'boruLore'     },
+    korhan: { name: 'KORHAN', roleKey: 'roleWarrior', faction: 'fire', hp: 220, atk: 24, arm: 8, spd: 4, abilityNameKey: 'korhanAbilName', abilityDescKey: 'korhanAbilDesc', loreKey: 'korhanLore' },
+    erlik: { name: 'ERLİK', roleKey: 'roleMage', faction: 'fire', hp: 100, atk: 35, arm: 1, spd: 7, abilityNameKey: 'erlikAbilName', abilityDescKey: 'erlikAbilDesc', loreKey: 'erlikLore' },
+    od: { name: 'OD', roleKey: 'roleSupport', faction: 'fire', hp: 70, atk: 0, arm: 2, spd: 10, abilityNameKey: 'odAbilName', abilityDescKey: 'odAbilDesc', loreKey: 'odLore' },
+    ayaz: { name: 'AYAZ', roleKey: 'roleWarrior', faction: 'ice', hp: 240, atk: 18, arm: 10, spd: 3, abilityNameKey: 'ayazAbilName', abilityDescKey: 'ayazAbilDesc', loreKey: 'ayazLore' },
+    tulpar: { name: 'TULPAR', roleKey: 'roleSupport', faction: 'ice', hp: 70, atk: 0, arm: 1, spd: 10, abilityNameKey: 'tulparAbilName', abilityDescKey: 'tulparAbilDesc', loreKey: 'tulparLore' },
+    umay: { name: 'UMAY', roleKey: 'roleMage', faction: 'ice', hp: 120, atk: 22, arm: 2, spd: 5, abilityNameKey: 'umayAbilName', abilityDescKey: 'umayAbilDesc', loreKey: 'umayLore' },
+    albasti: { name: 'ALBASTI', roleKey: 'roleNeutral', faction: 'merc', hp: 140, atk: 26, arm: 2, spd: 8, abilityNameKey: 'albastiAbilName', abilityDescKey: 'albastiAbilDesc', loreKey: 'albastiLore' },
+    tepegoz: { name: 'TEPEGÖZ', roleKey: 'roleTank', faction: 'merc', hp: 300, atk: 20, arm: 12, spd: 3, abilityNameKey: 'tepegozAbilName', abilityDescKey: 'tepegozAbilDesc', loreKey: 'tepegozLore' },
+    sahmeran: { name: 'ŞAHMERAN', roleKey: 'rolePoisoner', faction: 'merc', hp: 130, atk: 32, arm: 1, spd: 7, abilityNameKey: 'sahmeranAbilName', abilityDescKey: 'sahmeranAbilDesc', loreKey: 'sahmeranLore' },
+    boru: { name: 'BÖRÜ', roleKey: 'roleSpiritWolf', faction: 'merc', hp: 180, atk: 28, arm: 5, spd: 6, abilityNameKey: 'boruAbilName', abilityDescKey: 'boruAbilDesc', loreKey: 'boruLore' },
 };
 
 const CS_MAX = { hp: 300, atk: 35, arm: 12, spd: 10 };
@@ -1352,18 +1371,18 @@ function showToast(msg: string, durationMs = 4000) {
 }
 
 function setLobbyState(state: 'team-pick' | 'actions' | 'waiting' | 'connected' | 'qm-waiting') {
-    document.getElementById('lobby-team-pick')!.style.display  = state === 'team-pick' ? 'block' : 'none';
-    document.getElementById('lobby-actions')!.style.display    = state === 'actions'   ? 'flex'  : 'none';
-    document.getElementById('lobby-waiting')!.style.display    = state === 'waiting'   ? 'block' : 'none';
-    document.getElementById('lobby-connected')!.style.display  = state === 'connected' ? 'block' : 'none';
+    document.getElementById('lobby-team-pick')!.style.display = state === 'team-pick' ? 'block' : 'none';
+    document.getElementById('lobby-actions')!.style.display = state === 'actions' ? 'flex' : 'none';
+    document.getElementById('lobby-waiting')!.style.display = state === 'waiting' ? 'block' : 'none';
+    document.getElementById('lobby-connected')!.style.display = state === 'connected' ? 'block' : 'none';
     const qmWaiting = document.getElementById('lobby-qm-waiting');
     if (qmWaiting) qmWaiting.style.display = state === 'qm-waiting' ? 'block' : 'none';
 }
 
 function updateLobbyConnectedUI() {
-    const myName   = (lobbyTeam === 'fire' ? t('lobbyFireName') : t('lobbyIceName')) + ' ' + t('lobbyMySuffix');
-    const oppTeam  = mpService.opponentTeam ?? (lobbyTeam === 'fire' ? 'ice' : 'fire');
-    const oppName  = (oppTeam === 'fire' ? t('lobbyFireName') : t('lobbyIceName')) + ' ' + t('lobbyOppSuffix');
+    const myName = (lobbyTeam === 'fire' ? t('lobbyFireName') : t('lobbyIceName')) + ' ' + t('lobbyMySuffix');
+    const oppTeam = mpService.opponentTeam ?? (lobbyTeam === 'fire' ? 'ice' : 'fire');
+    const oppName = (oppTeam === 'fire' ? t('lobbyFireName') : t('lobbyIceName')) + ' ' + t('lobbyOppSuffix');
 
     document.getElementById('lc-my-team')!.innerHTML = `<span class="lct-name">${myName}</span>`;
     document.getElementById('lc-opp-team')!.innerHTML = `<span class="lct-name">${oppName}</span>`;
@@ -1383,22 +1402,22 @@ type BetPanelState =
     | 'no-bet';         // bet skipped
 
 function showBetPanel(state: BetPanelState) {
-    const hostSection  = document.getElementById('bet-host-section');
-    const offerSent    = document.getElementById('bet-offer-sent');
-    const incoming     = document.getElementById('bet-incoming');
-    const locked       = document.getElementById('bet-locked');
-    const skipNote     = document.getElementById('bet-skip-note');
-    const noWallet     = document.getElementById('bet-no-wallet');
-    const guestWait    = document.getElementById('bet-guest-wait');
+    const hostSection = document.getElementById('bet-host-section');
+    const offerSent = document.getElementById('bet-offer-sent');
+    const incoming = document.getElementById('bet-incoming');
+    const locked = document.getElementById('bet-locked');
+    const skipNote = document.getElementById('bet-skip-note');
+    const noWallet = document.getElementById('bet-no-wallet');
+    const guestWait = document.getElementById('bet-guest-wait');
 
     if (!hostSection) return; // panel not in DOM yet
 
-    hostSection.style.display  = 'none';
-    offerSent!.style.display   = 'none';
-    incoming!.style.display    = 'none';
-    locked!.style.display      = 'none';
-    skipNote!.style.display    = 'none';
-    if (noWallet)  noWallet.style.display  = 'none';
+    hostSection.style.display = 'none';
+    offerSent!.style.display = 'none';
+    incoming!.style.display = 'none';
+    locked!.style.display = 'none';
+    skipNote!.style.display = 'none';
+    if (noWallet) noWallet.style.display = 'none';
     if (guestWait) guestWait.style.display = 'none';
 
     const sendBtn = document.getElementById('bet-send-btn') as HTMLButtonElement | null;
@@ -1430,12 +1449,12 @@ function showBetPanel(state: BetPanelState) {
         case 'locked': {
             locked!.style.display = 'block';
             const lockedText = document.getElementById('bet-locked-text');
-            const lockedAmt  = document.getElementById('bet-locked-amount');
-            const totalPot   = betService.state.amount * 2;
-            const fee        = totalPot * (BET_FEE_PERCENT / 100);
-            const prize      = totalPot - fee;
+            const lockedAmt = document.getElementById('bet-locked-amount');
+            const totalPot = betService.state.amount * 2;
+            const fee = totalPot * (BET_FEE_PERCENT / 100);
+            const prize = totalPot - fee;
             if (lockedText) lockedText.textContent = 'Bahis kilitlendi — Kazanan alır:';
-            if (lockedAmt)  lockedAmt.textContent = `${prize.toFixed(4)} AVAX (%${100 - BET_FEE_PERCENT} · ${BET_FEE_PERCENT}% fee)`;
+            if (lockedAmt) lockedAmt.textContent = `${prize.toFixed(4)} AVAX (%${100 - BET_FEE_PERCENT} · ${BET_FEE_PERCENT}% fee)`;
             break;
         }
         case 'no-wallet':
@@ -1515,7 +1534,7 @@ function startQuickMatch() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ wallet: walletAddress, team: lobbyTeam, code, nickname: nick }),
-        }).catch(() => {});
+        }).catch(() => { });
 
         // Poll başlat
         _qmPollTimer = window.setInterval(async () => {
@@ -1547,7 +1566,7 @@ function leaveQuickMatch() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ wallet: walletAddress }),
-        }).catch(() => {});
+        }).catch(() => { });
     }
     mpService.disconnect();
     setLobbyState('actions');
@@ -1604,9 +1623,9 @@ function initLobbyScreen() {
 
     // ── Update lobby info bar ──
     const walletStatusEl = document.getElementById('lib-wallet-status');
-    const walletTextEl   = document.getElementById('lib-wallet-text');
-    const balanceEl      = document.getElementById('lib-balance');
-    const balanceTextEl  = document.getElementById('lib-balance-text');
+    const walletTextEl = document.getElementById('lib-wallet-text');
+    const balanceEl = document.getElementById('lib-balance');
+    const balanceTextEl = document.getElementById('lib-balance-text');
 
     if (walletAddress) {
         if (walletStatusEl) walletStatusEl.classList.add('lib-wallet-connected');
@@ -1918,21 +1937,21 @@ function handleMPStatus(status: string) {
 }
 
 // Multiplayer callback stubs — boot() tarafından doldurulur
-let _mpSpawnUnit: ((team: 'fire'|'ice', cardId: UnitType, lane: 'left'|'mid'|'right') => void) | null = null;
-let _mpApplyPrompt: ((team: 'fire'|'ice', promptId: string) => void) | null = null;
-let _mpTriggerWin: ((winner: 'fire'|'ice', msg: string) => void) | null = null;
+let _mpSpawnUnit: ((team: 'fire' | 'ice', cardId: UnitType, lane: 'left' | 'mid' | 'right') => void) | null = null;
+let _mpApplyPrompt: ((team: 'fire' | 'ice', promptId: string) => void) | null = null;
+let _mpTriggerWin: ((winner: 'fire' | 'ice', msg: string) => void) | null = null;
 let _mpStartGame: (() => void) | null = null;   // her iki taraf hazır olunca çağrılır
 let _mpGameEnded = false;                        // double-fire guard
 
-const MP_LANE_MAP: Record<'left'|'mid'|'right', number> = { left: 0, mid: 1, right: 2 };
+const MP_LANE_MAP: Record<'left' | 'mid' | 'right', number> = { left: 0, mid: 1, right: 2 };
 
-function spawnUnitForTeam(team: 'fire'|'ice', cardId: UnitType, lane: 'left'|'mid'|'right') {
+function spawnUnitForTeam(team: 'fire' | 'ice', cardId: UnitType, lane: 'left' | 'mid' | 'right') {
     _mpSpawnUnit?.(team, cardId, lane);
 }
-function applyPromptForTeam(team: 'fire'|'ice', promptId: string) {
+function applyPromptForTeam(team: 'fire' | 'ice', promptId: string) {
     _mpApplyPrompt?.(team, promptId);
 }
-function triggerWin(winner: 'fire'|'ice', msg: string) {
+function triggerWin(winner: 'fire' | 'ice', msg: string) {
     _mpTriggerWin?.(winner, msg);
 }
 
@@ -2006,67 +2025,62 @@ function startMultiplayerGame() {
     boot('multiplayer').catch(console.error);
 }
 
-// ─── AUDIO CONTROLS ──────────────────────────────────────────────────
-function setupAudioControls(): void {
-    const wrapper    = document.getElementById('audio-controls')!;
-    const settingsBtn = document.getElementById('audio-settings-btn')!;
-    const bgmIcon    = document.getElementById('bgm-toggle') as HTMLElement;
-    const bgmSlider  = document.getElementById('bgm-volume') as HTMLInputElement;
-    const sfxIcon    = document.getElementById('sfx-toggle') as HTMLElement;
-    const sfxSlider  = document.getElementById('sfx-volume') as HTMLInputElement;
-
-    // ── Ayar butonu: paneli aç/kapat ──
-    settingsBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        wrapper.classList.toggle('open');
-    });
-
-    // ── Dışarı tıklanınca kapat ──
-    document.addEventListener('click', (e) => {
-        if (!wrapper.contains(e.target as Node)) {
-            wrapper.classList.remove('open');
+// ─── GAME CLEANUP (location.reload yerine) ──────────────────────────
+function cleanupGame(): void {
+    console.log('[Cleanup] Oyun temizleniyor...');
+    // 1. BabylonJS engine ve scene'i kapat
+    if (_engine) {
+        _engine.stopRenderLoop();
+        if (_engine.scenes) {
+            for (const s of [..._engine.scenes]) {
+                s.dispose();
+            }
         }
-    });
-
-    // ── BGM ──
-    if (bgmSlider) {
-        bgmSlider.value = String(Math.round(getBGMVolume() * 100));
-        bgmSlider.addEventListener('input', () => {
-            setBGMVolume(Number(bgmSlider.value) / 100);
-            if (isBGMMuted() && Number(bgmSlider.value) > 0) {
-                toggleBGMMute();
-                bgmIcon.textContent = '🎵';
-                bgmIcon.classList.remove('muted');
-            }
-        });
+        _engine.dispose();
+        _engine = null;
     }
-    if (bgmIcon) {
-        bgmIcon.addEventListener('click', () => {
-            const muted = toggleBGMMute();
-            bgmIcon.textContent = muted ? '🔇' : '🎵';
-            bgmIcon.classList.toggle('muted', muted);
-        });
+    _scene = null;
+    _um = null;
+    _shards = null;
+
+    // 2. Cooldown ticker durdur
+    if (cooldownRAF) { cancelAnimationFrame(cooldownRAF); cooldownRAF = null; }
+
+    // 3. AVX coin DOM elementlerini temizle
+    document.querySelectorAll('.avx-coin-float').forEach(el => el.remove());
+
+    // 4. Resize listener temizle
+    const resizeHandler = (window as any).__a2ResizeHandler;
+    if (resizeHandler) {
+        window.removeEventListener('resize', resizeHandler);
+        (window as any).__a2ResizeHandler = null;
     }
 
-    // ── SFX ──
-    if (sfxSlider) {
-        sfxSlider.value = String(Math.round(getSFXVolume() * 100));
-        sfxSlider.addEventListener('input', () => {
-            setSFXVolume(Number(sfxSlider.value) / 100);
-            if (isSFXMuted() && Number(sfxSlider.value) > 0) {
-                toggleSFXMute();
-                sfxIcon.textContent = '🔊';
-                sfxIcon.classList.remove('muted');
-            }
-        });
-    }
-    if (sfxIcon) {
-        sfxIcon.addEventListener('click', () => {
-            const muted = toggleSFXMute();
-            sfxIcon.textContent = muted ? '🔇' : '🔊';
-            sfxIcon.classList.toggle('muted', muted);
-        });
-    }
+    // 5. Multiplayer bağlantısını kapat
+    mpService.disconnect();
+
+    // 5. Win overlay kapat
+    winOverlay.classList.remove('show');
+
+    // 6. Canvas gizle, header göster
+    canvas.style.display = 'none';
+
+    // 7. Game state sıfırla
+    playerMana = 3;
+    playerAvx = 0;
+    turnCount = 1;
+    realtimeManaAccum = 0;
+    realtimeAiAccum = 0;
+    iceManaAccum = 0;
+    _mpGameEnded = false;
+    mpGameStarted = false;
+
+    // 8. Mini player'ı gizle
+    hideMiniPlayer();
+
+    // 9. Ana sayfaya dön
+    showScreen('home');
+    console.log('[Cleanup] Temizlendi — ana sayfaya dönüldü');
 }
 
 // ─── BOOT ─────────────────────────────────────────────────────────────
@@ -2086,8 +2100,8 @@ async function boot(mode: GameMode): Promise<void> {
     loadingSlowEl.textContent = t('loadingSlow');
     const tipLabelMap: Record<string, string> = { tr: 'BİLGİ', en: 'DID YOU KNOW?', es: 'DATO' };
     loadingTipLabel.textContent = tipLabelMap[getLang()] ?? tipLabelMap['en'];
-    const tipKeys: TransKey[] = ['loadingTip1','loadingTip2','loadingTip3','loadingTip4','loadingTip5',
-                     'loadingTip6','loadingTip7','loadingTip8','loadingTip9','loadingTip10'];
+    const tipKeys: TransKey[] = ['loadingTip1', 'loadingTip2', 'loadingTip3', 'loadingTip4', 'loadingTip5',
+        'loadingTip6', 'loadingTip7', 'loadingTip8', 'loadingTip9', 'loadingTip10'];
     let tipIdx = Math.floor(Math.random() * tipKeys.length);
     loadingTipEl.textContent = t(tipKeys[tipIdx]);
     const tipInterval = setInterval(() => {
@@ -2127,11 +2141,16 @@ async function boot(mode: GameMode): Promise<void> {
 
     loadingBar.style.width = '15%';
 
-    // War music for game screen
-    switchBGM('/assets/sound/war.mp3', 0.2);
+    // Oyun içi müzik: Kullanıcının seçtiği şarkı veya varsayılan (Battle Drums)
+    const userTrack = getCurrentTrack();
+    if (userTrack) {
+        switchBGM(userTrack.src, 0.2);
+    } else {
+        switchBGM('/assets/sound/war.mp3', 0.2);
+    }
 
-    // Audio controls
-    setupAudioControls();
+    // Show mini player for in-game audio controls
+    showMiniPlayer();
 
     const mapData = createAvaxMap(scene, shadowGenerator);
 
@@ -2215,8 +2234,8 @@ async function boot(mode: GameMode): Promise<void> {
         const betHud = document.getElementById('bet-hud');
         if (betHud) {
             if (betService.isActive() && betService.state.status === 'locked') {
-                const totalPot  = betService.state.amount * 2;
-                const prize     = totalPot * 0.98;
+                const totalPot = betService.state.amount * 2;
+                const prize = totalPot * 0.98;
                 betHud.style.display = 'inline-flex';
                 const betHudText = document.getElementById('bet-hud-text');
                 if (betHudText) betHudText.textContent = `${prize.toFixed(4)} AVAX bahis aktif`;
@@ -2389,7 +2408,7 @@ async function boot(mode: GameMode): Promise<void> {
     loadingBar.style.width = '100%';
     await new Promise(r => setTimeout(r, 300));
     clearInterval(tipInterval);
-    loadingScreen.remove();
+    loadingScreen.style.display = 'none';
 
     if (mode === 'multiplayer') {
         // "Rakip bekleniyor…" overlay'i göster
@@ -2427,7 +2446,10 @@ async function boot(mode: GameMode): Promise<void> {
         lowerBGMForGame();
     }
 
-    window.addEventListener('resize', () => engine.resize());
+    const _resizeHandler = () => engine.resize();
+    window.addEventListener('resize', _resizeHandler);
+    // Cleanup'ta kaldırılacak referans
+    (window as any).__a2ResizeHandler = _resizeHandler;
 }
 
 // ─── REALTIME TICK ────────────────────────────────────────────────────
@@ -2702,14 +2724,14 @@ function handleIceKeyboard(e: KeyboardEvent, um: UnitManager): void {
 let _fireGhostTimeout: ReturnType<typeof setTimeout> | null = null;
 let _iceGhostTimeout: ReturnType<typeof setTimeout> | null = null;
 let _prevFireRatio = 1;
-let _prevIceRatio  = 1;
+let _prevIceRatio = 1;
 
 function updateBaseHpUI(fireBase: BaseBuilding, iceBase: BaseBuilding): void {
     const fr = fireBase.hpRatio * 100;
     const ir = iceBase.hpRatio * 100;
 
     const fireGhost = document.getElementById('fire-base-ghost') as HTMLElement;
-    const iceGhost  = document.getElementById('ice-base-ghost')  as HTMLElement;
+    const iceGhost = document.getElementById('ice-base-ghost') as HTMLElement;
 
     // ── Fire ──────────────────────────────────────────────
     if (fr < _prevFireRatio) {
@@ -2742,11 +2764,11 @@ function updateBaseHpUI(fireBase: BaseBuilding, iceBase: BaseBuilding): void {
     iceBaseFill.classList.toggle('mk-danger', ir <= 20);
 
     _prevFireRatio = fr;
-    _prevIceRatio  = ir;
+    _prevIceRatio = ir;
 
     // Sayı gösterimi
     fireBaseHpText.textContent = `${Math.ceil(fireBase.hp)}`;
-    iceBaseHpText.textContent  = `${Math.ceil(iceBase.hp)}`;
+    iceBaseHpText.textContent = `${Math.ceil(iceBase.hp)}`;
 }
 
 // ─── BOARD CONTROL UI ─────────────────────────────────────────────────
@@ -2783,10 +2805,10 @@ const UNIT_TR_NAMES: Record<string, string> = {
 
 /** Show bet payout/loss info on the win overlay */
 function showBetResultOnWin(didWin: boolean, amountAvax: number, txHash: string | null) {
-    const row  = document.getElementById('bet-result-row');
+    const row = document.getElementById('bet-result-row');
     const icon = document.getElementById('bet-result-icon');
     const text = document.getElementById('bet-result-text');
-    const tx   = document.getElementById('bet-result-tx');
+    const tx = document.getElementById('bet-result-tx');
     if (!row || !icon || !text || !tx) return;
 
     row.style.display = 'block';
@@ -2865,13 +2887,20 @@ function showWinScreen(sys: WinConditionSystem): void {
 
     // Buton metinleri
     const winRestartBtn = document.getElementById('win-restart-btn');
-    if (winRestartBtn) winRestartBtn.textContent = t('winReplay');
+    if (winRestartBtn) {
+        winRestartBtn.textContent = t('winReplay');
+        winRestartBtn.onclick = () => {
+            // Engine temizle → aynı mod ile yeniden başlat
+            const restartMode = gameMode;
+            cleanupGame();
+            boot(restartMode);
+        };
+    }
     const winHomeBtn = document.getElementById('win-home-btn');
     if (winHomeBtn) {
         winHomeBtn.textContent = t('winHome');
         winHomeBtn.onclick = () => {
-            winOverlay.classList.remove('show');
-            location.reload();
+            cleanupGame();
         };
         winHomeBtn.onmouseenter = () => { (winHomeBtn as HTMLElement).style.color = '#fff'; (winHomeBtn as HTMLElement).style.borderColor = 'rgba(255,255,255,0.3)'; };
         winHomeBtn.onmouseleave = () => { (winHomeBtn as HTMLElement).style.color = ''; (winHomeBtn as HTMLElement).style.borderColor = ''; };
@@ -3074,11 +3103,11 @@ function clearPromptSelections(): void {
 const activeEffectsEl = document.getElementById('active-effects')!;
 
 const EFFECT_DISPLAY: Record<string, { labelKey: string; color: string }> = {
-    mana_fill:   { labelKey: 'manaFill',    color: '#aaff55' },
-    mana_freeze: { labelKey: 'manaFreeze',  color: '#55ccff' },
-    ouroboros:   { labelKey: 'ouroboros',    color: '#cc55ff' },
+    mana_fill: { labelKey: 'manaFill', color: '#aaff55' },
+    mana_freeze: { labelKey: 'manaFreeze', color: '#55ccff' },
+    ouroboros: { labelKey: 'ouroboros', color: '#cc55ff' },
     autocollect: { labelKey: 'autoCollect', color: '#ffcc00' },
-    bancollect:  { labelKey: 'banCollect',  color: '#ff4444' },
+    bancollect: { labelKey: 'banCollect', color: '#ff4444' },
 };
 
 function showActiveEffect(def: PromptCardDef): void {
@@ -3564,7 +3593,7 @@ function spawnAvxCoin(worldPos: { x: number; y: number; z: number }, killerTeam:
         // bancollect aktifse düşman takımı (killerTeam dışındaki) toplayamaz
         if (gameMode === 'twoplayer') {
             const isEnemy = (killerTeam === 'fire' && banCollectActive)
-                          || (killerTeam === 'ice' && banCollectActive);
+                || (killerTeam === 'ice' && banCollectActive);
             if (isEnemy) return; // engellendi
             if (killerTeam === 'fire') playerAvx++;
             else iceAvx++;
@@ -3736,6 +3765,42 @@ let _stgDraft: KeyBindings = loadBindings();
 let _listeningEl: HTMLElement | null = null;
 let _listeningKey: { player: 'fire' | 'ice'; action: string } | null = null;
 
+// ─── PLAYLIST UI ─────────────────────────────────────────────────────
+function renderPlaylist(): void {
+    const grid = document.getElementById('playlist-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    const playlist = getPlaylist();
+    const currentTrack = getCurrentTrack();
+
+    for (const track of playlist) {
+        const isActive = currentTrack?.id === track.id;
+        const el = document.createElement('div');
+        el.className = `playlist-track${isActive ? ' active' : ''}`;
+        el.innerHTML = `
+            <div class="playlist-icon">
+                <span class="playlist-icon-static">♪</span>
+                <div class="playlist-playing">
+                    <div class="playlist-bar"></div>
+                    <div class="playlist-bar"></div>
+                    <div class="playlist-bar"></div>
+                </div>
+            </div>
+            <div class="playlist-info">
+                <div class="playlist-title">${track.title}</div>
+                <div class="playlist-artist">${track.artist}</div>
+            </div>
+            <div class="playlist-duration">${track.duration ?? ''}</div>
+        `;
+        el.onclick = () => {
+            playTrack(track.id, 0.3);
+            renderPlaylist(); // UI güncelle
+        };
+        grid.appendChild(el);
+    }
+}
+
 function initSettingsScreen(): void {
     _stgDraft = loadBindings();
     _listeningEl = null;
@@ -3743,15 +3808,38 @@ function initSettingsScreen(): void {
     renderKeybindGrid('fire', 'stg-fire-binds');
     renderKeybindGrid('ice', 'stg-ice-binds');
 
-    // Volume slider
-    const volSlider = document.getElementById('stg-volume') as HTMLInputElement;
-    const volVal = document.getElementById('stg-volume-val')!;
-    const currentVol = Math.round((parseFloat(localStorage.getItem('a2volume') ?? '0.5')) * 100);
-    volSlider.value = String(currentVol);
-    volVal.textContent = String(currentVol);
-    volSlider.oninput = () => {
-        volVal.textContent = volSlider.value;
-    };
+    // Music volume slider (general panel)
+    const musicVolSlider = document.getElementById('stg-music-volume') as HTMLInputElement;
+    const musicVolVal = document.getElementById('stg-music-volume-val')!;
+    if (musicVolSlider && musicVolVal) {
+        const currentMusicVol = Math.round(getBGMVolume() * 100);
+        musicVolSlider.value = String(currentMusicVol);
+        musicVolVal.textContent = String(currentMusicVol);
+        musicVolSlider.oninput = () => {
+            const vol = parseInt(musicVolSlider.value) / 100;
+            musicVolVal.textContent = musicVolSlider.value;
+            setBGMVolume(vol);
+            localStorage.setItem('a2_music_volume', String(vol));
+        };
+    }
+
+    // SFX volume slider (general panel)
+    const sfxVolSlider = document.getElementById('stg-sfx-volume') as HTMLInputElement;
+    const sfxVolVal = document.getElementById('stg-sfx-volume-val')!;
+    if (sfxVolSlider && sfxVolVal) {
+        const currentSfxVol = Math.round(getSFXVolume() * 100);
+        sfxVolSlider.value = String(currentSfxVol);
+        sfxVolVal.textContent = String(currentSfxVol);
+        sfxVolSlider.oninput = () => {
+            const vol = parseInt(sfxVolSlider.value) / 100;
+            sfxVolVal.textContent = sfxVolSlider.value;
+            setSFXVolume(vol);
+            localStorage.setItem('a2_sfx_volume', String(vol));
+        };
+    }
+
+    // Render playlist
+    renderPlaylist();
 
     // Tabs
     document.querySelectorAll<HTMLButtonElement>('.stg-tab').forEach(tab => {
@@ -3760,6 +3848,7 @@ function initSettingsScreen(): void {
             tab.classList.add('active');
             const target = tab.dataset.stgTab!;
             document.getElementById('stg-panel-keybinds')!.style.display = target === 'keybinds' ? '' : 'none';
+            document.getElementById('stg-panel-music')!.style.display = target === 'music' ? '' : 'none';
             document.getElementById('stg-panel-general')!.style.display = target === 'general' ? '' : 'none';
         };
     });
@@ -3768,9 +3857,11 @@ function initSettingsScreen(): void {
     document.getElementById('stg-save-btn')!.onclick = () => {
         keybinds = JSON.parse(JSON.stringify(_stgDraft));
         saveBindings(keybinds);
-        // Save volume
-        const vol = parseInt((document.getElementById('stg-volume') as HTMLInputElement).value) / 100;
-        localStorage.setItem('a2volume', String(vol));
+        // Save volumes
+        const musicVol = parseInt((document.getElementById('stg-music-volume') as HTMLInputElement)?.value ?? '30') / 100;
+        const sfxVol = parseInt((document.getElementById('stg-sfx-volume') as HTMLInputElement)?.value ?? '50') / 100;
+        localStorage.setItem('a2_music_volume', String(musicVol));
+        localStorage.setItem('a2_sfx_volume', String(sfxVol));
         stgToast(t('settingsSaved'));
     };
 
@@ -3779,7 +3870,127 @@ function initSettingsScreen(): void {
         _stgDraft = JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
         renderKeybindGrid('fire', 'stg-fire-binds');
         renderKeybindGrid('ice', 'stg-ice-binds');
+        // Reset volume sliders
+        if (musicVolSlider) { musicVolSlider.value = '30'; musicVolVal.textContent = '30'; setBGMVolume(0.3); }
+        if (sfxVolSlider) { sfxVolSlider.value = '50'; sfxVolVal.textContent = '50'; setSFXVolume(0.5); }
     };
+}
+
+function initMiniPlayer(): void {
+    const btn = document.getElementById('mini-player-btn');
+    const panel = document.getElementById('mini-player-panel');
+    const closeBtn = panel?.querySelector('.mp-close');
+    const tracklist = document.getElementById('mp-tracklist');
+    const bgmSlider = document.getElementById('mp-bgm-volume') as HTMLInputElement;
+    const sfxSlider = document.getElementById('mp-sfx-volume') as HTMLInputElement;
+
+    if (!btn || !panel || !tracklist) return;
+
+    // Toggle panel
+    btn.onclick = () => {
+        panel.classList.toggle('show');
+    };
+
+    // Close button
+    closeBtn?.addEventListener('click', () => {
+        panel.classList.remove('show');
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        const miniPlayer = document.getElementById('mini-player');
+        if (miniPlayer && !miniPlayer.contains(e.target as Node)) {
+            panel.classList.remove('show');
+        }
+    });
+
+    // Render tracks
+    const playlist = getPlaylist();
+    tracklist.innerHTML = '';
+    const currentTrack = getCurrentTrack();
+
+    playlist.forEach(track => {
+        const item = document.createElement('div');
+        item.className = 'mp-track' + (track.id === currentTrack?.id ? ' active' : '');
+        item.innerHTML = `
+            <div class="mp-track-playing">
+                <span class="mp-track-bar"></span>
+                <span class="mp-track-bar"></span>
+                <span class="mp-track-bar"></span>
+            </div>
+            <span class="mp-track-icon">♪</span>
+            <span class="mp-track-name">${track.title}</span>
+        `;
+        item.onclick = () => {
+            playTrack(track.id);
+            tracklist.querySelectorAll('.mp-track').forEach(el => el.classList.remove('active'));
+            item.classList.add('active');
+            // Animate button bars when track is selected
+            btn.classList.add('playing');
+            // Sync settings playlist if open
+            document.querySelectorAll('.playlist-track').forEach(el => {
+                el.classList.toggle('active', el.getAttribute('data-track') === track.id);
+            });
+        };
+        tracklist.appendChild(item);
+    });
+
+    // BGM Volume slider
+    if (bgmSlider) {
+        bgmSlider.value = String(getBGMVolume());
+        bgmSlider.oninput = () => {
+            const vol = parseFloat(bgmSlider.value);
+            setBGMVolume(vol);
+            localStorage.setItem('a2_music_volume', String(vol));
+            // Sync settings slider if open
+            const settingsSlider = document.getElementById('stg-music-volume') as HTMLInputElement;
+            const settingsVal = document.getElementById('stg-music-volume-val');
+            if (settingsSlider) settingsSlider.value = String(Math.round(vol * 100));
+            if (settingsVal) settingsVal.textContent = String(Math.round(vol * 100));
+        };
+    }
+
+    // SFX Volume slider
+    if (sfxSlider) {
+        sfxSlider.value = String(getSFXVolume());
+        sfxSlider.oninput = () => {
+            const vol = parseFloat(sfxSlider.value);
+            setSFXVolume(vol);
+            localStorage.setItem('a2_sfx_volume', String(vol));
+            // Sync settings slider if open
+            const settingsSlider = document.getElementById('stg-sfx-volume') as HTMLInputElement;
+            const settingsVal = document.getElementById('stg-sfx-volume-val');
+            if (settingsSlider) settingsSlider.value = String(Math.round(vol * 100));
+            if (settingsVal) settingsVal.textContent = String(Math.round(vol * 100));
+        };
+    }
+
+    // Animate bars when music is playing (initial load)
+    if (currentTrack) {
+        btn.classList.add('playing');
+    }
+}
+
+// ─── MINI PLAYER SHOW/HIDE ───────────────────────────────────────────
+function showMiniPlayer(): void {
+    const miniPlayer = document.getElementById('mini-player');
+    if (miniPlayer) {
+        miniPlayer.style.display = 'flex';
+        // Re-init sliders with current values
+        const bgmSlider = document.getElementById('mp-bgm-volume') as HTMLInputElement;
+        const sfxSlider = document.getElementById('mp-sfx-volume') as HTMLInputElement;
+        if (bgmSlider) bgmSlider.value = String(getBGMVolume());
+        if (sfxSlider) sfxSlider.value = String(getSFXVolume());
+    }
+}
+
+function hideMiniPlayer(): void {
+    const miniPlayer = document.getElementById('mini-player');
+    if (miniPlayer) {
+        miniPlayer.style.display = 'none';
+        // Close panel if open
+        document.getElementById('mini-player-panel')?.classList.remove('show');
+    }
 }
 
 const BIND_ACTIONS = [

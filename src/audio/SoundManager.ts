@@ -8,6 +8,51 @@ function getCtx(): AudioContext {
     return ctx;
 }
 
+// ─── PLAYLIST SYSTEM ─────────────────────────────────────────────────
+export interface Track {
+    id: string;
+    title: string;
+    artist: string;
+    src: string;
+    duration?: string;   // "3:45" format
+}
+
+export const PLAYLIST: Track[] = [
+    { id: 'storymusic',   title: 'Avaland Theme',       artist: 'A2 OST',    src: '/assets/sound/storymusic.mp3',                  duration: '4:12' },
+    { id: 'character',    title: 'Heroes of Fire & Ice', artist: 'A2 OST',   src: '/assets/sound/character.mp3',                   duration: '3:58' },
+    { id: 'war',          title: 'Battle Drums',        artist: 'A2 OST',    src: '/assets/sound/war.mp3',                         duration: '3:41' },
+    { id: 'soundtrack1',  title: 'A2 Saga',             artist: 'A2 OST',    src: '/assets/sound/A2saga%20soundtrack%201.mp3',     duration: '2:15' },
+    { id: 'rockmetal',    title: 'Alaz & Ayaz',         artist: 'Metal Ver', src: '/assets/sound/Ayaz%20and%20alaz%20rock%20metal%20ver.mp3', duration: '1:52' },
+    { id: 'ayazgelir',    title: 'Ayaz Gelir Alaz Olur', artist: 'Vocal',    src: '/assets/sound/ayaz_gelir_alaz_olur.mp3', duration: '1:38' },
+];
+
+let currentTrackId = 'storymusic';
+
+export function getCurrentTrack(): Track | undefined {
+    return PLAYLIST.find(t => t.id === currentTrackId);
+}
+
+export function getPlaylist(): Track[] {
+    return PLAYLIST;
+}
+
+export function playTrack(trackId: string, volume?: number): void {
+    const track = PLAYLIST.find(t => t.id === trackId);
+    if (!track) return;
+    currentTrackId = trackId;
+    // localStorage'a kaydet
+    localStorage.setItem('a2_current_track', trackId);
+    switchBGM(track.src, volume);
+}
+
+// Sayfa yüklenince önceki seçimi yükle
+export function restoreTrackPreference(): void {
+    const saved = localStorage.getItem('a2_current_track');
+    if (saved && PLAYLIST.find(t => t.id === saved)) {
+        currentTrackId = saved;
+    }
+}
+
 // ─── BACKGROUND MUSIC ────────────────────────────────────────────────
 let bgmElement: HTMLAudioElement | null = null;
 let bgmCurrentSrc = '';
@@ -22,7 +67,8 @@ export function switchBGM(src: string, volume?: number): void {
     // Stop previous
     if (bgmElement) {
         bgmElement.pause();
-        bgmElement.src = '';
+        bgmElement.removeAttribute('src'); // Fixes NotSupportedError
+        bgmElement.load();
         bgmElement = null;
     }
     if (volume !== undefined) bgmVolume = Math.max(0, Math.min(1, volume));
@@ -30,9 +76,11 @@ export function switchBGM(src: string, volume?: number): void {
     bgmElement = new Audio(src);
     bgmElement.loop = true;
     bgmElement.volume = bgmMuted ? 0 : bgmVolume;
-    bgmElement.play().catch(() => {
-        const playOnce = () => { bgmElement?.play(); document.removeEventListener('click', playOnce); };
-        document.addEventListener('click', playOnce);
+    bgmElement.play().catch((err: any) => {
+        if (err.name === 'NotAllowedError') { // Autoplay blocked
+            const playOnce = () => { bgmElement?.play().catch(()=>{}); document.removeEventListener('click', playOnce); };
+            document.addEventListener('click', playOnce);
+        }
     });
 }
 
