@@ -73,7 +73,7 @@ contract AgentNFT is ERC721, ERC721URIStorage, Ownable {
             poaiScore: 0,
             matchesPlayed: 0,
             wins: 0,
-            tbaAddress: address(0),
+            tbaAddress: address(0)
         });
 
         emit AgentMinted(tokenId, to, characterType);

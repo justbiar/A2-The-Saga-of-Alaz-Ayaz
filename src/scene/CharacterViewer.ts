@@ -26,19 +26,21 @@ const GLB_MAP: Record<string, string> = {
     albasti:  '/assets/character animation/albastiwalk.glb',
     tepegoz:  '/assets/character animation/tepegozwalk.glb',
     sahmeran: '/assets/character animation/sahmeranwalk.glb',
+    boru:     '/assets/character animation/Meshy_AI_biped/boruwalk.glb',
 };
 
 // Per-character camera adjustments (alpha, beta, radius, target Y)
 const CAM_PRESETS: Record<string, { alpha: number; beta: number; radius: number; targetY: number }> = {
-    korhan:   { alpha: -Math.PI / 2, beta: 1.2, radius: 4.5, targetY: 1.0 },
-    erlik:    { alpha: -Math.PI / 2, beta: 1.2, radius: 4.5, targetY: 1.0 },
-    od:       { alpha: -Math.PI / 2, beta: 1.2, radius: 4.5, targetY: 1.0 },
-    ayaz:     { alpha: -Math.PI / 2, beta: 1.2, radius: 4.5, targetY: 1.0 },
-    tulpar:   { alpha: -Math.PI / 2, beta: 1.1, radius: 6.0, targetY: 1.2 },
-    umay:     { alpha: -Math.PI / 2, beta: 1.2, radius: 4.5, targetY: 1.0 },
-    albasti:  { alpha: -Math.PI / 2, beta: 1.2, radius: 4.5, targetY: 1.0 },
-    tepegoz:  { alpha: -Math.PI / 2, beta: 1.1, radius: 6.5, targetY: 1.5 },
-    sahmeran: { alpha: -Math.PI / 2, beta: 1.2, radius: 4.5, targetY: 1.0 },
+    korhan:   { alpha: -Math.PI / 2, beta: 1.25, radius: 3.2, targetY: 1.2 },
+    erlik:    { alpha: -Math.PI / 2, beta: 1.25, radius: 3.2, targetY: 1.2 },
+    od:       { alpha: -Math.PI / 2, beta: 1.25, radius: 3.2, targetY: 1.2 },
+    ayaz:     { alpha: -Math.PI / 2, beta: 1.25, radius: 3.2, targetY: 1.2 },
+    tulpar:   { alpha: -Math.PI / 2, beta: 1.1,  radius: 4.5, targetY: 1.4 },
+    umay:     { alpha: -Math.PI / 2, beta: 1.25, radius: 3.2, targetY: 1.2 },
+    albasti:  { alpha: -Math.PI / 2, beta: 1.25, radius: 3.2, targetY: 1.2 },
+    tepegoz:  { alpha: -Math.PI / 2, beta: 1.1,  radius: 5.0, targetY: 1.6 },
+    sahmeran: { alpha: -Math.PI / 2, beta: 1.25, radius: 3.2, targetY: 1.2 },
+    boru:     { alpha: -Math.PI / 2, beta: 1.15, radius: 3.8, targetY: 1.3 },
 };
 
 export class CharacterViewer {
@@ -117,7 +119,7 @@ export class CharacterViewer {
                 return false;
             }
 
-            // Auto-scale: fit model in a ~2 unit bounding box
+            // Auto-scale: fit model in a ~2.8 unit tall bounding box
             const meshes = result.meshes.filter(m => m.getTotalVertices() > 0);
             if (meshes.length > 0) {
                 let min = new Vector3(Infinity, Infinity, Infinity);
@@ -129,11 +131,15 @@ export class CharacterViewer {
                 });
                 const size = max.subtract(min);
                 const maxDim = Math.max(size.x, size.y, size.z);
-                const scale = 2.0 / maxDim;
+                const scale = 2.8 / maxDim;
                 result.meshes[0].scaling = new Vector3(scale, scale, scale);
-                // Center vertically
-                const center = min.add(max).scale(0.5 * scale);
-                result.meshes[0].position.y = -center.y + preset.targetY * 0.3;
+
+                // Ayakları zemine bas
+                result.meshes[0].position.y = -min.y * scale;
+
+                // Kamera hedefini modelin göğüs hizasına ayarla
+                const modelMidY = (-min.y + (size.y * 0.55)) * scale;
+                cam.target = new Vector3(0, modelMidY, 0);
             }
 
             // Play first animation (walk)

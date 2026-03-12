@@ -10,3 +10,12 @@ example
 # Assets transferred via rsync (too large for GitHub)
 assets/
 CLAUDE.md
+
+# Build artifacts
+*.tar.gz
+*.blend
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+index.html.disk_backup
+glb fix/

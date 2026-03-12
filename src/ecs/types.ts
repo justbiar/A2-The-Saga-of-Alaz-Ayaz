@@ -101,10 +101,13 @@ export interface PromptCardDef {
     id: string;
     name: string;
     description: string;
+    nameKey?: string;
+    descKey?: string;
     manaCost: number;
     effectType: PromptEffectType;
     magnitude: number;
     duration: number;           // seconds
+    cooldown: number;           // seconds — skill tekrar kullanılana kadar bekleme süresi
     targetTeam: 'self' | 'enemy' | 'both';
     imagePath: string;
 }

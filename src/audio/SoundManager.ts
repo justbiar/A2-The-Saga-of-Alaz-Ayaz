@@ -133,11 +133,11 @@ function playSFX(src: string, vol = 0.5): void {
 
 // ─── SFX PATHS ──────────────────────────────────────────────────────
 const SFX = {
-    swordSlash:  '/assets/sfx/kılıçkesmesi.mp3',
+    swordSlash:  '/assets/sfx/kilickesmesi.mp3',
     swordHit:    '/assets/sfx/freesound_community-sword-hit-7160.mp3',
-    albastiWing: '/assets/sfx/albastıwing.mp3',
+    albastiWing: '/assets/sfx/albastiwing.mp3',
     odWizard:    '/assets/sfx/odwizard.mp3',
-    tepegozBite: '/assets/sfx/tepegöz%20bite.mp3',
+    tepegozBite: '/assets/sfx/tepegoz-bite.mp3',
     umay:        '/assets/sfx/umay.mp3',
     coinDrop:    '/assets/sfx/freesound_crunchpixstudio-drop-coin-384921.mp3',
     coinCollect: '/assets/sfx/freesound_community-coins-falling-013-36967.mp3',

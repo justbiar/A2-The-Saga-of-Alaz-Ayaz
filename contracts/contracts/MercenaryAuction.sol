@@ -60,7 +60,7 @@ contract MercenaryAuction is Ownable, ReentrancyGuard {
             endTime: block.timestamp + duration,
             highBidder: address(0),
             highBid: 0,
-            settled: false,
+            settled: false
         });
 
         emit AuctionCreated(auctionId, mercenaryId, block.timestamp + duration);

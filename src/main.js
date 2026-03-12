@@ -41,7 +41,7 @@ function initGame(gameState) {
 
 // Sayfa yüklendiğinde
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🔥 Fire vs Ice - Avalanche Strategy Game');
+    console.log('Fire vs Ice - Avalanche Strategy Game');
     console.log('📋 Oyun yüklenmeye hazır');
     
     // Phaser kontrolü
