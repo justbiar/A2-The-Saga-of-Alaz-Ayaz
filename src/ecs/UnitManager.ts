@@ -53,7 +53,6 @@ export class UnitManager {
     private korhanWalkContainer:   AssetContainer | null = null;
     private korhanAttackContainer: AssetContainer | null = null;
     private korhanDieContainer:    AssetContainer | null = null;
-    private korhanHammerContainer: AssetContainer | null = null;
     private korhanAnimMap = new Map<number, GLBAnimData>();
     // Erlik animation containers
     private erlikWalkContainer:   AssetContainer | null = null;
@@ -257,7 +256,7 @@ export class UnitManager {
         // Cache'den parse — hepsi bellekte, paralel yükle (network yok)
         const BATCH_SIZE = 6;
         const allEntries: LoadEntry[] = [
-            { file: 'korhanwalk.glb' }, { file: 'Korhanattack.glb' }, { file: 'korhandie.glb' }, { file: 'korhanhammer.glb' },
+            { file: 'korhanwalk.glb' }, { file: 'Korhanattack.glb' }, { file: 'korhandie.glb' },
             { file: 'erlik.glb' }, { file: 'erlikattack.glb' }, { file: 'erlikdie.glb' },
             { file: 'odwalk.glb' }, { file: 'odattack.glb' }, { file: 'oddie.glb' },
             { file: 'tepegozwalk.glb' }, { file: 'tepegozattack.glb' }, { file: 'tepegozdie.glb' },
@@ -277,7 +276,7 @@ export class UnitManager {
         }
 
         const [
-            korhanW, korhanA, korhanD, korhanH,
+            korhanW, korhanA, korhanD,
             erlikW, erlikA, erlikD,
             odW, odA, odD,
             tepegozW, tepegozA, tepegozD,
@@ -289,7 +288,7 @@ export class UnitManager {
             boruW, boruA, boruD,
         ] = results;
 
-        this.korhanWalkContainer = korhanW; this.korhanAttackContainer = korhanA; this.korhanDieContainer = korhanD; this.korhanHammerContainer = korhanH;
+        this.korhanWalkContainer = korhanW; this.korhanAttackContainer = korhanA; this.korhanDieContainer = korhanD;
         this.erlikWalkContainer = erlikW; this.erlikAttackContainer = erlikA; this.erlikDieContainer = erlikD;
         this.odWalkContainer = odW; this.odAttackContainer = odA; this.odDieContainer = odD;
         this.tepegozWalkContainer = tepegozW; this.tepegozAttackContainer = tepegozA; this.tepegozDieContainer = tepegozD;
@@ -521,15 +520,16 @@ export class UnitManager {
             attackInst?.animationGroups.forEach(ag => { ag.loopAnimation = true; ag.stop(); });
             dieInst?.animationGroups.forEach(ag => { ag.loopAnimation = false; ag.stop(); });
 
-            // Attach hammer to each pose's right hand bone
-            this.attachHammerToHand(walkRoot, parent, unitId, 'walk');
-            if (attackInst) this.attachHammerToHand(attackRoot, parent, unitId, 'attack');
-            if (dieRoot) this.attachHammerToHand(dieRoot, parent, unitId, 'die');
+            // Korhan attack GLB has extra anims (walk, cast) — keep only Hammer
+            const korhanAttackAnims = (attackInst?.animationGroups ?? []).filter(ag => /hammer|attack|swing|hit/i.test(ag.name));
+            const finalAttackAnims = korhanAttackAnims.length > 0 ? korhanAttackAnims : (attackInst?.animationGroups ?? []);
+            // Stop the filtered-out anims so they don't interfere
+            (attackInst?.animationGroups ?? []).forEach(ag => { if (!finalAttackAnims.includes(ag)) { ag.stop(); ag.reset(); } });
 
             this.korhanAnimMap.set(unitId, {
                 walkRoot, attackRoot, dieRoot,
                 walkAnims:   walkInst.animationGroups,
-                attackAnims: attackInst?.animationGroups ?? [],
+                attackAnims: finalAttackAnims,
                 dieAnims:    dieInst?.animationGroups    ?? [],
                 lastState:   'walking',
                 dieStarted:  false,
@@ -554,57 +554,6 @@ export class UnitManager {
         this.buildWarriorBody(parent, team === 'fire'
             ? new Color3(0.9, 0.25, 0.05)
             : new Color3(0.1, 0.35, 0.9), 'sword');
-    }
-
-    /** Clone hammer template and attach to a Korhan pose root. */
-    private attachHammerToHand(poseRoot: TransformNode, parentMesh: Mesh, unitId: number, tag: string): void {
-        if (!this.korhanHammerContainer) return;
-
-        const inst = this.korhanHammerContainer.instantiateModelsToScene(
-            (n: string) => `hammer_${tag}_${unitId}_${n}`, false,
-        );
-        const hammerRoot = inst.rootNodes[0] as TransformNode;
-
-        const allNodes = poseRoot.getChildTransformNodes(false);
-        const rightHand = allNodes.find(n => /righthand$/i.test(n.name)) ?? null;
-        const spine     = allNodes.find(n => /spine01$/i.test(n.name))   ?? null;
-
-        if (tag === 'walk' || tag === 'die') {
-            // ── SIRT pozisyonu: Spine01'e parent, sırtın arkasında dik dursun ──
-            const anchor = spine ?? rightHand;
-            if (anchor) {
-                hammerRoot.parent = anchor;
-                (hammerRoot as any).scaling = new Vector3(100, 100, 100);
-                // Sırtın arkasında, dik, baş yukarıda
-                hammerRoot.rotation = new Vector3(0, Math.PI, 0);
-                hammerRoot.position = new Vector3(0, 4, -3);
-            } else {
-                hammerRoot.parent = parentMesh;
-                (hammerRoot as any).scaling = new Vector3(1, 1, 1);
-                hammerRoot.position = new Vector3(0, 1.8, -0.3);
-                hammerRoot.rotation = new Vector3(0, 0, 0);
-            }
-        } else {
-            // ── ATTACK pozisyonu: RightHand'e parent, iki elle tutar gibi önde ──
-            if (rightHand) {
-                hammerRoot.parent = rightHand;
-                (hammerRoot as any).scaling = new Vector3(100, 100, 100);
-                // Sap ele paralel, baş yukarıda öne uzansın
-                hammerRoot.rotation = new Vector3(-Math.PI / 2, 0, 0);
-                hammerRoot.position = new Vector3(0, 5, 0);
-            } else {
-                hammerRoot.parent = parentMesh;
-                (hammerRoot as any).scaling = new Vector3(1, 1, 1);
-                hammerRoot.position = new Vector3(0.3, 1.2, 0.4);
-                hammerRoot.rotation = new Vector3(0, 0, 0);
-            }
-        }
-
-        hammerRoot.getChildMeshes().forEach(m => {
-            m.setEnabled(true);
-            m.isVisible = true;
-            if (m instanceof Mesh) this.sg.addShadowCaster(m);
-        });
     }
 
     // ─── ERLIK — dark GLB warrior with walk / attack / die animations ───

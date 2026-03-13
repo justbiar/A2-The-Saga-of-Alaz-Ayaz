@@ -7,7 +7,7 @@ const BASE = '/assets/character%20animation/';
 const BORU_BASE = '/assets/character%20animation/Meshy_AI_biped/';
 
 const GLB_FILES = [
-    'korhanwalk.glb', 'Korhanattack.glb', 'korhandie.glb', 'korhanhammer.glb',
+    'korhanwalk.glb', 'Korhanattack.glb', 'korhandie.glb',
     'erlik.glb', 'erlikattack.glb', 'erlikdie.glb',
     'odwalk.glb', 'odattack.glb', 'oddie.glb',
     'tepegozwalk.glb', 'tepegozattack.glb', 'tepegozdie.glb',

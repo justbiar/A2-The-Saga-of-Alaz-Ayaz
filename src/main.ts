@@ -2180,8 +2180,10 @@ async function boot(mode: GameMode): Promise<void> {
         const killerTeam = unit.team === 'fire' ? 'ice' : 'fire';
         const wasCrit = !!unit.abilityState._critKill;
         const coinCount = wasCrit ? 2 : 1;
+        unit.mesh.computeWorldMatrix(true);
+        const deathPos = unit.mesh.absolutePosition.clone();
         for (let i = 0; i < coinCount; i++) {
-            spawnAvxCoin(unit.mesh.position, killerTeam, i);
+            spawnAvxCoin(deathPos, killerTeam, i);
         }
     };
 
@@ -3514,61 +3516,103 @@ function updateAvxUI(): void {
 let _scene: any = null;
 let _engine: any = null;
 
+/** Project world position to CSS screen coordinates */
+function worldToScreen(pos: Vector3): { x: number; y: number } | null {
+    if (!_scene || !_engine) return null;
+    const cam = _scene.activeCamera;
+    if (!cam) return null;
+    try {
+        const canvas = _engine.getRenderingCanvas()!;
+        const rect = canvas.getBoundingClientRect();
+        const vm = cam.getViewMatrix();
+        const pm = cam.getProjectionMatrix();
+        const vPos = Vector3.TransformCoordinates(pos, vm);
+        const cPos = Vector3.TransformCoordinates(vPos, pm);
+        const x = rect.left + ((cPos.x + 1) / 2) * rect.width;
+        const y = rect.top + ((1 - cPos.y) / 2) * rect.height;
+        if (isNaN(x) || isNaN(y)) return null;
+        return { x, y };
+    } catch { return null; }
+}
+
 function spawnAvxCoin(worldPos: { x: number; y: number; z: number }, killerTeam: 'fire' | 'ice', index: number): void {
     if (!_scene || !_engine) return;
     if (index === 0) playCoinDrop();
 
-    const cam = _scene.activeCamera;
-    if (!cam) return;
-
-    // Use a temporary mesh to get screen coordinates
-    let sx: number, sy: number;
-    try {
-        const tempPos = new Vector3(worldPos.x, worldPos.y + 1.5, worldPos.z);
-        const screenPos = Vector3.Project(
-            tempPos,
-            _scene.getTransformMatrix(),
-            cam.getTransformationMatrix(),
-            cam.viewport.toGlobal(_engine.getRenderWidth(), _engine.getRenderHeight()),
-        );
-        // Canvas might be scaled vs CSS pixels
-        const canvas = _engine.getRenderingCanvas()!;
-        const rect = canvas.getBoundingClientRect();
-        const scaleX = rect.width / _engine.getRenderWidth();
-        const scaleY = rect.height / _engine.getRenderHeight();
-        sx = rect.left + screenPos.x * scaleX;
-        sy = rect.top + screenPos.y * scaleY;
-        if (isNaN(sx) || isNaN(sy)) throw new Error('NaN');
-    } catch {
-        sx = window.innerWidth / 2;
-        sy = window.innerHeight / 2;
-    }
-
-    // Offset for multiple coins
-    sx += index * 40 + (Math.random() - 0.5) * 20;
-    sy += (Math.random() - 0.5) * 20;
+    // Store the 3D death position + random offset per coin
+    const groundY = 0.15;
+    const spawnY = worldPos.y + 3.5;
+    const offsetX = (Math.random() - 0.5) * 3 + index * 1.5;
+    const offsetZ = (Math.random() - 0.5) * 3;
+    const finalWorldPos = new Vector3(worldPos.x + offsetX, groundY, worldPos.z + offsetZ);
 
     const coin = document.createElement('div');
     coin.className = 'avx-coin';
-    coin.style.left = `${sx}px`;
-    coin.style.top = `${sy}px`;
-    coin.style.opacity = '1';
-    coin.style.pointerEvents = 'auto';
+    coin.style.opacity = '0';
+    coin.style.pointerEvents = 'none';
     coin.innerHTML = `<img src="${avxCoinUrl}" alt="AVX">`;
     document.body.appendChild(coin);
 
-    // Drop animation
-    const anim = coin.animate([
-        { transform: 'translate(-50%, -50%) scale(0.3)', opacity: '0.3' },
-        { transform: 'translate(-50%, -50%) scale(1.15)', opacity: '1', offset: 0.65 },
-        { transform: 'translate(-50%, -50%) scale(0.95)', opacity: '1', offset: 0.85 },
-        { transform: 'translate(-50%, -50%) scale(1)', opacity: '1' },
-    ], { duration: 400, fill: 'forwards', easing: 'ease-out' });
+    // Physics-like drop animation: fall from air, bounce, settle
+    const DROP_DURATION = 500;
+    const BOUNCE_DURATION = 250;
+    const startTime = performance.now();
+    let settled = false;
 
-    anim.onfinish = () => {
-        coin.style.transform = 'translate(-50%, -50%) scale(1)';
-        coin.style.opacity = '1';
-    };
+    function updateCoinPosition(now: number): void {
+        if (!coin.parentNode) return;
+        const elapsed = now - startTime;
+
+        let currentY: number;
+        let scale: number;
+        let opacity: number;
+
+        if (elapsed < DROP_DURATION) {
+            // Phase 1: falling with gravity (ease-in quadratic)
+            const t = elapsed / DROP_DURATION;
+            const eased = t * t; // accelerating fall
+            currentY = spawnY + (groundY - spawnY) * eased;
+            scale = 0.4 + 0.6 * t;
+            opacity = 0.3 + 0.7 * t;
+        } else if (elapsed < DROP_DURATION + BOUNCE_DURATION) {
+            // Phase 2: bounce up and back
+            const t = (elapsed - DROP_DURATION) / BOUNCE_DURATION;
+            const bounce = Math.sin(t * Math.PI) * 0.8; // bounce height
+            currentY = groundY + bounce;
+            scale = 1.0 + bounce * 0.15;
+            opacity = 1;
+        } else {
+            // Phase 3: settled on ground
+            currentY = groundY;
+            scale = 1;
+            opacity = 1;
+            settled = true;
+        }
+
+        const pos3d = new Vector3(finalWorldPos.x, currentY, finalWorldPos.z);
+        const screen = worldToScreen(pos3d);
+        if (screen) {
+            coin.style.left = `${screen.x}px`;
+            coin.style.top = `${screen.y}px`;
+            coin.style.opacity = String(opacity);
+            coin.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(2)}) rotate(${(elapsed * 0.5) % 360}deg)`;
+        }
+
+        if (!settled) {
+            requestAnimationFrame(updateCoinPosition);
+        } else {
+            // Final position — keep updating with camera so coin stays on ground
+            coin.style.pointerEvents = 'auto';
+            coin.style.transform = 'translate(-50%, -50%) scale(1)';
+            // Track coin to 3D position while it lives
+            const trackId = setInterval(() => {
+                if (!coin.parentNode) { clearInterval(trackId); return; }
+                const s = worldToScreen(finalWorldPos);
+                if (s) { coin.style.left = `${s.x}px`; coin.style.top = `${s.y}px`; }
+            }, 50);
+        }
+    }
+    requestAnimationFrame(updateCoinPosition);
 
     // ── autocollect: oyuncu tarafı için otomatik topla ──
     if (autoCollectActive && gameMode !== 'twoplayer') {
