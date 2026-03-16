@@ -1,0 +1,568 @@
+/* ═══════════════════════════════════════════
+   HEADER BAR (menü ekranlarında)
+═══════════════════════════════════════════ */
+#app-header {
+  position: fixed;
+  top: 8px;
+  left: 0;
+  right: 0;
+  z-index: 3000;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 32px;
+  background: transparent;
+  pointer-events: all;
+}
+
+.header-logo-img {
+  height: 32px;
+  width: auto;
+  cursor: pointer;
+  filter: drop-shadow(0 0 8px rgba(255, 120, 0, 0.4));
+  transition: filter 0.2s ease;
+}
+
+.header-logo-img:hover {
+  filter: drop-shadow(0 0 16px rgba(255, 140, 0, 0.65));
+}
+
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-left: 40px;
+}
+
+.header-nav-item {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  transition: color 0.2s;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.header-nav-item:hover {
+  color: #fff;
+}
+
+.header-nav-item.active {
+  color: #fff;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.35);
+  padding-bottom: 2px;
+}
+
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ═══════════════════════════════════════════
+   LOADING SCREEN
+═══════════════════════════════════════════ */
+#loading-screen {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #0a0a0f;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════
+   ESC OVERLAY
+═══════════════════════════════════════════ */
+#esc-overlay.show {
+  display: flex !important;
+  animation: fadeInScale 0.25s ease;
+}
+
+.esc-btn {
+  width: 220px;
+  padding: 14px 0;
+  font-family: 'Cinzel', serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.esc-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ═══════════════════════════════════════════
+   MINI PLAYER (Sol Alt)
+═══════════════════════════════════════════ */
+#mini-player {
+  position: fixed;
+  bottom: 80px;
+  left: 20px;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#mini-player-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(10, 10, 15, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+}
+
+#mini-player-btn:hover {
+  border-color: rgba(255, 100, 30, 0.4);
+  background: rgba(255, 100, 30, 0.1);
+}
+
+#mini-player-btn.playing {
+  border-color: rgba(255, 100, 30, 0.5);
+}
+
+.mini-player-bars {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 14px;
+}
+
+.mini-player-bar {
+  width: 3px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 1px;
+  transition: background 0.2s;
+}
+
+#mini-player-btn.playing .mini-player-bar {
+  background: #ff6a30;
+  animation: miniBars 0.8s ease-in-out infinite;
+}
+
+.mini-player-bar:nth-child(1) {
+  height: 6px;
+  animation-delay: 0s;
+}
+
+.mini-player-bar:nth-child(2) {
+  height: 10px;
+  animation-delay: 0.15s;
+}
+
+.mini-player-bar:nth-child(3) {
+  height: 4px;
+  animation-delay: 0.3s;
+}
+
+/* Mini Player Panel */
+#mini-player-panel {
+  position: absolute;
+  bottom: 50px;
+  left: 0;
+  width: 280px;
+  background: rgba(10, 10, 15, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 16px;
+  display: none;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+#mini-player-panel.show {
+  display: block;
+  animation: panelSlideUp 0.2s ease;
+}
+
+.mp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.mp-title {
+  font-family: 'Cinzel', serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: rgba(255, 100, 30, 0.6);
+}
+
+.mp-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: color 0.2s;
+}
+
+.mp-close:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.mp-tracklist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.mp-track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mp-track:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mp-track.active {
+  background: rgba(255, 100, 30, 0.1);
+}
+
+.mp-track-icon {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.2);
+  width: 14px;
+}
+
+.mp-track.active .mp-track-icon {
+  display: none;
+}
+
+.mp-track-playing {
+  display: none;
+  gap: 2px;
+  align-items: flex-end;
+  height: 12px;
+}
+
+.mp-track.active .mp-track-playing {
+  display: flex;
+}
+
+.mp-track-bar {
+  width: 3px;
+  background: #ff6a30;
+  border-radius: 1px;
+  animation: miniBars 0.8s ease-in-out infinite;
+}
+
+.mp-track-bar:nth-child(1) {
+  height: 5px;
+  animation-delay: 0s;
+}
+
+.mp-track-bar:nth-child(2) {
+  height: 10px;
+  animation-delay: 0.15s;
+}
+
+.mp-track-bar:nth-child(3) {
+  height: 4px;
+  animation-delay: 0.3s;
+}
+
+.mp-track-name {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mp-track.active .mp-track-name {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.mp-controls {
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mp-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mp-volume-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  min-width: 65px;
+}
+
+#mp-bgm-volume,
+#mp-sfx-volume {
+  flex: 1;
+  height: 3px;
+  accent-color: #ff6a30;
+  cursor: pointer;
+}
+
+.mp-section-title {
+  font-family: 'Cinzel', serif;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: rgba(255, 100, 30, 0.5);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+/* ─── SCREEN BACK BTN (shared) ─── */
+.screen-back-btn {
+  position: fixed;
+  top: 14px;
+  left: 120px;
+  z-index: 3001;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.screen-back-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 200, 80, 0.28);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+#mode-back,
+#team-back {
+  top: auto;
+  bottom: 32px;
+  left: 32px;
+}
+
+#diff-back {
+  top: auto;
+  bottom: 32px;
+  left: 32px;
+}
+
+/* ─── DEBUG UI ─── */
+#debug-ui {
+  position: fixed;
+  bottom: 220px;
+  left: 10px;
+  z-index: 100;
+  pointer-events: none;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 10px;
+  font-family: monospace;
+  line-height: 1.6;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+#debug-ui .label {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+#debug-ui .val {
+  color: rgba(100, 255, 100, 0.5);
+}
+
+#debug-ui .val-cyan {
+  color: rgba(0, 220, 220, 0.4);
+}
+
+#debug-ui .val-orange {
+  color: rgba(255, 160, 0, 0.5);
+}
+
+#debug-ui .val-blue {
+  color: rgba(80, 160, 255, 0.5);
+}
+
+#debug-ui h3 {
+  display: none;
+}
+
+#debug-ui hr {
+  display: none;
+}
+
+/* ─── ACTIVE EFFECTS BAR ─── */
+#active-effects {
+  position: fixed;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 200;
+  pointer-events: none;
+  width: 190px;
+}
+
+.effect-entry {
+  background: rgba(10, 8, 20, 0.88);
+  border: 1px solid rgba(160, 80, 255, 0.45);
+  border-radius: 8px;
+  padding: 8px 10px 10px;
+  animation: effectSlideIn 0.25s ease;
+}
+
+.effect-entry.fading {
+  animation: effectFadeOut 0.35s ease forwards;
+}
+
+.effect-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #cc99ff;
+  margin-bottom: 3px;
+}
+
+.effect-desc {
+  font-size: 9px;
+  color: rgba(200, 180, 230, 0.65);
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.effect-timer-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.effect-timer-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #9933ff, #cc66ff);
+  border-radius: 2px;
+  transition: width 0.1s linear;
+}
+
+/* ─── ENEMY STATUS ─── */
+#enemy-status {
+  position: fixed;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  display: none;
+  background: rgba(0, 15, 50, 0.9);
+  border: 1px solid rgba(50, 130, 255, 0.4);
+  border-radius: 20px;
+  padding: 4px 16px;
+  color: #70b8ff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  animation: glow-pulse 1.2s ease-in-out infinite alternate;
+}
+
+/* ─── SURGE INDICATOR ─── */
+#surge-indicator {
+  position: fixed;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  display: none;
+  background: rgba(180, 120, 0, 0.15);
+  border: 1px solid rgba(255, 180, 0, 0.5);
+  border-radius: 20px;
+  padding: 3px 14px;
+  color: #ffcc00;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  animation: glow-pulse 0.8s ease-in-out infinite alternate;
+}
+
+/* ─── BOARD CONTROL METER ─── */
+#board-control-meter {
+  position: fixed;
+  top: 56px;
+  left: 0;
+  right: 0;
+  z-index: 299;
+  height: 4px;
+  pointer-events: none;
+}
+
+.bcm-bar-bg {
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.bcm-bar-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  transition: left 0.5s ease, width 0.5s ease;
+}

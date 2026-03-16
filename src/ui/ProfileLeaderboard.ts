@@ -152,11 +152,11 @@ export async function renderLocalLeaderboard(sortBy: 'wins' | 'weeklyWins' | 'be
             ? `<td class="lb-prize-cell">${e.weeklyPrize.toFixed(4)}</td>`
             : `<td class="lb-prize-none">—</td>`;
 
-        const gamesPlayed = e.wins + e.losses + e.draws;
+        const gamesPlayed = (e.onlineWins ?? 0) + (e.onlineLosses ?? 0) + (e.onlineDraws ?? 0);
         tr.innerHTML = `
             <td class="lb-rank ${e.rank <= 3 ? 'lb-rank-' + e.rank : ''}">${e.rank}</td>
             <td>${e.username}</td>
-            <td>${sortBy === 'weeklyWins' ? e.weeklyWins : e.wins}</td>
+            <td>${sortBy === 'weeklyWins' ? e.weeklyWins : (e.onlineWins ?? e.wins)}</td>
             <td>${gamesPlayed}</td>
             <td class="lb-winrate">${e.winRate}%</td>
             ${prizeCell}
@@ -244,8 +244,8 @@ export async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'b
             const e = entries[idx];
             const pClass = idx === 0 ? 'p1' : idx === 1 ? 'p2' : 'p3';
             const rankLabel = idx === 0 ? '1' : idx === 1 ? '2' : '3';
-            const gamesPlayed = e.wins + e.losses + e.draws;
-            const winVal = sortBy === 'weeklyWins' ? e.weeklyWins : e.wins;
+            const gamesPlayed = (e.onlineWins ?? 0) + (e.onlineLosses ?? 0) + (e.onlineDraws ?? 0);
+            const winVal = sortBy === 'weeklyWins' ? e.weeklyWins : (e.onlineWins ?? e.wins);
             const winLabel = sortBy === 'weeklyWins' ? t('lbPodiumWeek' as TransKey) : t('lbPodiumWins' as TransKey);
             const prizeHtml = e.weeklyPrize && e.weeklyPrize > 0
                 ? `<div class="lb-podium-prize">${e.weeklyPrize.toFixed(4)} AVAX</div>
@@ -297,8 +297,8 @@ export async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'b
         const tr = document.createElement('tr');
         if (isMe) tr.className = 'lb-me';
 
-        const gamesPlayed = e.wins + e.losses + e.draws;
-        const winVal = sortBy === 'weeklyWins' ? e.weeklyWins : e.wins;
+        const gamesPlayed = (e.onlineWins ?? 0) + (e.onlineLosses ?? 0) + (e.onlineDraws ?? 0);
+        const winVal = sortBy === 'weeklyWins' ? e.weeklyWins : (e.onlineWins ?? e.wins);
         const prize = e.weeklyPrize && e.weeklyPrize > 0
             ? `<span class="lb-prize-val">${e.weeklyPrize.toFixed(4)}</span>`
             : `<span class="lb-prize-empty">—</span>`;

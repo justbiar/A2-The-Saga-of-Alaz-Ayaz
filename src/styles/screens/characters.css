@@ -1,0 +1,420 @@
+/* ═══════════════════════════════════════════
+   CHARACTERS SCREEN — Draven-style 2K
+═══════════════════════════════════════════ */
+#characters-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  display: none;
+  overflow: hidden;
+  background: #0a0a0f;
+}
+
+/* Blurred background image (character art) */
+.cs-bg {
+  position: absolute;
+  inset: -40px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(30px) brightness(0.35) saturate(0.7);
+  z-index: 0;
+  transition: background-image 0.5s ease;
+}
+
+/* Noise overlay */
+#characters-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Outer frame border (like the Draven reference) */
+.cs-frame {
+  position: absolute;
+  inset: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.cs-frame::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 5%, rgba(255, 255, 255, 0.12) 50%, transparent 95%);
+}
+
+/* Main content layer */
+.cs-content {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── TOP NAV BAR ─── */
+.cs-topbar {
+  display: flex;
+  align-items: center;
+  padding: 18px 32px;
+  gap: 16px;
+  z-index: 10;
+}
+
+.cs-logo {
+  font-family: 'Cinzel', serif;
+  font-size: 16px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #ff7030, #ffdd60);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-right: auto;
+}
+
+/* ─── MAIN AREA: 3 zones ─── */
+.cs-main {
+  flex: 1;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+}
+
+/* LEFT: Name + class + description */
+.cs-info-left {
+  position: absolute;
+  left: 48px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  max-width: 380px;
+}
+
+.cs-class-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 4px;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  transition: all 0.3s;
+}
+
+.cs-class-badge.fire {
+  background: rgba(255, 77, 0, 0.15);
+  border: 1px solid rgba(255, 77, 0, 0.3);
+  color: #FF4D00;
+}
+
+.cs-class-badge.ice {
+  background: rgba(0, 229, 255, 0.12);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  color: #00E5FF;
+}
+
+.cs-class-badge.merc {
+  background: rgba(157, 78, 221, 0.12);
+  border: 1px solid rgba(157, 78, 221, 0.3);
+  color: #9D4EDD;
+}
+
+.cs-hero-name {
+  font-family: 'Cinzel', serif;
+  font-size: 72px;
+  font-weight: 900;
+  color: #F2F2F2;
+  letter-spacing: 8px;
+  line-height: 1;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.9));
+  margin-bottom: 24px;
+}
+
+.cs-hero-lore {
+  background: rgba(15, 17, 26, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 18px 20px;
+  max-width: 320px;
+}
+
+.cs-hero-lore p {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  color: #A1A1AA;
+  line-height: 1.7;
+  letter-spacing: 0.3px;
+}
+
+/* CENTER: Hero image */
+.cs-hero-center {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 480px;
+  height: 85vh;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.cs-hero-img {
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 80px rgba(0, 0, 0, 0.5));
+  transition: opacity 0.35s ease;
+}
+
+/* Faction glow behind hero */
+.cs-hero-glow {
+  position: absolute;
+  bottom: 5%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  opacity: 0.15;
+  filter: blur(100px);
+  z-index: 0;
+  transition: background 0.5s ease;
+}
+
+.cs-hero-glow.fire {
+  background: #FF4D00;
+}
+
+.cs-hero-glow.ice {
+  background: #00E5FF;
+}
+
+.cs-hero-glow.merc {
+  background: #9D4EDD;
+}
+
+/* Bottom vignette */
+.cs-main::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 25%;
+  background: linear-gradient(to top, #0a0a0f, transparent);
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* RIGHT: Abilities panel */
+.cs-abilities-right {
+  position: absolute;
+  right: 48px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 260px;
+}
+
+.cs-abilities-title {
+  font-family: 'Cinzel', serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #F2F2F2;
+  letter-spacing: 4px;
+  text-align: right;
+  margin-bottom: 20px;
+}
+
+/* Segmented stat bars (block style like reference) */
+.cs-seg-stat {
+  margin-bottom: 16px;
+}
+
+.cs-seg-stat-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  color: #A1A1AA;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-align: right;
+  margin-bottom: 5px;
+}
+
+.cs-seg-bar {
+  display: flex;
+  gap: 3px;
+  justify-content: flex-end;
+}
+
+.cs-seg-block {
+  width: 18px;
+  height: 12px;
+  border-radius: 2px;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.cs-seg-block.empty {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.cs-seg-block.filled.fire {
+  background: #FF4D00;
+  box-shadow: 0 0 6px rgba(255, 77, 0, 0.4);
+}
+
+.cs-seg-block.filled.ice {
+  background: #00E5FF;
+  box-shadow: 0 0 6px rgba(0, 229, 255, 0.4);
+}
+
+.cs-seg-block.filled.merc {
+  background: #9D4EDD;
+  box-shadow: 0 0 6px rgba(157, 78, 221, 0.4);
+}
+
+/* Ability detail box */
+.cs-ability-box {
+  margin-top: 24px;
+  background: rgba(15, 17, 26, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 14px 16px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.cs-ability-box.fire {
+  border-color: rgba(255, 77, 0, 0.2);
+  box-shadow: 0 0 16px rgba(255, 77, 0, 0.06);
+}
+
+.cs-ability-box.ice {
+  border-color: rgba(0, 229, 255, 0.2);
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.06);
+}
+
+.cs-ability-box.merc {
+  border-color: rgba(157, 78, 221, 0.2);
+  box-shadow: 0 0 16px rgba(157, 78, 221, 0.06);
+}
+
+.cs-ability-box-title {
+  font-family: 'Cinzel', serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: #F2F2F2;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.cs-ability-box-desc {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: #A1A1AA;
+  line-height: 1.5;
+}
+
+/* ─── BOTTOM BAR: Carousel + buttons ─── */
+.cs-bottom {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  padding: 0 32px 20px;
+  gap: 16px;
+}
+
+.cs-bottom-left {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+
+.cs-bottom-left:hover {
+  color: #fff;
+}
+
+/* Carousel */
+.cs-carousel {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.cs-carousel-item {
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  opacity: 0.35;
+  filter: grayscale(1);
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.cs-carousel-item:hover {
+  opacity: 0.8;
+  filter: grayscale(0);
+}
+
+.cs-carousel-item.active {
+  opacity: 1;
+  filter: grayscale(0);
+  transform: scale(1.08);
+  z-index: 1;
+}
+
+.cs-carousel-item:not(.active) {
+  z-index: 2;
+}
+
+.cs-carousel-item.active.fire {
+  border-color: #FF4D00;
+  box-shadow: 0 0 14px rgba(255, 77, 0, 0.45);
+}
+
+.cs-carousel-item.active.ice {
+  border-color: #00E5FF;
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.45);
+}
+
+.cs-carousel-item.active.merc {
+  border-color: #9D4EDD;
+  box-shadow: 0 0 14px rgba(157, 78, 221, 0.45);
+}
+
+.cs-carousel-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+}

@@ -1,0 +1,310 @@
+/* ═══════════════════════════════════════════
+   STORY SCREEN
+═══════════════════════════════════════════ */
+#story-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  background: #08060f;
+  overflow-y: auto;
+  padding: 72px 20px 100px;
+}
+
+/* ── Bölüm: tam genişlik sinematik blok ── */
+.story-act {
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  min-height: 260px;
+  position: relative;
+}
+
+.story-act:last-of-type {
+  border-bottom: none;
+}
+
+/* Metin tarafı */
+.story-act-text {
+  flex: 1;
+  padding: 48px 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+/* Görsel tarafı */
+.story-act-img {
+  width: 260px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.story-act-img img {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 130%;
+  object-fit: cover;
+  object-position: top center;
+  filter: saturate(0.7) brightness(0.55);
+  transition: filter 0.4s;
+}
+
+.story-act:hover .story-act-img img {
+  filter: saturate(0.95) brightness(0.72);
+}
+
+/* görsel soldan soluklaşır */
+.story-act-img::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(to right, #08060f 0%, transparent 55%);
+  pointer-events: none;
+}
+
+/* görsel alttan soluklaşır */
+.story-act-img::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(to top, #08060f 0%, transparent 40%);
+  pointer-events: none;
+}
+
+/* İmge sağda olunca fade yönü tersine döner */
+.story-act.img-right .story-act-img {
+  order: 2;
+}
+
+.story-act.img-right .story-act-img::before {
+  background: linear-gradient(to left, #08060f 0%, transparent 55%);
+}
+
+.story-act.img-right .story-act-text {
+  order: 1;
+}
+
+/* İki karakter gösterilince yan yana */
+.story-act-img.dual {
+  width: 320px;
+  display: flex;
+}
+
+.story-act-img.dual img {
+  width: 50%;
+  position: relative;
+  height: 100%;
+}
+
+/* Renk şeridi — sol kenar */
+.story-act-text::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  border-radius: 1px;
+}
+
+.story-act.fire .story-act-text::before {
+  background: #FF4D00;
+  box-shadow: 0 0 12px rgba(255, 77, 0, 0.5);
+}
+
+.story-act.ice .story-act-text::before {
+  background: #00E5FF;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
+}
+
+.story-act.earth .story-act-text::before {
+  background: #7fbb3a;
+}
+
+.story-act.dark .story-act-text::before {
+  background: #9340dd;
+  box-shadow: 0 0 12px rgba(147, 64, 221, 0.4);
+}
+
+.story-act.gold .story-act-text::before {
+  background: #f0c040;
+}
+
+.story-act.blood .story-act-text::before {
+  background: #c82020;
+}
+
+.story-act-num {
+  font-family: 'Cinzel', serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  opacity: 0.4;
+}
+
+.story-act.fire .story-act-num {
+  color: #FF8050;
+}
+
+.story-act.ice .story-act-num {
+  color: #60D8FF;
+}
+
+.story-act.earth .story-act-num {
+  color: #9fcc60;
+}
+
+.story-act.dark .story-act-num {
+  color: #c080ff;
+}
+
+.story-act.gold .story-act-num {
+  color: #f0c040;
+}
+
+.story-act.blood .story-act-num {
+  color: #e04040;
+}
+
+.story-act-title {
+  font-family: 'Cinzel', serif;
+  font-size: clamp(16px, 2.2vw, 22px);
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+  line-height: 1.3;
+}
+
+.story-act-body {
+  font-size: 13px;
+  line-height: 1.9;
+  color: rgba(255, 255, 255, 0.42);
+  max-width: 480px;
+}
+
+.story-act-body strong {
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+}
+
+.story-act-body em {
+  color: rgba(255, 255, 255, 0.62);
+  font-style: italic;
+}
+
+/* ── Başlık (en üst) ── */
+.story-header {
+  width: 100%;
+  max-width: 900px;
+  padding: 40px 40px 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 0;
+}
+
+.story-header-eyebrow {
+  font-size: 9px;
+  letter-spacing: 5px;
+  color: rgba(255, 255, 255, 0.2);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.story-header-title {
+  font-family: 'Cinzel', serif;
+  font-size: clamp(24px, 4vw, 42px);
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.88);
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+/* ── Son kapanış satırı ── */
+.story-final {
+  width: 100%;
+  max-width: 900px;
+  padding: 56px 40px 0;
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+}
+
+.story-final-line {
+  flex: 1;
+  font-family: 'Cinzel', serif;
+  font-size: 13px;
+  line-height: 2;
+  color: rgba(255, 255, 255, 0.22);
+  letter-spacing: 1px;
+  white-space: pre-line;
+}
+
+.story-final-line.f {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.story-final-line.i {
+  color: rgba(255, 255, 255, 0.24);
+}
+
+@media (max-width: 640px) {
+  .story-act {
+    flex-direction: column;
+  }
+
+  .story-act-img,
+  .story-act-img.dual {
+    width: 100%;
+    height: 180px;
+  }
+
+  .story-act-img img {
+    height: 100%;
+    object-position: center 20%;
+  }
+
+  .story-act-img::before {
+    background: linear-gradient(to bottom, #08060f 0%, transparent 40%) !important;
+  }
+
+  .story-act-img::after {
+    display: none;
+  }
+
+  .story-act.img-right .story-act-img {
+    order: 0;
+  }
+
+  .story-act.img-right .story-act-text {
+    order: 1;
+  }
+
+  .story-act-text {
+    padding: 28px 20px;
+  }
+
+  .story-header {
+    padding: 28px 20px 24px;
+  }
+
+  .story-final {
+    flex-direction: column;
+    gap: 16px;
+    padding: 36px 20px 0;
+  }
+}

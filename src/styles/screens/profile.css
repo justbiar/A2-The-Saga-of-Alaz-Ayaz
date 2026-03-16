@@ -1,0 +1,522 @@
+/* ═══════════════════════════════════════════
+   PROFILE SCREEN
+═══════════════════════════════════════════ */
+#profile-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  background: #08060f;
+  overflow-y: auto;
+  padding: 80px 20px 100px;
+}
+
+.pfs-header {
+  width: 100%;
+  max-width: 760px;
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+.pfs-eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: rgba(232, 65, 66, 0.45);
+  margin-bottom: 10px;
+}
+
+.pfs-title {
+  font-family: 'Cinzel', serif;
+  font-size: clamp(26px, 4.5vw, 44px);
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: #fff;
+  text-shadow: 0 0 40px rgba(232, 65, 66, 0.2);
+}
+
+/* Not connected state */
+.pfs-not-connected {
+  width: 100%;
+  max-width: 440px;
+  text-align: center;
+  padding: 60px 32px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.pfs-not-connected-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.pfs-connect-btn {
+  padding: 12px 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(232, 65, 66, 0.4);
+  background: rgba(232, 65, 66, 0.1);
+  color: #e84142;
+  font-family: 'Cinzel', serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pfs-connect-btn:hover {
+  background: rgba(232, 65, 66, 0.2);
+}
+
+/* Avatar card */
+.pfs-card {
+  width: 100%;
+  max-width: 760px;
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 0;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.pfs-avatar-col {
+  background: linear-gradient(170deg, rgba(80, 0, 160, 0.15), rgba(20, 0, 40, 0.4));
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 24px;
+  gap: 14px;
+}
+
+.pfs-avatar-img {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 2px solid rgba(232, 65, 66, 0.35);
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pfs-avatar-name {
+  font-family: 'Cinzel', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.pfs-avatar-addr {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.pfs-info-col {
+  padding: 32px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.pfs-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.pfs-stat {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 14px 8px;
+  text-align: center;
+}
+
+.pfs-stat-val {
+  font-family: 'Cinzel', serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.pfs-stat-lbl {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.pfs-stat.wins .pfs-stat-val {
+  color: #55ff99;
+}
+
+.pfs-stat.losses .pfs-stat-val {
+  color: #ff5555;
+}
+
+.pfs-stat.draws .pfs-stat-val {
+  color: #ffcc44;
+}
+
+.pfs-section-label {
+  font-family: 'Cinzel', serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: rgba(232, 65, 66, 0.45);
+  margin-top: 4px;
+}
+
+.pfs-stat.avax-won .pfs-stat-val {
+  color: #e84142;
+}
+
+/* Rename row */
+.pfs-rename-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pfs-rename-input {
+  flex: 1;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 12px;
+  outline: none;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.5px;
+  transition: border-color 0.2s;
+}
+
+.pfs-rename-input:focus {
+  border-color: rgba(255, 140, 0, 0.4);
+}
+
+.pfs-rename-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 140, 0, 0.4);
+  background: rgba(255, 140, 0, 0.08);
+  color: #ffaa50;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.2s;
+}
+
+.pfs-rename-btn:hover {
+  background: rgba(255, 140, 0, 0.18);
+}
+
+/* Register form */
+.pfs-register-wrap {
+  width: 100%;
+  max-width: 440px;
+  border-radius: 20px;
+  border: 1px solid rgba(232, 65, 66, 0.2);
+  background: rgba(232, 65, 66, 0.03);
+  padding: 36px 32px;
+}
+
+.pfs-register-title {
+  font-family: 'Cinzel', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 2px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.pfs-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pfs-form label {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.pfs-form input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.pfs-form input:focus {
+  border-color: rgba(232, 65, 66, 0.4);
+}
+
+.pfs-form-avatar-preview {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2px solid rgba(232, 65, 66, 0.3);
+  object-fit: cover;
+  display: block;
+  margin: 4px auto;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pfs-register-btn {
+  padding: 12px 0;
+  border-radius: 10px;
+  border: 1px solid rgba(232, 65, 66, 0.4);
+  background: rgba(232, 65, 66, 0.12);
+  color: #e84142;
+  font-family: 'Cinzel', serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+
+.pfs-register-btn:hover {
+  background: rgba(232, 65, 66, 0.25);
+}
+
+.pfs-register-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════
+   PROFILE MODAL
+═══════════════════════════════════════════ */
+#profile-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(14px);
+}
+
+#profile-modal.show {
+  display: flex;
+  animation: fadeInScale 0.3s ease;
+}
+
+.profile-panel {
+  width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: linear-gradient(170deg, rgba(18, 8, 42, 0.98), rgba(8, 3, 22, 0.98));
+  border: 1px solid rgba(140, 90, 255, 0.3);
+  border-radius: 16px;
+  padding: 28px 24px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(120, 60, 255, 0.15);
+}
+
+.profile-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.profile-close:hover {
+  color: #fff;
+}
+
+.profile-title {
+  font-family: 'Cinzel', serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #e84142;
+  letter-spacing: 2px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* Register form */
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.profile-form label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.profile-form input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.profile-form input:focus {
+  border-color: rgba(232, 65, 66, 0.5);
+}
+
+.profile-form .avatar-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid rgba(232, 65, 66, 0.3);
+  object-fit: cover;
+  display: block;
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.profile-btn {
+  padding: 11px 0;
+  border-radius: 10px;
+  border: 1px solid rgba(232, 65, 66, 0.4);
+  background: rgba(232, 65, 66, 0.12);
+  color: #e84142;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+
+.profile-btn:hover {
+  background: rgba(232, 65, 66, 0.25);
+}
+
+.profile-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Profile view (after registered) */
+.profile-info {
+  text-align: center;
+}
+
+.profile-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid rgba(232, 65, 66, 0.4);
+  object-fit: cover;
+  display: block;
+  margin: 0 auto 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.profile-username {
+  font-family: 'Cinzel', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.profile-address {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+}
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.profile-stat-box {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 4px;
+  text-align: center;
+}
+
+.profile-stat-val {
+  font-family: 'Cinzel', serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.profile-stat-label {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.profile-stat-box.wins .profile-stat-val {
+  color: #55ff99;
+}
+
+.profile-stat-box.losses .profile-stat-val {
+  color: #ff5555;
+}
+
+.profile-stat-box.draws .profile-stat-val {
+  color: #ffcc44;
+}
+
+/* Leaderboard section title (in profile modal) */
+.profile-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin: 16px 0 10px;
+  text-align: center;
+}

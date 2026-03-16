@@ -4,6 +4,7 @@
 
 import { ctx } from '../game/GameContext';
 import { t } from '../i18n';
+import { showScreen } from './ScreenRouter';
 import { leaderboardService } from '../chain/LeaderboardService';
 import { profileService } from '../chain/ProfileService';
 import { kiteService } from '../ai/KiteService';
@@ -106,6 +107,15 @@ export function showWinScreen(sys: WinConditionSystem): void {
         };
         winHomeBtn.onmouseenter = () => { (winHomeBtn as HTMLElement).style.color = '#fff'; (winHomeBtn as HTMLElement).style.borderColor = 'rgba(255,255,255,0.3)'; };
         winHomeBtn.onmouseleave = () => { (winHomeBtn as HTMLElement).style.color = ''; (winHomeBtn as HTMLElement).style.borderColor = ''; };
+    }
+
+    const winRestartBtn = document.getElementById('win-restart-btn');
+    if (winRestartBtn) {
+        winRestartBtn.onclick = () => {
+            winOverlay.classList.remove('show');
+            (window as any).__cleanupGame?.();
+            showScreen('team-select');
+        };
     }
 
     winOverlay.classList.add('show');

@@ -1,0 +1,39 @@
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg-deep: #03020c;
+  --fire: #ff5520;
+  --fire-glow: rgba(255, 70, 0, 0.55);
+  --ice: #38aaff;
+  --ice-glow: rgba(40, 140, 255, 0.5);
+  --gold: #ffc94d;
+  --gold-dim: rgba(255, 185, 50, 0.35);
+  --purple: #9b5fe6;
+  --glass: rgba(255, 255, 255, 0.035);
+  --glass-hover: rgba(255, 255, 255, 0.065);
+  --glass-border: rgba(255, 255, 255, 0.09);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  overflow: hidden;
+  background: var(--bg-deep);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+#renderCanvas {
+  width: 100vw;
+  height: 100vh;
+  touch-action: none;
+  outline: none;
+  display: block;
+}
