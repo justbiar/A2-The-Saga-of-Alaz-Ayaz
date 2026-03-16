@@ -1770,7 +1770,7 @@
       z-index: 0;
       top: 0;
       height: 42%;
-      background: url('assets/images/textures/ice_color.jpg') center top / cover no-repeat;
+      background: url('assets/images/textures/ice_color.webp') center top / cover no-repeat;
       filter: blur(18px) brightness(0.18) saturate(1.4);
       mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.9) 40%, transparent 100%);
       -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.9) 40%, transparent 100%);
@@ -1785,7 +1785,7 @@
       z-index: 0;
       bottom: 0;
       height: 62%;
-      background: url('assets/images/textures/lava.jpg') center bottom / cover no-repeat;
+      background: url('assets/images/textures/lava.webp') center bottom / cover no-repeat;
       filter: blur(22px) brightness(0.12) saturate(1.6);
       mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9) 40%, transparent 100%);
       -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9) 40%, transparent 100%);
@@ -2603,6 +2603,32 @@
     .wpb-inner {
       padding: 14px 16px;
       text-align: center;
+    }
+
+    .wpb-meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .wpb-season {
+      font-family: 'Inter', sans-serif;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(255, 185, 50, 0.4);
+    }
+    .wpb-countdown {
+      font-family: 'Inter', sans-serif;
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: rgba(255, 200, 80, 0.55);
+      border: 1px solid rgba(255, 185, 50, 0.18);
+      border-radius: 3px;
+      padding: 1px 5px;
     }
 
     .wpb-title {
@@ -3775,7 +3801,7 @@
     /* ── PODIUM — top 3 cards ── */
     .lb-podium {
       width: 100%;
-      max-width: 960px;
+      max-width: 860px;
       display: flex;
       align-items: flex-end;
       justify-content: center;
@@ -3789,15 +3815,15 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 28px 20px 24px;
-      border-radius: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.07);
-      background: rgba(255, 255, 255, 0.025);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      padding: 24px 18px 20px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      background: rgba(20, 18, 30, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       position: relative;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
-      width: 200px;
+      width: 205px;
       overflow: hidden;
     }
 
@@ -3805,92 +3831,105 @@
       content: '';
       position: absolute;
       inset: 0;
-      border-radius: 20px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 40%);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 50%);
       pointer-events: none;
     }
 
     .lb-podium-card:hover {
       transform: translateY(-4px);
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
     }
 
     /* 1st place — bigger + gold border */
     .lb-podium-card.p1 {
-      width: 230px;
-      padding: 36px 24px 28px;
-      border-color: rgba(255, 200, 50, 0.3);
-      background: linear-gradient(170deg, rgba(255, 200, 50, 0.06) 0%, rgba(255, 255, 255, 0.02) 50%, transparent 100%);
-      box-shadow: 0 0 60px rgba(255, 185, 50, 0.08);
+      width: 238px;
+      padding: 28px 22px 22px;
+      border-color: rgba(255, 185, 50, 0.4);
+      background: rgba(20, 17, 9, 0.92);
+      box-shadow: 0 0 50px rgba(255, 185, 50, 0.12), 0 0 0 1px rgba(255, 185, 50, 0.18);
       order: 2;
+      z-index: 2;
     }
 
-    /* 2nd place — silver */
+    /* 2nd place — silver — on the left, slightly lower */
     .lb-podium-card.p2 {
-      border-color: rgba(192, 210, 230, 0.2);
-      background: linear-gradient(170deg, rgba(192, 210, 230, 0.04) 0%, rgba(255, 255, 255, 0.02) 50%, transparent 100%);
+      border-color: rgba(180, 195, 215, 0.2);
+      background: rgba(16, 16, 26, 0.88);
       order: 1;
-      margin-bottom: 16px;
+      margin-bottom: 30px;
     }
 
-    /* 3rd place — bronze */
+    /* 3rd place — bronze — on the right, slightly lower */
     .lb-podium-card.p3 {
-      border-color: rgba(205, 140, 60, 0.2);
-      background: linear-gradient(170deg, rgba(205, 140, 60, 0.04) 0%, rgba(255, 255, 255, 0.02) 50%, transparent 100%);
+      border-color: rgba(160, 100, 40, 0.22);
+      background: rgba(16, 14, 12, 0.88);
       order: 3;
-      margin-bottom: 16px;
+      margin-bottom: 30px;
     }
 
     .lb-podium-rank {
       font-family: 'Cinzel', serif;
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 900;
-      width: 36px;
-      height: 36px;
+      width: 40px;
+      height: 40px;
       display: flex;
       align-items: center;
       justify-content: center;
       border-radius: 50%;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
+      background: rgba(180, 180, 180, 0.12);
+      border: 2px solid rgba(180, 180, 180, 0.25);
+      color: rgba(200, 200, 200, 0.7);
     }
 
     .p1 .lb-podium-rank {
-      font-size: 18px;
-      width: 44px;
-      height: 44px;
-      background: linear-gradient(135deg, rgba(255, 200, 50, 0.25), rgba(255, 150, 0, 0.15));
-      border: 2px solid rgba(255, 200, 50, 0.5);
+      font-size: 20px;
+      width: 48px;
+      height: 48px;
+      background: radial-gradient(circle, rgba(255, 200, 50, 0.2) 0%, rgba(180, 100, 0, 0.08) 100%);
+      border: 2px solid rgba(255, 185, 50, 0.6);
       color: #ffc94d;
-      box-shadow: 0 0 24px rgba(255, 185, 50, 0.3);
+      box-shadow: 0 0 20px rgba(255, 185, 50, 0.25);
     }
 
     .p2 .lb-podium-rank {
-      background: linear-gradient(135deg, rgba(192, 210, 230, 0.2), rgba(160, 180, 200, 0.1));
-      border: 2px solid rgba(192, 210, 230, 0.35);
-      color: #c0d2e6;
+      background: rgba(160, 180, 200, 0.1);
+      border: 2px solid rgba(180, 195, 215, 0.35);
+      color: #b0c4d8;
     }
 
     .p3 .lb-podium-rank {
-      background: linear-gradient(135deg, rgba(205, 140, 60, 0.2), rgba(180, 120, 50, 0.1));
-      border: 2px solid rgba(205, 140, 60, 0.35);
-      color: #cd8c3c;
+      background: rgba(180, 120, 60, 0.1);
+      border: 2px solid rgba(180, 120, 60, 0.35);
+      color: #b87840;
     }
 
     .lb-podium-avatar {
-      width: 56px;
-      height: 56px;
+      width: 58px;
+      height: 58px;
       border-radius: 50%;
       object-fit: cover;
-      border: 2px solid rgba(255, 255, 255, 0.1);
-      background: rgba(255, 255, 255, 0.05);
+      border: 2.5px solid rgba(255, 255, 255, 0.12);
+      background: rgba(30, 25, 40, 0.8);
       margin-bottom: 12px;
+      padding: 4px;
     }
 
     .p1 .lb-podium-avatar {
-      width: 72px;
-      height: 72px;
-      border-color: rgba(255, 200, 50, 0.35);
-      box-shadow: 0 0 30px rgba(255, 185, 50, 0.15);
+      width: 74px;
+      height: 74px;
+      border-color: rgba(255, 185, 50, 0.5);
+      box-shadow: 0 0 24px rgba(255, 185, 50, 0.2);
+    }
+
+    .p2 .lb-podium-avatar {
+      border-color: rgba(180, 195, 215, 0.4);
+    }
+
+    .p3 .lb-podium-avatar {
+      border-color: rgba(180, 120, 60, 0.4);
     }
 
     .lb-podium-name {
@@ -3898,7 +3937,7 @@
       font-size: 14px;
       font-weight: 700;
       color: #fff;
-      margin-bottom: 2px;
+      margin-bottom: 3px;
       text-align: center;
       max-width: 100%;
       overflow: hidden;
@@ -3912,16 +3951,18 @@
 
     .lb-podium-addr {
       font-size: 9px;
-      color: rgba(255, 255, 255, 0.25);
+      color: rgba(255, 255, 255, 0.22);
       letter-spacing: 0.5px;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
     }
 
     .lb-podium-stats {
       display: flex;
-      gap: 16px;
-      align-items: center;
+      gap: 20px;
+      align-items: flex-start;
       margin-bottom: 10px;
+      width: 100%;
+      justify-content: center;
     }
 
     .lb-podium-stat {
@@ -3932,32 +3973,44 @@
 
     .lb-podium-stat-val {
       font-family: 'Cinzel', serif;
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 900;
-      color: #55ff99;
+      color: #fff;
+      line-height: 1.1;
     }
 
     .p1 .lb-podium-stat-val {
-      font-size: 22px;
+      font-size: 26px;
+      color: #ffd060;
+    }
+
+    .p2 .lb-podium-stat-val {
+      color: #b8ccd8;
+    }
+
+    .p3 .lb-podium-stat-val {
+      color: #c8905a;
     }
 
     .lb-podium-stat-lbl {
-      font-size: 8px;
+      font-size: 7.5px;
       font-weight: 700;
       letter-spacing: 1.5px;
       text-transform: uppercase;
-      color: rgba(255, 255, 255, 0.3);
-      margin-top: 2px;
+      color: rgba(255, 255, 255, 0.28);
+      margin-top: 3px;
     }
 
     .lb-podium-winrate {
       font-size: 10px;
       font-weight: 700;
-      color: rgba(255, 255, 255, 0.35);
-      padding: 3px 10px;
+      color: rgba(255, 255, 255, 0.4);
+      padding: 4px 12px;
       border-radius: 20px;
       background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
     }
 
     .lb-podium-prize {
@@ -3970,9 +4023,46 @@
     }
 
     .lb-podium-prize-lbl {
-      font-size: 8px;
+      font-size: 7px;
       letter-spacing: 1px;
       color: rgba(255, 185, 50, 0.4);
+      text-transform: uppercase;
+    }
+
+    .lb-podium-avx {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 185, 50, 0.28);
+      background: rgba(255, 185, 50, 0.05);
+      text-align: center;
+    }
+
+    .lb-podium-avx-val {
+      font-family: 'Cinzel', serif;
+      font-size: 17px;
+      font-weight: 900;
+      color: #ffc94d;
+      text-shadow: 0 0 14px rgba(255, 185, 50, 0.4);
+      line-height: 1.2;
+    }
+
+    .p1 .lb-podium-avx {
+      border-color: rgba(255, 185, 50, 0.4);
+      background: rgba(255, 185, 50, 0.07);
+    }
+
+    .p1 .lb-podium-avx-val {
+      font-size: 22px;
+      text-shadow: 0 0 20px rgba(255, 185, 50, 0.55);
+    }
+
+    .lb-podium-avx-lbl {
+      font-size: 7px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: rgba(255, 185, 50, 0.4);
+      margin-top: 2px;
       text-transform: uppercase;
     }
 
@@ -3982,52 +4072,99 @@
       padding: 20px 0;
     }
 
-    /* ── Prize Pool Compact Banner ── */
+    /* ── Prize Pool Banner ── */
     .lb-prize-pool {
       width: 100%;
       max-width: 960px;
       margin-bottom: 28px;
       border-radius: 14px;
-      border: 1px solid rgba(255, 185, 50, 0.15);
-      background: linear-gradient(160deg, rgba(24, 16, 2, 0.85), rgba(10, 6, 0, 0.95));
-      padding: 18px 28px;
+      border: 1px solid rgba(232, 65, 66, 0.25);
+      background: linear-gradient(160deg, rgba(40, 8, 8, 0.9), rgba(12, 4, 4, 0.95));
+      padding: 32px 36px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: 20px;
       flex-wrap: wrap;
       position: relative;
       z-index: 1;
+      box-shadow: 0 0 80px rgba(232, 65, 66, 0.1);
     }
 
     .lb-pp-left {
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 4px;
     }
 
+    .lb-pp-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .lb-pp-season {
+      font-family: 'Inter', sans-serif;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(232, 65, 66, 0.55);
+    }
+    .lb-pp-countdown {
+      font-family: 'Inter', sans-serif;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: rgba(255, 200, 80, 0.6);
+      border: 1px solid rgba(255, 200, 80, 0.2);
+      border-radius: 4px;
+      padding: 2px 7px;
+    }
+    .lb-pp-total-distributed {
+      font-family: 'Inter', sans-serif;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.2);
+      margin-top: 6px;
+    }
+    .lb-pp-total-distributed span {
+      color: rgba(255, 200, 80, 0.5);
+      font-family: 'Cinzel', serif;
+    }
     .lb-pp-label {
       font-family: 'Inter', sans-serif;
       font-size: 9px;
       font-weight: 700;
       letter-spacing: 4px;
       text-transform: uppercase;
-      color: rgba(255, 185, 50, 0.5);
+      color: rgba(232, 65, 66, 0.6);
     }
 
     .lb-pp-amount {
       font-family: 'Cinzel', serif;
-      font-size: 32px;
+      font-size: 56px;
       font-weight: 900;
-      color: #ffc94d;
-      text-shadow: 0 0 20px rgba(255, 185, 50, 0.4);
+      color: #e84142;
+      text-shadow: 0 0 40px rgba(232, 65, 66, 0.7), 0 0 80px rgba(232, 65, 66, 0.3);
       line-height: 1;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .lb-pp-amount .lb-pp-avax-icon {
+      width: 42px;
+      height: 42px;
+      opacity: 0.85;
     }
 
     .lb-pp-amount span {
-      font-size: 14px;
-      color: rgba(255, 185, 50, 0.45);
-      margin-left: 6px;
+      font-size: inherit;
+      color: #e84142;
+      text-shadow: 0 0 40px rgba(232, 65, 66, 0.8), 0 0 80px rgba(232, 65, 66, 0.4);
     }
 
     .lb-pp-note {
@@ -4037,9 +4174,85 @@
       letter-spacing: 0.5px;
     }
 
-    .lb-pp-podium {
-      display: none;
+    .lb-pp-right {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
     }
+
+    .lb-pp-prize-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 18px 28px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.025);
+      min-width: 120px;
+    }
+
+    .lb-pp-prize-box .lb-pp-prize-rank {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: rgba(255, 255, 255, 0.3);
+      margin-bottom: 4px;
+    }
+
+    .lb-pp-prize-box .lb-pp-prize-val {
+      font-family: 'Cinzel', serif;
+      font-size: 20px;
+      font-weight: 900;
+      color: #fff;
+      line-height: 1.2;
+    }
+
+    .lb-pp-prize-box .lb-pp-prize-unit {
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: rgba(255, 255, 255, 0.25);
+      margin-top: 2px;
+    }
+
+    /* 1. — Altin */
+    .lb-pp-prize-box:nth-child(1) {
+      border-color: rgba(255, 208, 96, 0.4);
+      background: rgba(255, 208, 96, 0.06);
+      padding: 18px 32px;
+    }
+    .lb-pp-prize-box:nth-child(1) .lb-pp-prize-rank { color: rgba(255, 208, 96, 0.55); }
+    .lb-pp-prize-box:nth-child(1) .lb-pp-prize-val {
+      color: #ffd060;
+      font-size: 26px;
+      text-shadow: 0 0 20px rgba(255, 208, 96, 0.5);
+    }
+    .lb-pp-prize-box:nth-child(1) .lb-pp-prize-unit { color: rgba(255, 208, 96, 0.45); }
+
+    /* 2. — Gumus */
+    .lb-pp-prize-box:nth-child(2) {
+      border-color: rgba(184, 204, 216, 0.3);
+      background: rgba(184, 204, 216, 0.04);
+    }
+    .lb-pp-prize-box:nth-child(2) .lb-pp-prize-rank { color: rgba(184, 204, 216, 0.55); }
+    .lb-pp-prize-box:nth-child(2) .lb-pp-prize-val {
+      color: #b8ccd8;
+      text-shadow: 0 0 14px rgba(184, 204, 216, 0.3);
+    }
+    .lb-pp-prize-box:nth-child(2) .lb-pp-prize-unit { color: rgba(184, 204, 216, 0.4); }
+
+    /* 3. — Bronz */
+    .lb-pp-prize-box:nth-child(3) {
+      border-color: rgba(200, 144, 90, 0.3);
+      background: rgba(200, 144, 90, 0.04);
+    }
+    .lb-pp-prize-box:nth-child(3) .lb-pp-prize-rank { color: rgba(200, 144, 90, 0.55); }
+    .lb-pp-prize-box:nth-child(3) .lb-pp-prize-val {
+      color: #c8905a;
+      text-shadow: 0 0 14px rgba(200, 144, 90, 0.3);
+    }
+    .lb-pp-prize-box:nth-child(3) .lb-pp-prize-unit { color: rgba(200, 144, 90, 0.4); }
 
     /* ── Sort tabs ── */
     .lb-sort-tabs {
@@ -4050,6 +4263,7 @@
       margin-bottom: 16px;
       position: relative;
       z-index: 1;
+      flex-shrink: 0;
     }
 
     .lb-sort-tab {
@@ -4091,6 +4305,8 @@
       overflow: hidden;
       position: relative;
       z-index: 1;
+      flex-shrink: 0;
+      min-height: 60px;
     }
 
     .lb-full-table {
@@ -4298,10 +4514,20 @@
 
       .lb-prize-pool {
         padding: 16px 20px;
+        flex-direction: column;
+        align-items: flex-start;
       }
 
       .lb-pp-amount {
         font-size: 24px;
+      }
+
+      .lb-pp-right {
+        width: 100%;
+      }
+
+      .lb-pp-prize-box {
+        flex: 1;
       }
     }
 
@@ -4478,6 +4704,20 @@
 
     .pfs-stat.draws .pfs-stat-val {
       color: #ffcc44;
+    }
+
+    .pfs-section-label {
+      font-family: 'Cinzel', serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(232, 65, 66, 0.45);
+      margin-top: 4px;
+    }
+
+    .pfs-stat.avax-won .pfs-stat-val {
+      color: #e84142;
     }
 
     /* Rename row */
@@ -4965,7 +5205,7 @@
       content: '';
       position: absolute;
       inset: 0;
-      background: url('/assets/images/characters/korhan.png') center/contain no-repeat;
+      background: url('/assets/images/characters/korhan.webp') center/contain no-repeat;
       opacity: 0.25;
       filter: blur(0px);
       pointer-events: none;
@@ -4988,7 +5228,7 @@
       content: '';
       position: absolute;
       inset: 0;
-      background: url('/assets/images/characters/ayaz.png') center/contain no-repeat;
+      background: url('/assets/images/characters/ayaz.webp') center/contain no-repeat;
       opacity: 0.25;
       filter: blur(0px);
       pointer-events: none;
@@ -6437,7 +6677,7 @@
 <body>
   <!-- ═══ HEADER BAR ═══ -->
   <div id="app-header">
-    <img class="header-logo-img" id="header-logo" src="/assets/images/logo.png" alt="A2" />
+    <img class="header-logo-img" id="header-logo" src="/assets/images/logo.webp" alt="A2" />
     <nav class="header-nav">
       <button class="header-nav-item" id="nav-characters-header" data-i18n="characters">KARAKTERLER</button>
       <button class="header-nav-item" id="nav-story-header" data-i18n="story">HİKAYE</button>
@@ -6445,6 +6685,7 @@
       <button class="header-nav-item" id="nav-leaderboard-header" data-i18n="navLeaderboard">LİDER TABLOSU</button>
       <button class="header-nav-item" id="nav-profile-header" data-i18n="navProfile">PROFİL</button>
       <button class="header-nav-item" id="nav-settings-header" data-i18n="navSettings">AYARLAR</button>
+      <button class="header-nav-item" id="nav-report-header" data-i18n="navReport" style="color:#ff6b6b;">REPORT</button>
     </nav>
     <div class="header-right">
       <div id="lang-selector" style="display:flex;gap:4px;align-items:center;">
@@ -6496,7 +6737,7 @@
       </video>
     </div>
     <div class="home-frame"></div>
-    <img class="home-logo-img" src="/assets/images/logo.png" alt="A2 — Alaz & Ayaz" />
+    <img class="home-logo-img" src="/assets/images/logo.webp" alt="A2 — Alaz & Ayaz" />
     <div class="home-subtitle">THE SAGA OF ALAZ & AYAZ</div>
     <div class="home-tagline" data-i18n="tagline">Türk Mitolojisi · Moba Strateji · Web3</div>
     <button class="home-play-btn" id="nav-play" data-i18n="play">OYNA</button>
@@ -6505,7 +6746,7 @@
   <!-- ═══ CHARACTERS SCREEN — Draven-style 2K ═══ -->
   <div id="characters-screen">
     <!-- Blurred character background -->
-    <div class="cs-bg" id="cs-bg" style="background-image:url('/assets/images/characters/korhan.png')"></div>
+    <div class="cs-bg" id="cs-bg" style="background-image:url('/assets/images/characters/korhan.webp')"></div>
 
     <!-- Outer frame -->
     <div class="cs-frame"></div>
@@ -6526,7 +6767,7 @@
         <!-- CENTER: Hero Image -->
         <div class="cs-hero-center">
           <div class="cs-hero-glow fire" id="cs-hero-glow"></div>
-          <img class="cs-hero-img" id="cs-hero-img" src="/assets/images/characters/korhan.png" alt="Hero" />
+          <img class="cs-hero-img" id="cs-hero-img" src="/assets/images/characters/korhan.webp" alt="Hero" />
         </div>
 
         <!-- RIGHT: Abilities (segmented bars) -->
@@ -6562,25 +6803,25 @@
         <div class="cs-bottom-left" id="cs-back-lobby" data-i18n="csBackLobby">← LOBIYE DÖN</div>
 
         <div class="cs-carousel" id="cs-carousel">
-          <div class="cs-carousel-item active fire" data-char="korhan"><img src="/assets/images/characters/korhan.png"
+          <div class="cs-carousel-item active fire" data-char="korhan"><img src="/assets/images/characters/korhan.webp"
               alt="Korhan" /></div>
-          <div class="cs-carousel-item fire" data-char="erlik"><img src="/assets/images/characters/erlik.png"
+          <div class="cs-carousel-item fire" data-char="erlik"><img src="/assets/images/characters/erlik.webp"
               alt="Erlik" /></div>
-          <div class="cs-carousel-item fire" data-char="od"><img src="/assets/images/characters/od.png" alt="Od" />
+          <div class="cs-carousel-item fire" data-char="od"><img src="/assets/images/characters/od.webp" alt="Od" />
           </div>
-          <div class="cs-carousel-item ice" data-char="ayaz"><img src="/assets/images/characters/ayaz.png" alt="Ayaz" />
+          <div class="cs-carousel-item ice" data-char="ayaz"><img src="/assets/images/characters/ayaz.webp" alt="Ayaz" />
           </div>
-          <div class="cs-carousel-item ice" data-char="tulpar"><img src="/assets/images/characters/tulpar.png"
+          <div class="cs-carousel-item ice" data-char="tulpar"><img src="/assets/images/characters/tulpar.webp"
               alt="Tulpar" /></div>
-          <div class="cs-carousel-item ice" data-char="umay"><img src="/assets/images/characters/umay.png" alt="Umay" />
+          <div class="cs-carousel-item ice" data-char="umay"><img src="/assets/images/characters/umay.webp" alt="Umay" />
           </div>
-          <div class="cs-carousel-item merc" data-char="albasti"><img src="/assets/images/characters/albasti.png"
+          <div class="cs-carousel-item merc" data-char="albasti"><img src="/assets/images/characters/albasti.webp"
               alt="Albastı" /></div>
-          <div class="cs-carousel-item merc" data-char="tepegoz"><img src="/assets/images/characters/tepegoz.png"
+          <div class="cs-carousel-item merc" data-char="tepegoz"><img src="/assets/images/characters/tepegoz.webp"
               alt="Tepegöz" /></div>
-          <div class="cs-carousel-item merc" data-char="sahmeran"><img src="/assets/images/characters/sahmeran.png"
+          <div class="cs-carousel-item merc" data-char="sahmeran"><img src="/assets/images/characters/sahmeran.webp"
               alt="Şahmeran" /></div>
-          <div class="cs-carousel-item merc" data-char="boru"><img src="/assets/images/characters/boru.png"
+          <div class="cs-carousel-item merc" data-char="boru"><img src="/assets/images/characters/boru.webp"
               alt="Börü" /></div>
         </div>
       </div>
@@ -6604,16 +6845,16 @@
         <div class="story-act-body" data-i18n-html="storyAct1Body"></div>
       </div>
       <div class="story-act-img dual">
-        <img src="assets/images/characters/od.png" alt="Od">
-        <img src="assets/images/characters/ayaz.png" alt="Ayaz">
+        <img src="assets/images/characters/od.webp" alt="Od">
+        <img src="assets/images/characters/ayaz.webp" alt="Ayaz">
       </div>
     </div>
 
     <!-- II · İsyan -->
     <div class="story-act earth">
       <div class="story-act-img dual">
-        <img src="assets/images/characters/tepegoz.png" alt="Tepegöz">
-        <img src="assets/images/characters/albasti.png" alt="Albastı">
+        <img src="assets/images/characters/tepegoz.webp" alt="Tepegöz">
+        <img src="assets/images/characters/albasti.webp" alt="Albastı">
       </div>
       <div class="story-act-text">
         <div class="story-act-num" data-i18n="storyAct2Num">Bölüm II · İsyan</div>
@@ -6630,15 +6871,15 @@
         <div class="story-act-body" data-i18n-html="storyAct3Body"></div>
       </div>
       <div class="story-act-img">
-        <img src="assets/images/characters/korhan.png" alt="Korhan">
+        <img src="assets/images/characters/korhan.webp" alt="Korhan">
       </div>
     </div>
 
     <!-- IV · Tamag -->
     <div class="story-act dark">
       <div class="story-act-img dual">
-        <img src="assets/images/characters/erlik.png" alt="Erlik">
-        <img src="assets/images/characters/korhan.png" alt="Korhan">
+        <img src="assets/images/characters/erlik.webp" alt="Erlik">
+        <img src="assets/images/characters/korhan.webp" alt="Korhan">
       </div>
       <div class="story-act-text">
         <div class="story-act-num" data-i18n="storyAct4Num">Bölüm IV · Ateşin Gazabı</div>
@@ -6655,15 +6896,15 @@
         <div class="story-act-body" data-i18n-html="storyAct5Body"></div>
       </div>
       <div class="story-act-img dual">
-        <img src="assets/images/characters/tulpar.png" alt="Tulpar">
-        <img src="assets/images/characters/umay.png" alt="Umay">
+        <img src="assets/images/characters/tulpar.webp" alt="Tulpar">
+        <img src="assets/images/characters/umay.webp" alt="Umay">
       </div>
     </div>
 
     <!-- VI · Son Karar -->
     <div class="story-act blood">
       <div class="story-act-img">
-        <img src="assets/images/characters/sahmeran.png" alt="Şahmeran">
+        <img src="assets/images/characters/sahmeran.webp" alt="Şahmeran">
       </div>
       <div class="story-act-text">
         <div class="story-act-num" data-i18n="storyAct6Num">Bölüm VI · Son Karar</div>
@@ -6696,10 +6937,35 @@
     <!-- Prize Pool Banner -->
     <div class="lb-prize-pool">
       <div class="lb-pp-left">
-        <div class="lb-pp-label" data-i18n="lbPrizeLabel">Haftalık Ödül Havuzu</div>
-        <div class="lb-pp-amount"><span id="lb-screen-total">0.0000</span><span>AVAX</span></div>
-        <div class="lb-pp-note" data-i18n="lbPrizeNote">Her oyundaki %2 platform ücreti bu havuza gider · Haftalık
-          dağıtılır</div>
+        <div class="lb-pp-meta">
+          <span class="lb-pp-season" id="lb-pp-season">SEZON 1 · HAFTA 1</span>
+          <span class="lb-pp-countdown" id="lb-pp-countdown">— gün — saat kaldı</span>
+        </div>
+        <div class="lb-pp-label" data-i18n="lbPrizeLabel">WEEKLY PRIZE POOL</div>
+        <div class="lb-pp-amount">
+          <span id="lb-screen-total">0.0000</span>
+          <img class="lb-pp-avax-icon" src="/assets/images/Avalanche_Blockchain_Logo.svg" alt="AVAX" />
+        </div>
+        <div class="lb-pp-total-distributed">
+          <span data-i18n="lbTotalDistributed">TOPLAM DAĞITILAN:</span> <span id="lb-pp-total-distributed">0.0000</span> AVAX
+        </div>
+      </div>
+      <div class="lb-pp-right">
+        <div class="lb-pp-prize-box">
+          <div class="lb-pp-prize-rank">1.</div>
+          <div class="lb-pp-prize-val" id="lb-pp-prize-1">0.0000</div>
+          <div class="lb-pp-prize-unit">AVAX</div>
+        </div>
+        <div class="lb-pp-prize-box">
+          <div class="lb-pp-prize-rank">2.</div>
+          <div class="lb-pp-prize-val" id="lb-pp-prize-2">0.0000</div>
+          <div class="lb-pp-prize-unit">AVAX</div>
+        </div>
+        <div class="lb-pp-prize-box">
+          <div class="lb-pp-prize-rank">3.</div>
+          <div class="lb-pp-prize-val" id="lb-pp-prize-3">0.0000</div>
+          <div class="lb-pp-prize-unit">AVAX</div>
+        </div>
       </div>
     </div>
 
@@ -6756,7 +7022,7 @@
         <label data-i18n="pfsLabelAvatar">Avatar URL</label>
         <input type="text" id="pfs-avatar-input" data-i18n-placeholder="pfsAvatarPlaceholder"
           placeholder="https://... (opsiyonel)" />
-        <img class="pfs-form-avatar-preview" id="pfs-avatar-preview" src="/assets/images/logo.png" alt="avatar" />
+        <img class="pfs-form-avatar-preview" id="pfs-avatar-preview" src="/assets/images/logo.webp" alt="avatar" />
         <button class="pfs-register-btn" id="pfs-register-btn" data-i18n="pfsRegisterBtn">KAYIT OL</button>
       </div>
     </div>
@@ -6764,22 +7030,24 @@
     <!-- Profile view (registered) -->
     <div class="pfs-card" id="pfs-view" style="display:none;">
       <div class="pfs-avatar-col">
-        <img class="pfs-avatar-img" id="pfs-avatar-img" src="/assets/images/logo.png" alt="avatar" />
+        <img class="pfs-avatar-img" id="pfs-avatar-img" src="/assets/images/logo.webp" alt="avatar" />
         <div class="pfs-avatar-name" id="pfs-display-name">—</div>
         <div class="pfs-avatar-addr" id="pfs-display-addr">0x...</div>
       </div>
       <div class="pfs-info-col">
+        <!-- Local Stats -->
+        <div class="pfs-section-label">YEREL</div>
         <div class="pfs-stats-row">
           <div class="pfs-stat">
-            <div class="pfs-stat-val" id="pfs-games">0</div>
+            <div class="pfs-stat-val" id="pfs-local-games">0</div>
             <div class="pfs-stat-lbl" data-i18n="pfsStatGames">OYUN</div>
           </div>
           <div class="pfs-stat wins">
-            <div class="pfs-stat-val" id="pfs-wins">0</div>
+            <div class="pfs-stat-val" id="pfs-local-wins">0</div>
             <div class="pfs-stat-lbl" data-i18n="pfsStatWins">GALİBİYET</div>
           </div>
           <div class="pfs-stat losses">
-            <div class="pfs-stat-val" id="pfs-losses">0</div>
+            <div class="pfs-stat-val" id="pfs-local-losses">0</div>
             <div class="pfs-stat-lbl" data-i18n="pfsStatLosses">MAĞLUBİYET</div>
           </div>
           <div class="pfs-stat draws">
@@ -6787,6 +7055,27 @@
             <div class="pfs-stat-lbl" data-i18n="pfsStatDraws">BERABERLİK</div>
           </div>
         </div>
+        <!-- Online Stats -->
+        <div class="pfs-section-label">ONLINE</div>
+        <div class="pfs-stats-row">
+          <div class="pfs-stat">
+            <div class="pfs-stat-val" id="pfs-online-games">0</div>
+            <div class="pfs-stat-lbl" data-i18n="pfsStatGames">OYUN</div>
+          </div>
+          <div class="pfs-stat wins">
+            <div class="pfs-stat-val" id="pfs-online-wins">0</div>
+            <div class="pfs-stat-lbl" data-i18n="pfsStatWins">GALİBİYET</div>
+          </div>
+          <div class="pfs-stat losses">
+            <div class="pfs-stat-val" id="pfs-online-losses">0</div>
+            <div class="pfs-stat-lbl" data-i18n="pfsStatLosses">MAĞLUBİYET</div>
+          </div>
+          <div class="pfs-stat avax-won">
+            <div class="pfs-stat-val" id="pfs-avax-won">0.0000</div>
+            <div class="pfs-stat-lbl" data-i18n="pfsStatAvaxWon">AVAX KAZANÇ</div>
+          </div>
+        </div>
+
         <div class="pfs-rename-row">
           <input type="text" class="pfs-rename-input" id="pfs-rename-input" maxlength="32"
             data-i18n-placeholder="pfsRenamePlaceholder" placeholder="İsim değiştir..." />
@@ -6894,7 +7183,7 @@
         <span id="bet-hud-text">0 AVAX</span>
       </div>
       <div id="mana-row"></div>
-      <div id="avx-hud"><img src="/assets/avxcoin.png" class="avx-hud-icon" alt="AVX"><span id="avx-counter">0</span>
+      <div id="avx-hud"><img src="/assets/avxcoin.webp" class="avx-hud-icon" alt="AVX"><span id="avx-counter">0</span>
       </div>
     </div>
 
@@ -7058,7 +7347,7 @@
           <input type="text" id="profile-name-input" maxlength="32" placeholder="Savaşçı adını gir..." />
           <label data-i18n="profileAvatar">Avatar URL</label>
           <input type="text" id="profile-avatar-input" placeholder="https://... (opsiyonel)" />
-          <img class="avatar-preview" id="avatar-preview" src="/assets/images/logo.png" alt="avatar" />
+          <img class="avatar-preview" id="avatar-preview" src="/assets/images/logo.webp" alt="avatar" />
           <button class="profile-btn" id="profile-register-btn" data-i18n="profileRegister">KAYIT OL</button>
         </div>
       </div>
@@ -7066,7 +7355,7 @@
       <!-- Profile view (shown when registered) -->
       <div id="profile-view" style="display:none;">
         <div class="profile-info">
-          <img class="profile-avatar" id="profile-avatar" src="/assets/images/logo.png" alt="avatar" />
+          <img class="profile-avatar" id="profile-avatar" src="/assets/images/logo.webp" alt="avatar" />
           <div class="profile-username" id="profile-display-name">—</div>
           <div class="profile-address" id="profile-display-addr">0x...</div>
           <div id="profile-rename-row" style="margin-top:8px;display:flex;gap:8px;justify-content:center;">
@@ -7106,7 +7395,11 @@
         <!-- Haftalık ödül havuzu banner -->
         <div class="weekly-prize-banner" id="weekly-prize-banner">
           <div class="wpb-inner">
-            <div class="wpb-title">HAFTALIK ÖDÜL HAVUZU</div>
+            <div class="wpb-meta-row">
+              <span class="wpb-season" id="wpb-season">SEZON 1 · HAFTA 1</span>
+              <span class="wpb-countdown" id="wpb-countdown">— kaldı</span>
+            </div>
+            <div class="wpb-title" data-i18n="lbPrizeLabel">HAFTALIK ÖDÜL HAVUZU</div>
             <div class="wpb-pool">
               <span class="wpb-amount" id="wpb-total-amount">0.0000</span>
               <span class="wpb-avax">AVAX</span>
@@ -7694,6 +7987,32 @@
     color:#fff; letter-spacing:2px;
   ">20</div>
 
+  <!-- ESC PAUSE MENU -->
+  <div id="esc-overlay" style="
+    position:fixed;inset:0;z-index:1100;display:none;align-items:center;justify-content:center;
+    background:rgba(0,0,0,0.8);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  ">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:48px 56px;
+      border-radius:20px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);">
+      <div style="font-family:'Cinzel',serif;font-size:32px;font-weight:900;letter-spacing:6px;
+        color:rgba(255,255,255,0.85);margin-bottom:4px;">DURAKLAT</div>
+      <button class="esc-btn" id="esc-resume" data-i18n="escResume">DEVAM ET</button>
+      <button class="esc-btn" id="esc-settings" data-i18n="escSettings">AYARLAR</button>
+      <button class="esc-btn" id="esc-report" data-i18n="navReport" style="color:#ff6b6b;">REPORT</button>
+      <button class="esc-btn" id="esc-home" data-i18n="escHome">ANA MENU</button>
+    </div>
+  </div>
+  <style>
+    #esc-overlay.show { display:flex !important; animation:fadeInScale 0.25s ease; }
+    .esc-btn {
+      width:220px;padding:14px 0;font-family:'Cinzel',serif;font-size:13px;font-weight:700;
+      letter-spacing:3px;color:rgba(255,255,255,0.7);background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.1);border-radius:10px;cursor:pointer;transition:all 0.15s;
+    }
+    .esc-btn:hover { background:rgba(255,255,255,0.08);color:#fff;border-color:rgba(255,255,255,0.2); }
+    @keyframes fadeInScale { from{opacity:0;transform:scale(0.95)} to{opacity:1;transform:scale(1)} }
+  </style>
+
   <!-- LOADING SCREEN -->
   <div id="loading-screen" style="
     display:none; position:fixed; inset:0; z-index:10000;
@@ -7706,7 +8025,7 @@
       style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 50%, rgba(255,77,0,0.06) 0%, transparent 60%);pointer-events:none;">
     </div>
     <!-- Logo -->
-    <img src="/assets/images/logo.png" alt="A2"
+    <img src="/assets/images/logo.webp" alt="A2"
       style="width:120px;height:auto;filter:drop-shadow(0 0 30px rgba(255,110,20,0.5));position:relative;z-index:1;animation:float 5s ease-in-out infinite;" />
     <!-- Subtitle -->
     <div

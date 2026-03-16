@@ -82,10 +82,10 @@ export async function createAvaxMapFromGLB(
     );
 
     // ── Texture'ları yükle (paylaşımlı — clone yapmıyoruz) ──
-    const lavaTex = new Texture('/assets/images/textures/lava.jpg', scene);
+    const lavaTex = new Texture('/assets/images/textures/lava.webp', scene);
     lavaTex.uScale = 4; lavaTex.vScale = 4;
 
-    const iceTex = new Texture('/assets/images/textures/ice_color.jpg', scene);
+    const iceTex = new Texture('/assets/images/textures/ice_color.webp', scene);
     iceTex.uScale = 4; iceTex.vScale = 4;
 
     // ── Ortak material'lar (tek instance, tüm mesh'ler paylaşır) ──

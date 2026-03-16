@@ -76,22 +76,19 @@ registerAbility({
     },
 });
 
-// ─── TULPAR — Charge ──────────────────────────────────────────────────
-// On-deploy: First attack deals double damage
+// ─── TULPAR — Frost Bolt ──────────────────────────────────────────────
+// Ranged spell caster: attacks apply Frozen (slow 40%, 2s)
 registerAbility({
-    id: 'tulpar_charge',
-    name: 'Charge',
-    trigger: 'on_deploy',
-    onDeploy(unit: Unit): void {
-        (unit.abilityState as any).chargeReady = true;
-    },
-    onAttack(attacker: Unit, _target: Unit): void {
-        const state = attacker.abilityState as { chargeReady?: boolean };
-        if (state.chargeReady) {
-            state.chargeReady = false;
-            // UnitManager reads chargeReady before applying damage
-            (attacker.abilityState as any).chargeActive = true;
-        }
+    id: 'tulpar_frost_bolt',
+    name: 'Frost Bolt',
+    trigger: 'on_attack',
+    onAttack(_attacker: Unit, target: Unit): void {
+        applyStatusEffect(target, {
+            type: 'frozen',
+            duration: 2,
+            magnitude: 0.4,
+            sourceUnitId: _attacker.id,
+        });
     },
 });
 
@@ -128,16 +125,20 @@ registerAbility({
 });
 
 // ─── OD — Yalın Ateş ─────────────────────────────────────────────────
-// On-attack: 20% chance to deal +50% bonus fire damage
+// Ranged spell caster: attacks have 30% chance to apply Burning (8 dmg/s, 3s)
 registerAbility({
     id: 'od_yalin_ates',
     name: 'Yalın Ateş',
-    trigger: 'on_hit',
-    onHit(_unit: Unit, _attacker: Unit, damage: number): number {
-        if (Math.random() < 0.20) {
-            return damage * 1.5;
+    trigger: 'on_attack',
+    onAttack(attacker: Unit, target: Unit): void {
+        if (Math.random() < 0.30) {
+            applyStatusEffect(target, {
+                type: 'burning',
+                duration: 3,
+                magnitude: 8,
+                sourceUnitId: attacker.id,
+            });
         }
-        return damage;
     },
 });
 
@@ -147,7 +148,7 @@ export const UNIT_ABILITY_MAP: Record<string, string> = {
     erlik: 'erlik_dark_flame',
     ayaz: 'ayaz_hoarfrost',
     umay: 'umay_mercy',
-    tulpar: 'tulpar_charge',
+    tulpar: 'tulpar_frost_bolt',
     sahmeran: 'sahmeran_poison',
     tepegoz: 'tepegoz_earth_tremor',
     od: 'od_yalin_ates',

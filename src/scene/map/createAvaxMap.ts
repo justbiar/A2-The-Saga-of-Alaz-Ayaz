@@ -19,7 +19,6 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture';
-import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { Vector2, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { PointLight } from '@babylonjs/core/Lights/pointLight';
@@ -99,17 +98,17 @@ function fbm(x: number, y: number, s: number, o = 4): number {
  * TEXTURES — real files for lava & ice, procedural for rock/stone
  * ═══════════════════════════════════════════════════════════════════════ */
 function genLava(sc: Scene): Texture {
-    const t = new Texture('/assets/images/textures/lava.jpg', sc);
+    const t = new Texture('/assets/images/textures/lava.webp', sc);
     t.uScale = 2; t.vScale = 2;
     return t;
 }
 function genLavaEmissive(sc: Scene): Texture {
-    const t = new Texture('/assets/images/textures/lava.jpg', sc);
+    const t = new Texture('/assets/images/textures/lava.webp', sc);
     t.uScale = 2; t.vScale = 2;
     return t;
 }
 function genIce(sc: Scene): Texture {
-    const t = new Texture('/assets/images/textures/ice_color.jpg', sc);
+    const t = new Texture('/assets/images/textures/ice_color.webp', sc);
     t.uScale = 2; t.vScale = 2;
     return t;
 }
@@ -281,11 +280,11 @@ function buildTriangleEdges(scene: Scene): void {
     ];
 
     // lava.jpg texture — ateş kenarları için
-    const lavaTex = new Texture('/assets/images/textures/lava.jpg', scene);
+    const lavaTex = new Texture('/assets/images/textures/lava.webp', scene);
     lavaTex.uScale = 6; lavaTex.vScale = 1;
 
     // ice_color.jpg texture — buz kenarları için
-    const iceTex = new Texture('/assets/images/textures/ice_color.jpg', scene);
+    const iceTex = new Texture('/assets/images/textures/ice_color.webp', scene);
     iceTex.uScale = 6; iceTex.vScale = 1;
 
     edges.forEach(e => {
@@ -500,10 +499,7 @@ function buildIceFeatures(scene: Scene, iceTex: BaseTexture): void {
         cr.material = tMat(`cryM_${i}`, iceTex, scene, {
             a: .78, sp: new Color3(.5, .5, .7), em: new Color3(.03, .05, .12),
         });
-        if (c.h >= 3.5) {
-            const lt = new PointLight(`cryLt_${i}`, new Vector3(c.x, SURF + c.h + 1, c.z), scene);
-            lt.diffuse = new Color3(.3, .5, .9); lt.intensity = .25; lt.range = 7;
-        }
+        // kristal isiklari kaldirildi — GPU uniform buffer limitine takmamak icin
     });
 
     // ── BUZ BLOKLARI (ırmak üstünde yüzen) ──
@@ -535,27 +531,16 @@ function bBase(_sc: Scene, _w: Mesh[], _z: number, _side: string, _tex: BaseText
  * IŞIKLANDIRMA
  * ═══════════════════════════════════════════════════════════════════════ */
 function buildLighting(scene: Scene): void {
-    const hemi = new HemisphericLight('hemi', new Vector3(0, 1, 0), scene);
-    hemi.intensity = 0.55;
-    hemi.diffuse = new Color3(.9, .85, .8);
-    hemi.groundColor = new Color3(.12, .1, .18);
-
+    // NOT: createScene.ts'de zaten hemi + sun var (2 isik).
+    // WebGL2 uniform buffer limiti 12 — toplam max 8 isik ekliyoruz (2+8=10 < 12).
     [
-        { n: 'fireMain', p: new Vector3(0, 22, -24), c: new Color3(1, .5, .08), i: 1.5, r: 65 },
-        { n: 'iceMain', p: new Vector3(0, 22, 24), c: new Color3(.3, .6, 1), i: 1.5, r: 65 },
-        { n: 'midLight', p: new Vector3(0, 16, 0), c: new Color3(.9, .85, .6), i: 0.8, r: 40 },
-        { n: 'laneL', p: new Vector3(-12, 12, 0), c: new Color3(.8, .45, .1), i: 0.5, r: 35 },
-        { n: 'laneR', p: new Vector3(12, 12, 0), c: new Color3(.2, .5, .9), i: 0.5, r: 35 },
-        { n: 'fireBase', p: new Vector3(0, 14, -40), c: new Color3(1, .45, .0), i: 1.0, r: 30 },
-        { n: 'iceBase', p: new Vector3(0, 14, 40), c: new Color3(.3, .65, 1), i: 1.0, r: 30 },
-        { n: 'lavaZ1', p: new Vector3(-6, 8, -15), c: new Color3(.9, .35, .0), i: 0.4, r: 18 },
-        { n: 'lavaZ2', p: new Vector3(6, 8, -15), c: new Color3(.9, .35, .0), i: 0.4, r: 18 },
-        { n: 'iceZ1', p: new Vector3(-6, 8, 15), c: new Color3(.2, .45, .85), i: 0.4, r: 18 },
-        { n: 'iceZ2', p: new Vector3(6, 8, 15), c: new Color3(.2, .45, .85), i: 0.4, r: 18 },
-        { n: 'edgeFireL', p: new Vector3(-18, 5, -18), c: new Color3(.8, .3, .02), i: 0.3, r: 15 },
-        { n: 'edgeFireR', p: new Vector3(18, 5, -18), c: new Color3(.8, .3, .02), i: 0.3, r: 15 },
-        { n: 'edgeIceL', p: new Vector3(-18, 5, 18), c: new Color3(.15, .35, .8), i: 0.3, r: 15 },
-        { n: 'edgeIceR', p: new Vector3(18, 5, 18), c: new Color3(.15, .35, .8), i: 0.3, r: 15 },
+        { n: 'fireMain', p: new Vector3(0, 22, -24), c: new Color3(1, .5, .08), i: 1.8, r: 70 },
+        { n: 'iceMain', p: new Vector3(0, 22, 24), c: new Color3(.3, .6, 1), i: 1.8, r: 70 },
+        { n: 'midLight', p: new Vector3(0, 16, 0), c: new Color3(.9, .85, .6), i: 1.0, r: 50 },
+        { n: 'laneL', p: new Vector3(-12, 12, 0), c: new Color3(.8, .45, .1), i: 0.6, r: 40 },
+        { n: 'laneR', p: new Vector3(12, 12, 0), c: new Color3(.2, .5, .9), i: 0.6, r: 40 },
+        { n: 'fireBase', p: new Vector3(0, 14, -40), c: new Color3(1, .45, .0), i: 1.2, r: 35 },
+        { n: 'iceBase', p: new Vector3(0, 14, 40), c: new Color3(.3, .65, 1), i: 1.2, r: 35 },
     ].forEach(l => {
         const lt = new PointLight(l.n, l.p, scene);
         lt.diffuse = l.c; lt.intensity = l.i; lt.range = l.r;

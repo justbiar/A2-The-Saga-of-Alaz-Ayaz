@@ -59,8 +59,8 @@ class LeaderboardService {
     /** Register/update player (call after wallet connect) */
     upsertPlayer(address: string, username: string) {
         const addr = address.toLowerCase();
+        void this._serverUpsert(address, username);
         if (!this.stats.has(addr)) {
-            const currentWeek = getISOWeek();
             this.stats.set(addr, {
                 address: addr,
                 username,
@@ -82,24 +82,57 @@ class LeaderboardService {
         address: string,
         result: 'win' | 'loss' | 'draw',
         betWon: number = 0,
-        betLost: number = 0
+        betLost: number = 0,
+        mode: 'online' | 'local' = 'local'
     ) {
         const addr = address.toLowerCase();
+
+        // Sync to server (primary global store)
+        void this._serverResult(address, result, betWon, betLost, mode);
+
+        // Leaderboard sadece online maçları sayar
+        if (mode === 'local') return;
+
         if (!this.stats.has(addr)) return;
-
-        // Reset weekly stats if new week
         this._maybeResetWeekly(addr);
-
         const p = this.stats.get(addr)!;
         if (result === 'win') { p.wins++; p.weeklyWins++; }
         else if (result === 'loss') { p.losses++; }
         else { p.draws++; }
-
         if (betWon > 0) { p.totalBetWon += betWon; p.weeklyBetWon += betWon; }
         if (betLost > 0) { p.totalBetLost += betLost; }
-
         p.lastUpdated = Date.now();
         this._save();
+    }
+
+    /** Fetch global leaderboard from server */
+    async getServerLeaderboard(): Promise<LeaderboardEntry[] | null> {
+        try {
+            const res = await fetch('/api/leaderboard');
+            const data = await res.json();
+            if (data.ok && Array.isArray(data.entries)) return data.entries;
+        } catch { /* ignore */ }
+        return null;
+    }
+
+    private async _serverResult(address: string, result: string, betWon: number, betLost: number, mode: string = 'local') {
+        try {
+            await fetch('/api/leaderboard/result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address, result, betWon, betLost, mode }),
+            });
+        } catch { /* ignore */ }
+    }
+
+    private async _serverUpsert(address: string, username: string) {
+        try {
+            await fetch('/api/leaderboard/upsert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address, username }),
+            });
+        } catch { /* ignore */ }
     }
 
     /** Get sorted leaderboard */
@@ -226,7 +259,7 @@ class LeaderboardService {
         return { totalFee: pool.totalFee || 0, week: currentWeek };
     }
 
-    /** Returns current week's total fee pool and prize breakdown */
+    /** Returns current week's total fee pool and prize breakdown — server'dan okur */
     getPrizePoolInfo(): {
         totalFee: number;
         week: number;
@@ -235,6 +268,7 @@ class LeaderboardService {
         minPool: number;
         enoughForDistribution: boolean;
     } {
+        // Sync fallback (localStorage) — async fetch için getServerPrizePool() kullan
         const pool = this._getFeePool();
         const config = this.prizeConfig;
         const prizes = config.prizeRatios.map((ratio, i) => ({
@@ -250,6 +284,16 @@ class LeaderboardService {
             minPool: config.minPoolToDistribute,
             enoughForDistribution: pool.totalFee >= config.minPoolToDistribute,
         };
+    }
+
+    /** Server'dan anlık fee pool bilgisi çek */
+    async getServerPrizePool(): Promise<{ totalFee: number; week: number; seasonWeek: number; prizes: { rank: number; avax: number; ratio: number }[]; matchCount: number; totalDistributed: number; remainingMs: number; nextDistribution: string } | null> {
+        try {
+            const res = await fetch('/api/fee-pool');
+            const data = await res.json();
+            if (data.ok) return data;
+        } catch { /* ignore */ }
+        return null;
     }
 
     // ─── PERSIST ──────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import '@babylonjs/loaders/glTF';
 import type { Unit, Team } from '../../ecs/Unit';
 
-const BASE_MAX_HP = 1000;
+const BASE_MAX_HP = 3000;
 const BASE_ATTACK_RANGE = 12;
 const BASE_ATTACK_DAMAGE = 15;
 const BASE_ATTACK_COOLDOWN = 2.0; // seconds

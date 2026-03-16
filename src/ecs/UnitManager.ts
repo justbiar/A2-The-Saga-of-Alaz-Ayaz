@@ -18,6 +18,7 @@ import { AssetContainer } from '@babylonjs/core/assetContainer';
 import { AnimationGroup } from '@babylonjs/core/Animations/animationGroup';
 import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import '@babylonjs/loaders/glTF';
 import { Unit, Team, UnitType, STATS_MAP, AI_PROFILES_MAP } from './Unit';
 import { SimpleNavGraph } from '../pathfinding/SimpleNavGraph';
@@ -29,6 +30,19 @@ import { getCachedUrl, waitForCache, getOriginalFileName } from '../glbCache';
 
 let nextId = 1;
 
+interface SpellProjectile {
+    mesh: Mesh;
+    targetUnit: Unit;
+    attacker: Unit;
+    speed: number;
+    damage: number;
+    isHeal: boolean;
+    elapsed: number;
+    frameTimer: number;
+    currentFrame: number;
+    totalFrames: number;
+}
+
 interface GLBAnimData {
     walkRoot:    TransformNode;
     attackRoot:  TransformNode;
@@ -38,6 +52,11 @@ interface GLBAnimData {
     dieAnims:    AnimationGroup[];
     lastState:   'walking' | 'fighting' | 'dead' | null;
     dieStarted:  boolean;
+    // Boru multi-attack support
+    attackRoot2?:  TransformNode;
+    attackAnims2?: AnimationGroup[];
+    activeAttack?: 1 | 2;
+    attackSwitchTimer?: number;
 }
 
 export class UnitManager {
@@ -92,14 +111,21 @@ export class UnitManager {
     private sahmeranAttackContainer: AssetContainer | null = null;
     private sahmeranDieContainer:    AssetContainer | null = null;
     private sahmeranAnimMap = new Map<number, GLBAnimData>();
-    // Börü animation containers (walk + attack + die + run + buff)
-    private boruWalkContainer:   AssetContainer | null = null;
-    private boruAttackContainer: AssetContainer | null = null;
-    private boruDieContainer:    AssetContainer | null = null;
+    // Börü animation containers (walk + attack1 + attack2 + die)
+    private boruWalkContainer:    AssetContainer | null = null;
+    private boruAttackContainer:  AssetContainer | null = null;
+    private boruAttackContainer2: AssetContainer | null = null;
+    private boruDieContainer:     AssetContainer | null = null;
     private boruAnimMap = new Map<number, GLBAnimData>();
     /** Shard bonuses — set from main.ts each frame */
     public fireShard: ShardBonus = { manaRegen: 0, attackBonus: 0, speedBonus: 0 };
     public iceShard: ShardBonus = { manaRegen: 0, attackBonus: 0, speedBonus: 0 };
+    /** Multiplayer: guest'te base hasari devre disi (host otoritif) */
+    public skipBaseDamage = false;
+    /** Spell projectiles (Od/Tulpar ranged attacks) */
+    private spellProjectiles: SpellProjectile[] = [];
+    private fireSpellTex: Texture | null = null;
+    private iceSpellTex: Texture | null = null;
     /** Base references for unit→base melee attacks */
     private fireBase: BaseBuilding | null = null;
     private iceBase:  BaseBuilding | null = null;
@@ -115,6 +141,54 @@ export class UnitManager {
     setBaseRefs(fire: BaseBuilding, ice: BaseBuilding): void {
         this.fireBase = fire;
         this.iceBase  = ice;
+    }
+
+    /** Ouroboros — birimi karşı takıma geçir, tüm cache'leri temizle */
+    convertUnit(unit: Unit, newTeam: Team): void {
+        const oldTeam = unit.team;
+        unit.team = newTeam;
+        unit.targetUnit = null;
+        unit.state = 'walking';
+        (unit.abilityState as any)._cachedEnemy = null;
+        (unit.abilityState as any)._enemyLockTimer = 0;
+        (unit.abilityState as any)._cachedTarget = null;
+        (unit.abilityState as any)._targetLockTimer = 0;
+
+        // Yeni takım yönünde path ver
+        const curPos = unit.mesh.position;
+        const lane = Math.floor(Math.random() * 3);
+        const fullPath = this.buildLanePath(0, 24, lane, newTeam);
+        const fullQueue = fullPath.map(n => new Vector3(n.x, unit.baseY, n.z));
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < fullQueue.length; i++) {
+            const dx = fullQueue[i].x - curPos.x;
+            const dz = fullQueue[i].z - curPos.z;
+            const d = dx * dx + dz * dz;
+            if (d < bestDist) { bestDist = d; bestIdx = i; }
+        }
+        unit.pathQueue = fullQueue.slice(bestIdx);
+
+        // TÜM birimlerin cache'ini temizle (takım değişikliği karışıklık yaratmasın)
+        for (const u of this.units) {
+            if (u.state === 'dead') continue;
+            const st = u.abilityState as any;
+            // Bu birimi hedef almış olanları temizle
+            if (st._cachedEnemy === unit) { st._cachedEnemy = null; st._enemyLockTimer = 0; }
+            if (st._cachedTarget === unit) { st._cachedTarget = null; st._targetLockTimer = 0; }
+            if (u.targetUnit === unit) { u.targetUnit = null; }
+        }
+
+        // Emissive renk güncelle
+        unit.mesh.getChildMeshes().forEach(c => {
+            if (c.material && 'emissiveColor' in c.material) {
+                (c.material as any).emissiveColor = newTeam === 'fire'
+                    ? { r: 0.6, g: 0.15, b: 0.05 }
+                    : { r: 0.1, g: 0.3, b: 0.6 };
+            }
+        });
+
+        console.log(`[OUROBOROS] ${unit.type}#${unit.id} converted: ${oldTeam} → ${newTeam}`);
     }
 
     /**
@@ -265,7 +339,7 @@ export class UnitManager {
             { file: 'ayazwalk.glb' }, { file: 'ayazattack.glb' }, { file: 'ayazdie.glb' },
             { file: 'tulpar.glb' },
             { file: 'sahmeranwalk.glb' }, { file: 'sahmeranattack.glb' }, { file: 'sahmerandie.glb' },
-            { file: 'boruwalk.glb', boru: true }, { file: 'boruattack.glb', boru: true }, { file: 'borudie.glb', boru: true },
+            { file: 'boruwalk.glb', boru: true }, { file: 'boruattack.glb', boru: true }, { file: 'boruattack2.glb', boru: true }, { file: 'borudie.glb', boru: true },
         ];
 
         const results: (AssetContainer | null)[] = [];
@@ -285,7 +359,7 @@ export class UnitManager {
             ayazW, ayazA, ayazD,
             tulparW,
             sahmeranW, sahmeranA, sahmeranD,
-            boruW, boruA, boruD,
+            boruW, boruA, boruA2, boruD,
         ] = results;
 
         this.korhanWalkContainer = korhanW; this.korhanAttackContainer = korhanA; this.korhanDieContainer = korhanD;
@@ -297,7 +371,7 @@ export class UnitManager {
         this.ayazWalkContainer = ayazW; this.ayazAttackContainer = ayazA; this.ayazDieContainer = ayazD;
         this.tulparWalkContainer = tulparW;
         this.sahmeranWalkContainer = sahmeranW; this.sahmeranAttackContainer = sahmeranA; this.sahmeranDieContainer = sahmeranD;
-        this.boruWalkContainer = boruW; this.boruAttackContainer = boruA; this.boruDieContainer = boruD;
+        this.boruWalkContainer = boruW; this.boruAttackContainer = boruA; this.boruAttackContainer2 = boruA2; this.boruDieContainer = boruD;
 
         // Preload özet log
         const summary = [
@@ -320,6 +394,14 @@ export class UnitManager {
             if (wOk) okCount++; else failCount++;
         }
         console.log(`📊 Preload sonucu: ${okCount}/10 karakter GLB yüklendi, ${failCount} başarısız`);
+
+        // Spell effect textures (576.png sprite sheet — 14 cols × 9 rows, 64×64 cells)
+        try {
+            this.fireSpellTex = new Texture('/assets/Effect%20and%20FX%20Pixel%20Part%2012%20Free/576.webp', this.scene, false, true, Texture.NEAREST_SAMPLINGMODE);
+            this.fireSpellTex.hasAlpha = true;
+            this.iceSpellTex = this.fireSpellTex; // same sheet, different UV row
+            console.log('✅ Spell effect texture loaded');
+        } catch { console.warn('⚠️ Spell effect texture not found'); }
     }
 
     spawnUnit(type: UnitType, team: Team, lane?: number): Unit {
@@ -435,7 +517,7 @@ export class UnitManager {
         return unit;
     }
 
-    private buildLanePath(_from: number, _to: number, lane: number, team: Team): Vector3[] {
+    public buildLanePath(_from: number, _to: number, lane: number, team: Team): Vector3[] {
         // lane 0 = SOL  (X: -4→-14→-4, diamond konturunu takip eder)
         // lane 1 = ORTA (X=0, nodes 25 & 26 for mid extensions)
         // lane 2 = SAĞ  (X: +4→+14→+4, diamond konturunu takip eder)
@@ -446,7 +528,16 @@ export class UnitManager {
         };
         let path = laneNodes[lane] ?? laneNodes[1];
         if (team === 'ice') path = [...path].reverse();
-        return path.map(i => this.nav.nodes[i]);
+        const points = path.map(i => this.nav.nodes[i].clone());
+        // Son noktayi base'den 4 birim geri cek (unitler icine girmesin)
+        const last = points[points.length - 1];
+        const prev = points.length > 1 ? points[points.length - 2] : last;
+        const dir = last.subtract(prev);
+        if (dir.length() > 0.1) {
+            dir.normalize();
+            last.subtractInPlace(dir.scale(4));
+        }
+        return points;
     }
 
     // ─── MESH DISPATCHER ────────────────────────────────────────────
@@ -757,17 +848,13 @@ export class UnitManager {
 
     // ─── TEPEGÖZ — one-eyed giant with walk / attack / die animations ─
     private buildTepegoz(parent: Mesh, _team: Team, unitId: number): void {
-        // tepegozwalk.glb mesh içermeyebilir (low-poly export sorunu);
-        // bu durumda attack GLB'sini walk yerine kullan
         const walkC = this.tepegozWalkContainer;
         const atkC  = this.tepegozAttackContainer;
         const dieC  = this.tepegozDieContainer;
-        const walkHasMesh = walkC && walkC.meshes.length > 1;
-        const effectiveWalk = walkHasMesh ? walkC : atkC;
-        if (!effectiveWalk) { this.buildTepegozProcedural(parent); return; }
+        if (!walkC) { this.buildTepegozProcedural(parent); return; }
         this.tepegozAnimMap.set(unitId, this.buildGlbRoots(
             parent, `tw${unitId}`, 2.0,
-            effectiveWalk, walkHasMesh ? atkC : null, dieC,
+            walkC, atkC, dieC,
         ));
     }
 
@@ -854,17 +941,20 @@ export class UnitManager {
         if (!this.boruWalkContainer) { this.buildBoruProcedural(parent); return; }
 
         const mk = (tag: string) => (n: string) => `bw${unitId}_${tag}_${n}`;
-        const walkInst   = this.boruWalkContainer.instantiateModelsToScene(mk('w'), true);
-        const attackInst = this.boruAttackContainer?.instantiateModelsToScene(mk('a'), true) ?? null;
-        const dieInst    = this.boruDieContainer?.instantiateModelsToScene(mk('d'), true) ?? null;
+        const walkInst    = this.boruWalkContainer.instantiateModelsToScene(mk('w'), true);
+        const attackInst  = this.boruAttackContainer?.instantiateModelsToScene(mk('a'), true) ?? null;
+        const attackInst2 = this.boruAttackContainer2?.instantiateModelsToScene(mk('a2'), true) ?? null;
+        const dieInst     = this.boruDieContainer?.instantiateModelsToScene(mk('d'), true) ?? null;
 
-        const walkRoot   = walkInst.rootNodes[0] as TransformNode;
-        const attackRoot = (attackInst?.rootNodes[0] ?? walkRoot) as TransformNode;
-        const dieRoot    = dieInst ? dieInst.rootNodes[0] as TransformNode : null;
+        const walkRoot    = walkInst.rootNodes[0] as TransformNode;
+        const attackRoot  = (attackInst?.rootNodes[0] ?? walkRoot) as TransformNode;
+        const attackRoot2 = (attackInst2?.rootNodes[0] ?? null) as TransformNode | null;
+        const dieRoot     = dieInst ? dieInst.rootNodes[0] as TransformNode : null;
 
         const allRoots: TransformNode[] = [walkRoot];
-        if (attackInst) allRoots.push(attackRoot);
-        if (dieRoot)    allRoots.push(dieRoot);
+        if (attackInst)  allRoots.push(attackRoot);
+        if (attackRoot2) allRoots.push(attackRoot2);
+        if (dieRoot)     allRoots.push(dieRoot);
 
         const scale = 2.5;
         for (const root of allRoots) {
@@ -886,11 +976,13 @@ export class UnitManager {
             });
         }
 
-        if (attackInst) attackRoot.setEnabled(false);
-        if (dieRoot)    dieRoot.setEnabled(false);
+        if (attackInst)  attackRoot.setEnabled(false);
+        if (attackRoot2) attackRoot2.setEnabled(false);
+        if (dieRoot)     dieRoot.setEnabled(false);
 
         walkInst.animationGroups.forEach(ag => { ag.loopAnimation = true; ag.speedRatio = 1.0; ag.goToFrame(0); ag.play(true); });
         attackInst?.animationGroups.forEach(ag => { ag.loopAnimation = true; ag.stop(); });
+        attackInst2?.animationGroups.forEach(ag => { ag.loopAnimation = true; ag.stop(); });
         dieInst?.animationGroups.forEach(ag => { ag.loopAnimation = false; ag.stop(); });
 
         this.boruAnimMap.set(unitId, {
@@ -900,6 +992,11 @@ export class UnitManager {
             dieAnims:    dieInst?.animationGroups    ?? [],
             lastState:   'walking',
             dieStarted:  false,
+            // Multi-attack
+            attackRoot2:  attackRoot2 ?? undefined,
+            attackAnims2: attackInst2?.animationGroups ?? undefined,
+            activeAttack: 1,
+            attackSwitchTimer: 0,
         });
     }
 
@@ -1056,58 +1153,134 @@ export class UnitManager {
             const stunned = unit.statusEffects.some(s => s.type === 'stunned');
 
             if (!stunned) {
-                const enemy = this.findNearestEnemy(unit, alive);
+                // Target hysteresis — mevcut hedef gecerliyse degistirme
+                const st = unit.abilityState as any;
+                st._enemyLockTimer = (st._enemyLockTimer ?? 0) - dt;
+                let enemy: Unit | null = null;
+                const prevEnemy = st._cachedEnemy as Unit | null;
+                if (prevEnemy && prevEnemy.hp > 0 && prevEnemy.state !== 'dead'
+                    && prevEnemy.team !== unit.team
+                    && this.distXZ(unit, prevEnemy) < unit.stats.attackRange + 2
+                    && st._enemyLockTimer > 0) {
+                    enemy = prevEnemy;
+                } else {
+                    enemy = this.findNearestEnemy(unit, alive);
+                    if (prevEnemy && prevEnemy.hp > 0 && prevEnemy.state !== 'dead'
+                        && prevEnemy.team !== unit.team
+                        && enemy && prevEnemy !== enemy) {
+                        const prevD = this.distXZ(unit, prevEnemy);
+                        const newD = this.distXZ(unit, enemy);
+                        if (prevD - newD < 2 && prevD < unit.stats.attackRange + 2) {
+                            enemy = prevEnemy;
+                        }
+                    }
+                    st._cachedEnemy = enemy;
+                    st._enemyLockTimer = 0.4;
+                }
 
-                // Support units (Tulpar / Od): untargetable, escort allies, heal
-                if (unit.type === 'tulpar' || unit.type === 'od') {
-                    const nearbyAllies = alive.filter(a =>
+                // ── OD / TULPAR — Destek: dost heal (öncelik) > düşmana zayıf saldırı > base'e dön ──
+                if (unit.type === 'od' || unit.type === 'tulpar') {
+                    const spellRange = unit.stats.attackRange; // 12
+                    const keepDist = 6;
+
+                    // 1) Dost heal — en düşük HP'li müttefike büyü at
+                    const healCandidates = alive.filter(a =>
+                        a.team === unit.team && a.id !== unit.id
+                        && !UnitManager.UNTARGETABLE.has(a.type)
+                        && a.hp < a.stats.maxHp
+                        && this.distXZ(unit, a) < spellRange
+                    );
+                    const healTarget = healCandidates.length > 0
+                        ? healCandidates.reduce((a, b) => (a.hp / a.stats.maxHp) < (b.hp / b.stats.maxHp) ? a : b)
+                        : null;
+
+                    // 2) Düşman saldırı — target hysteresis ile (0.5s yapış)
+                    const st = unit.abilityState as any;
+                    st._targetLockTimer = (st._targetLockTimer ?? 0) - dt;
+                    let attackTarget: Unit | null = null;
+                    // Mevcut hedef hala gecerli mi?
+                    const prevTarget = st._cachedTarget as Unit | null;
+                    if (prevTarget && prevTarget.hp > 0 && prevTarget.state !== 'dead'
+                        && prevTarget.team !== unit.team
+                        && this.distXZ(unit, prevTarget) < spellRange + 4
+                        && st._targetLockTimer > 0) {
+                        attackTarget = prevTarget;
+                    } else {
+                        attackTarget = this.findNearestEnemy(unit, alive);
+                        // Dead zone: sadece yeni hedef 2m+ daha yakinsa degistir
+                        if (prevTarget && prevTarget.hp > 0 && prevTarget.state !== 'dead'
+                            && prevTarget.team !== unit.team
+                            && attackTarget && prevTarget !== attackTarget) {
+                            const prevDist = this.distXZ(unit, prevTarget);
+                            const newDist = this.distXZ(unit, attackTarget);
+                            if (prevDist - newDist < 2 && prevDist < spellRange + 4) {
+                                attackTarget = prevTarget;
+                            }
+                        }
+                        st._cachedTarget = attackTarget;
+                        st._targetLockTimer = 0.5;
+                    }
+                    const enemyDist = attackTarget ? this.distXZ(unit, attackTarget) : Infinity;
+
+                    // 3) Tüm dostlar (takip için)
+                    const allAllies = alive.filter(a =>
                         a.team === unit.team && a.id !== unit.id
                         && !UnitManager.UNTARGETABLE.has(a.type)
                     );
 
-                    if (nearbyAllies.length > 0) {
-                        const closest = nearbyAllies.reduce((a, b) =>
+                    if (healTarget) {
+                        // Dost canı eksik — heal projektili at
+                        unit.state = 'fighting';
+                        this.faceTarget(unit, healTarget);
+                        if (this.gameTime - unit.lastAttackTime >= unit.stats.attackCooldown) {
+                            unit.lastAttackTime = this.gameTime;
+                            this.launchSpellProjectile(unit, healTarget, true);
+                        }
+                    } else if (attackTarget && enemyDist <= spellRange) {
+                        // Kimsenin canı eksik değil ama düşman menzilde — zayıf saldırı
+                        unit.state = 'fighting';
+                        this.faceTarget(unit, attackTarget);
+                        if (enemyDist < keepDist) {
+                            const away = unit.mesh.position.subtract(attackTarget.mesh.position);
+                            away.y = 0; away.normalize();
+                            unit.mesh.position.addInPlace(away.scale(unit.stats.speed * speedMult * dt * 0.5));
+                        }
+                        if (this.gameTime - unit.lastAttackTime >= unit.stats.attackCooldown) {
+                            unit.lastAttackTime = this.gameTime;
+                            this.launchSpellProjectile(unit, attackTarget, false);
+                        }
+                    } else if (allAllies.length > 0) {
+                        // Ne heal ne düşman — dostu takip et
+                        const closest = allAllies.reduce((a, b) =>
                             this.distXZ(unit, a) < this.distXZ(unit, b) ? a : b);
                         const dist = this.distXZ(unit, closest);
-
-                        if (dist > 2.5) {
-                            // Move directly toward ally (ignore path)
+                        if (dist > keepDist) {
                             unit.state = 'walking';
                             const dir = closest.mesh.position.subtract(unit.mesh.position);
                             dir.y = 0; dir.normalize();
-                            // Use own speed if far, ally speed if close-ish
-                            const spd = (dist > 8 ? unit.stats.speed : closest.stats.speed) * speedMult * dt;
-                            unit.mesh.position.addInPlace(dir.scale(spd));
-                            unit.mesh.rotation.y = Math.atan2(dir.x, dir.z) + (this.isGlbUnit(unit) ? Math.PI : 0);
+                            unit.mesh.position.addInPlace(dir.scale(unit.stats.speed * speedMult * dt));
+                            const targetY = Math.atan2(dir.x, dir.z) + (this.isGlbUnit(unit) ? Math.PI : 0);
+                            this.smoothRotateY(unit, targetY);
                             this.applyWalkBob(unit, dt);
                         } else {
-                            // Right next to ally — just stay, face same direction
                             unit.state = 'walking';
-                            unit.mesh.rotation.y = closest.mesh.rotation.y;
-                            this.applyWalkBob(unit, dt);
+                            this.smoothRotateY(unit, closest.mesh.rotation.y);
                         }
                     } else {
-                        // No allies — wait at current position
+                        // Kimse yok — base'e dön
                         unit.state = 'walking';
-                        this.applyWalkBob(unit, dt);
-                    }
-
-                    // Heal nearby allies every 2s
-                    if (this.gameTime - unit.lastAttackTime >= 2.0) {
-                        const healRange = 8;
-                        const healAmount = 15;
-                        const healTargets = alive.filter(a =>
-                            a.team === unit.team && a.id !== unit.id
-                            && !UnitManager.UNTARGETABLE.has(a.type)
-                            && this.distXZ(unit, a) < healRange
-                            && a.hp < a.stats.maxHp
-                        );
-                        if (healTargets.length > 0) {
-                            const target = healTargets.reduce((a, b) => (a.hp / a.stats.maxHp) < (b.hp / b.stats.maxHp) ? a : b);
-                            target.hp = Math.min(target.stats.maxHp, target.hp + healAmount);
-                            unit.lastAttackTime = this.gameTime;
-                            this.spawnFloatingText(`+${healAmount}`, target.mesh.position.clone().addInPlaceFromFloats(0, 3.5, 0), new Color3(0.2, 1, 0.4));
+                        const basePos = unit.team === 'fire'
+                            ? new Vector3(0, unit.baseY, -35)
+                            : new Vector3(0, unit.baseY, 35);
+                        const toBase = basePos.subtract(unit.mesh.position);
+                        toBase.y = 0;
+                        if (toBase.length() > 3) {
+                            toBase.normalize();
+                            unit.mesh.position.addInPlace(toBase.scale(unit.stats.speed * speedMult * dt));
+                            const targetY = Math.atan2(toBase.x, toBase.z) + (this.isGlbUnit(unit) ? Math.PI : 0);
+                            this.smoothRotateY(unit, targetY);
                         }
+                        this.applyWalkBob(unit, dt);
                     }
                 } else if (enemy && this.distXZ(unit, enemy) < unit.stats.attackRange) {
                     unit.state = 'fighting';
@@ -1124,8 +1297,12 @@ export class UnitManager {
                         if (this.gameTime - unit.lastAttackTime >= unit.stats.attackCooldown) {
                             unit.lastAttackTime = this.gameTime;
                             const dmg = Math.max(1, unit.stats.attack - 5); // bases have light armor
-                            targetBase.takeDamage(dmg);
-                            this.flashAttackPos(unit, targetBase.position);
+                            if (!this.skipBaseDamage) {
+                                targetBase.takeDamage(dmg);
+                            }
+                            if (unit.type === 'od' || unit.type === 'tulpar') {
+                                this.flashAttackPos(unit, targetBase.position);
+                            }
                             this.showDamageNumberAt(targetBase.position, dmg);
                         }
                     }
@@ -1149,11 +1326,14 @@ export class UnitManager {
             if (unit.type === 'albasti')  this.updateGLBAnim(unit, this.albastiAnimMap);
             if (unit.type === 'umay')     this.updateGLBAnim(unit, this.umayAnimMap);
             if (unit.type === 'sahmeran') this.updateGLBAnim(unit, this.sahmeranAnimMap);
-            if (unit.type === 'boru')     this.updateGLBAnim(unit, this.boruAnimMap);
+            if (unit.type === 'boru')     this.updateBoruAnim(unit, dt);
         }
 
         // ── Unit collision separation — no unit walks through another ──
         this.separateUnits(alive);
+
+        // ── Spell projectiles (Od / Tulpar) ──
+        this.updateSpellProjectiles(dt, alive);
 
         for (let i = this.units.length - 1; i >= 0; i--) {
             if (this.units[i].hp <= 0 && this.units[i].state !== 'dead') {
@@ -1189,6 +1369,13 @@ export class UnitManager {
         }
     }
 
+    private smoothRotateY(unit: Unit, targetY: number): void {
+        let diff = targetY - unit.mesh.rotation.y;
+        if (diff > Math.PI) diff -= 2 * Math.PI;
+        if (diff < -Math.PI) diff += 2 * Math.PI;
+        unit.mesh.rotation.y += diff * 0.15;
+    }
+
     private moveUnit(unit: Unit, dt: number, speedMult = 1.0): void {
         if (unit.pathQueue.length === 0) return;
         const target = unit.pathQueue[0];
@@ -1196,8 +1383,8 @@ export class UnitManager {
         const dist = dir.length();
         if (dist < 0.5) { unit.pathQueue.shift(); return; }
         dir.normalize();
-        // GLB modellerin iç yönü -Z (GLTF standardı); prosedürel meshler simetrik
-        unit.mesh.rotation.y = Math.atan2(dir.x, dir.z) + (this.isGlbUnit(unit) ? Math.PI : 0);
+        const targetY = Math.atan2(dir.x, dir.z) + (this.isGlbUnit(unit) ? Math.PI : 0);
+        this.smoothRotateY(unit, targetY);
         unit.mesh.position.addInPlace(dir.scale(Math.min(unit.stats.speed * speedMult * dt, dist)));
     }
 
@@ -1211,8 +1398,7 @@ export class UnitManager {
     private findNearestEnemy(unit: Unit, alive: Unit[]): Unit | null {
         // Support units (tulpar, od) cannot be targeted; spawn-immune units skipped
         const enemies = alive.filter(o => o.team !== unit.team && o.state !== 'dead'
-            && !UnitManager.UNTARGETABLE.has(o.type)
-            && !((o.abilityState._spawnImmunity as number) > 0));
+            && !UnitManager.UNTARGETABLE.has(o.type));
         const inRange = enemies.filter(o => this.distXZ(unit, o) < 14);
         if (inRange.length === 0) return null;
 
@@ -1263,7 +1449,12 @@ export class UnitManager {
 
     private faceTarget(a: Unit, b: Unit): void {
         const dir = b.mesh.position.subtract(a.mesh.position);
-        a.mesh.rotation.y = Math.atan2(dir.x, dir.z) + (this.isGlbUnit(a) ? Math.PI : 0);
+        const targetY = Math.atan2(dir.x, dir.z) + (this.isGlbUnit(a) ? Math.PI : 0);
+        // Smooth rotation lerp — en kisa yon
+        let diff = targetY - a.mesh.rotation.y;
+        if (diff > Math.PI) diff -= 2 * Math.PI;
+        if (diff < -Math.PI) diff += 2 * Math.PI;
+        a.mesh.rotation.y += diff * 0.15;
     }
 
     private tryAttack(attacker: Unit, target: Unit): void {
@@ -1326,57 +1517,191 @@ export class UnitManager {
         // Update poaiScore slightly per attack
         attacker.poaiScore = Math.min(10000, attacker.poaiScore + 10);
 
-        this.flashAttack(attacker, target);
+        // FX sadece Od ve Tulpar icin (diger unitlerde dandik duruyor)
+        if (attacker.type === 'od' || attacker.type === 'tulpar') {
+            this.flashAttack(attacker, target);
+        }
         this.showDamageNumber(target, dmg, isCrit);
     }
 
-    private flashAttackPos(attacker: Unit, targetPos: Vector3): void {
-        const color = this.unitEmissive(attacker);
-        const flash = MeshBuilder.CreateSphere(`fl_${Date.now()}`, { diameter: 2.5, segments: 5 }, this.scene);
-        flash.position = targetPos.clone();
-        flash.position.y = 5;
-        const fm = new StandardMaterial(`flm_${Date.now()}`, this.scene);
-        fm.emissiveColor = color; fm.alpha = 0.9; flash.material = fm;
+    // ─── SPELL PROJECTILE SYSTEM (Od / Tulpar — heal & attack) ──────────
+    private launchSpellProjectile(attacker: Unit, target: Unit, isHeal: boolean): void {
+        const isFireSpell = attacker.type === 'od';
+        // 576.png: 14 cols × 9 rows, 64×64 cells
+        // Row 0 = orange/fire (Od), Row 3 = cyan/ice (Tulpar)
+        const cols = 14, rows = 9;
+        const row = isFireSpell ? 0 : 3;
+
+        // Create billboard plane for projectile
+        const id = `spell_${Date.now()}_${Math.random()}`;
+        const plane = MeshBuilder.CreatePlane(id, { width: 2.5, height: 2.5 }, this.scene);
+        plane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+        plane.position = attacker.mesh.position.clone();
+        plane.position.y += 3;
+
+        const mat = new StandardMaterial(`${id}_mat`, this.scene);
+        if (this.fireSpellTex) {
+            const tex = this.fireSpellTex.clone();
+            tex.hasAlpha = true;
+            // Show first frame of the correct row
+            tex.uScale = 1 / cols;
+            tex.vScale = 1 / rows;
+            tex.uOffset = 0;
+            tex.vOffset = 1 - (row + 1) / rows;
+            mat.diffuseTexture = tex;
+            mat.opacityTexture = tex;
+            mat.emissiveTexture = tex;
+        }
+        mat.useAlphaFromDiffuseTexture = true;
+        mat.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+        mat.emissiveColor = isFireSpell ? new Color3(1, 0.4, 0) : new Color3(0.2, 0.6, 1);
+        mat.backFaceCulling = false;
+        mat.disableLighting = true;
+        plane.material = mat;
+
+        this.spellProjectiles.push({
+            mesh: plane,
+            targetUnit: target,
+            attacker,
+            speed: 18,
+            damage: attacker.stats.attack,
+            isHeal,
+            elapsed: 0,
+            frameTimer: 0,
+            currentFrame: 0,
+            totalFrames: 10,
+        });
+    }
+
+    private updateSpellProjectiles(dt: number, alive: Unit[]): void {
+        const cols = 14, rows = 9;
+
+        for (let i = this.spellProjectiles.length - 1; i >= 0; i--) {
+            const proj = this.spellProjectiles[i];
+            proj.elapsed += dt;
+
+            // Max lifetime 2s
+            if (proj.elapsed > 2 || proj.mesh.isDisposed()) {
+                if (!proj.mesh.isDisposed()) { proj.mesh.dispose(); (proj.mesh.material as StandardMaterial)?.dispose(); }
+                this.spellProjectiles.splice(i, 1);
+                continue;
+            }
+
+            // Target dead or disposed?
+            const targetAlive = alive.includes(proj.targetUnit) && proj.targetUnit.hp > 0;
+            const targetPos = targetAlive
+                ? proj.targetUnit.mesh.position.clone().addInPlaceFromFloats(0, 2.5, 0)
+                : proj.mesh.position.clone().addInPlaceFromFloats(0, 0, 1); // keep going forward
+
+            // Move toward target
+            const dir = targetPos.subtract(proj.mesh.position);
+            const dist = dir.length();
+            if (dist < 1.5 && targetAlive) {
+                if (proj.isHeal) {
+                    // Od heal projectile — restore HP
+                    const healAmt = 20;
+                    proj.targetUnit.hp = Math.min(proj.targetUnit.stats.maxHp, proj.targetUnit.hp + healAmt);
+                    this.spawnFloatingText(`+${healAmt}`, proj.targetUnit.mesh.position.clone().addInPlaceFromFloats(0, 3.5, 0), new Color3(1, 0.6, 0.1));
+                } else {
+                    // Tulpar damage projectile — deal damage
+                    this.tryAttack(proj.attacker, proj.targetUnit);
+                    this.flashAttackPos(proj.attacker, proj.targetUnit.mesh.position);
+                }
+                proj.mesh.dispose();
+                (proj.mesh.material as StandardMaterial)?.diffuseTexture?.dispose();
+                (proj.mesh.material as StandardMaterial)?.dispose();
+                this.spellProjectiles.splice(i, 1);
+                continue;
+            }
+
+            dir.normalize();
+            proj.mesh.position.addInPlace(dir.scale(proj.speed * dt));
+
+            // Animate sprite sheet frames
+            proj.frameTimer += dt;
+            if (proj.frameTimer >= 0.06) { // ~16fps sprite anim
+                proj.frameTimer = 0;
+                proj.currentFrame = (proj.currentFrame + 1) % proj.totalFrames;
+                const tex = (proj.mesh.material as StandardMaterial)?.diffuseTexture as Texture;
+                if (tex) {
+                    tex.uOffset = proj.currentFrame / cols;
+                }
+            }
+        }
+    }
+
+    // 576.png sprite rows: 0=fire, 1=explosion, 2=spark, 3=ice, 4=poison, 5=heal
+    private spawnFxBillboard(pos: Vector3, color: Color3, row: number, size = 3.0, duration = 350): void {
+        const cols = 14, rows = 9;
+        const id = `fx_${Date.now()}_${Math.random()}`;
+        const plane = MeshBuilder.CreatePlane(id, { width: size, height: size }, this.scene);
+        plane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+        plane.position = pos.clone();
+
+        const mat = new StandardMaterial(`${id}_m`, this.scene);
+        mat.emissiveColor = color;
+        mat.backFaceCulling = false;
+        mat.disableLighting = true;
+        mat.transparencyMode = StandardMaterial.MATERIAL_ALPHABLEND;
+
+        if (this.fireSpellTex) {
+            const tex = this.fireSpellTex.clone();
+            tex.hasAlpha = true;
+            tex.uScale = 1 / cols;
+            tex.vScale = 1 / rows;
+            tex.uOffset = 0;
+            tex.vOffset = 1 - (row + 1) / rows;
+            mat.diffuseTexture = tex;
+            mat.opacityTexture = tex;
+            mat.emissiveTexture = tex;
+            mat.useAlphaFromDiffuseTexture = true;
+        } else {
+            mat.alpha = 0.85;
+        }
+        plane.material = mat;
 
         let t = 0;
-        const id = setInterval(() => {
+        let frame = 0;
+        const frameInterval = duration / 8;
+        const interval = setInterval(() => {
             t += 16;
-            const p = t / 300;
-            if (p >= 1 || flash.isDisposed()) {
-                clearInterval(id);
-                try { flash.dispose(); fm.dispose(); } catch { }
+            const p = t / duration;
+            if (p >= 1 || plane.isDisposed()) {
+                clearInterval(interval);
+                try { plane.dispose(); mat.dispose(); } catch { }
                 return;
             }
-            flash.scaling.setAll(1 + p * 1.5);
-            flash.visibility = 1 - p;
+            // Sprite animasyonu
+            frame = Math.min(Math.floor(t / frameInterval), cols - 1);
+            if (mat.diffuseTexture) {
+                (mat.diffuseTexture as Texture).uOffset = frame / cols;
+            }
+            plane.scaling.setAll(1 + p * 0.8);
+            plane.visibility = 1 - p * p;
         }, 16);
     }
 
+    private getAttackFxRow(attacker: Unit): number {
+        if (attacker.team === 'fire') return 0; // fire
+        if (attacker.team === 'ice') return 3;  // ice
+        return 2; // spark (mercenary)
+    }
+
+    private flashAttackPos(attacker: Unit, targetPos: Vector3): void {
+        const row = this.getAttackFxRow(attacker);
+        const pos = targetPos.clone(); pos.y = 5;
+        this.spawnFxBillboard(pos, this.unitEmissive(attacker), row, 3.5, 350);
+    }
+
     private flashAttack(attacker: Unit, target: Unit): void {
-        const sz = (attacker.type === 'tepegoz' || attacker.type === 'tulpar') ? 2.0 : 1.2;
-
-        const flash = MeshBuilder.CreateSphere(`fl_${Date.now()}`, { diameter: sz, segments: 5 }, this.scene);
-        flash.position = attacker.mesh.position.clone(); flash.position.y += 1.5;
-        const fm = new StandardMaterial(`flm_${Date.now()}`, this.scene);
-        fm.emissiveColor = this.unitEmissive(attacker); fm.alpha = 0.85; flash.material = fm;
-
-        const spark = MeshBuilder.CreateSphere(`sp_${Date.now()}`, { diameter: sz * 0.55, segments: 4 }, this.scene);
-        spark.position = target.mesh.position.clone(); spark.position.y += 1.2;
-        const sm = new StandardMaterial(`spm_${Date.now()}`, this.scene);
-        sm.emissiveColor = this.unitEmissive(attacker); sm.alpha = 0.9; spark.material = sm;
-
-        let t = 0;
-        const id = setInterval(() => {
-            t += 16;
-            const p = t / 200;
-            if (p >= 1 || flash.isDisposed() || spark.isDisposed()) {
-                clearInterval(id);
-                try { flash.dispose(); fm.dispose(); spark.dispose(); sm.dispose(); } catch { }
-                return;
-            }
-            flash.scaling.setAll(1 + p * 0.5); flash.visibility = 1 - p;
-            spark.scaling.setAll(1 + p * 0.8); spark.visibility = 1 - p;
-        }, 16);
+        const row = this.getAttackFxRow(attacker);
+        const sz = (attacker.type === 'tepegoz' || attacker.type === 'tulpar') ? 3.5 : 2.5;
+        // Saldıran tarafta küçük efekt
+        const atkPos = attacker.mesh.position.clone(); atkPos.y += 2;
+        this.spawnFxBillboard(atkPos, this.unitEmissive(attacker), row, sz * 0.6, 200);
+        // Hedefte büyük efekt
+        const tgtPos = target.mesh.position.clone(); tgtPos.y += 1.5;
+        this.spawnFxBillboard(tgtPos, this.unitEmissive(attacker), row, sz, 300);
     }
 
     // ─── GENERIC GLB ANIMATION STATE MACHINE ───────────────────────
@@ -1388,9 +1713,12 @@ export class UnitManager {
         if (state === data.lastState) return;
         data.lastState = state;
 
-        if (state === 'walking') {
+        // Od/Tulpar destek birimleri — attack anim yok, her zaman walk anim göster
+        const isSupport = unit.type === 'od' || unit.type === 'tulpar';
+
+        if (state === 'walking' || (state === 'fighting' && isSupport)) {
             data.walkRoot.setEnabled(true);
-            data.attackRoot.setEnabled(false);
+            if (data.attackRoot !== data.walkRoot) data.attackRoot.setEnabled(false);
             if (data.dieRoot) data.dieRoot.setEnabled(false);
             data.attackAnims.forEach(ag => { ag.stop(); ag.reset(); });
             data.dieAnims.forEach(ag => { ag.stop(); ag.reset(); });
@@ -1402,6 +1730,69 @@ export class UnitManager {
             data.walkAnims.forEach(ag => { ag.stop(); ag.reset(); });
             data.dieAnims.forEach(ag => { ag.stop(); ag.reset(); });
             data.attackAnims.forEach(ag => { ag.loopAnimation = true; ag.speedRatio = 1.0; ag.goToFrame(0); ag.play(true); });
+        }
+    }
+
+    // ─── BÖRÜ MULTI-ATTACK ANIM ─────────────────────────────────────
+    private static readonly BORU_ATTACK_SWITCH_INTERVAL = 1.8; // saniye
+
+    private updateBoruAnim(unit: Unit, dt: number): void {
+        const data = this.boruAnimMap.get(unit.id);
+        if (!data || data.dieStarted) return;
+
+        const state = unit.state;
+        const hasAlt = !!(data.attackRoot2 && data.attackAnims2 && data.attackAnims2.length > 0);
+
+        // State degisti mi?
+        if (state !== data.lastState) {
+            data.lastState = state;
+
+            if (state === 'walking') {
+                data.walkRoot.setEnabled(true);
+                if (data.attackRoot !== data.walkRoot) data.attackRoot.setEnabled(false);
+                if (data.attackRoot2) data.attackRoot2.setEnabled(false);
+                if (data.dieRoot) data.dieRoot.setEnabled(false);
+                data.attackAnims.forEach(ag => { ag.stop(); ag.reset(); });
+                data.attackAnims2?.forEach(ag => { ag.stop(); ag.reset(); });
+                data.dieAnims.forEach(ag => { ag.stop(); ag.reset(); });
+                data.walkAnims.forEach(ag => { ag.loopAnimation = true; ag.speedRatio = 1.0; ag.goToFrame(0); ag.play(true); });
+                data.activeAttack = 1;
+                data.attackSwitchTimer = 0;
+            } else if (state === 'fighting') {
+                data.walkRoot.setEnabled(false);
+                if (data.dieRoot) data.dieRoot.setEnabled(false);
+                data.walkAnims.forEach(ag => { ag.stop(); ag.reset(); });
+                data.dieAnims.forEach(ag => { ag.stop(); ag.reset(); });
+                // Random baslangic
+                const pick = hasAlt ? (Math.random() < 0.5 ? 1 : 2) : 1;
+                this.activateBoruAttack(data, pick as 1 | 2);
+            }
+            return;
+        }
+
+        // Fighting sirasinda periyodik olarak attack degistir
+        if (state === 'fighting' && hasAlt) {
+            data.attackSwitchTimer = (data.attackSwitchTimer ?? 0) + dt;
+            if (data.attackSwitchTimer! >= UnitManager.BORU_ATTACK_SWITCH_INTERVAL) {
+                data.attackSwitchTimer = 0;
+                const next = data.activeAttack === 1 ? 2 : 1;
+                this.activateBoruAttack(data, next);
+            }
+        }
+    }
+
+    private activateBoruAttack(data: GLBAnimData, which: 1 | 2): void {
+        data.activeAttack = which;
+        if (which === 1) {
+            data.attackRoot.setEnabled(true);
+            if (data.attackRoot2) data.attackRoot2.setEnabled(false);
+            data.attackAnims2?.forEach(ag => { ag.stop(); ag.reset(); });
+            data.attackAnims.forEach(ag => { ag.loopAnimation = true; ag.speedRatio = 1.0; ag.goToFrame(0); ag.play(true); });
+        } else {
+            data.attackRoot.setEnabled(false);
+            if (data.attackRoot2) data.attackRoot2.setEnabled(true);
+            data.attackAnims.forEach(ag => { ag.stop(); ag.reset(); });
+            data.attackAnims2?.forEach(ag => { ag.loopAnimation = true; ag.speedRatio = 1.0; ag.goToFrame(0); ag.play(true); });
         }
     }
 
@@ -1615,8 +2006,10 @@ export class UnitManager {
         data.dieStarted = true;
         data.walkRoot.setEnabled(false);
         data.attackRoot.setEnabled(false);
+        if (data.attackRoot2) data.attackRoot2.setEnabled(false);
         data.walkAnims.forEach(ag => ag.stop());
         data.attackAnims.forEach(ag => ag.stop());
+        data.attackAnims2?.forEach(ag => ag.stop());
 
         if (data.dieRoot) {
             // Has die animation — play it and dispose after
@@ -1650,8 +2043,9 @@ export class UnitManager {
         try {
             unit.healthBarBg?.dispose();
             unit.healthBarFill?.dispose();
-            [...data.walkAnims, ...data.attackAnims, ...data.dieAnims].forEach(ag => { try { ag.dispose(); } catch { } });
+            [...data.walkAnims, ...data.attackAnims, ...(data.attackAnims2 ?? []), ...data.dieAnims].forEach(ag => { try { ag.dispose(); } catch { } });
             const roots = new Set<TransformNode>([data.walkRoot, data.attackRoot]);
+            if (data.attackRoot2) roots.add(data.attackRoot2);
             if (data.dieRoot) roots.add(data.dieRoot);
             for (const root of roots) {
                 root.getChildMeshes().forEach(m => { try { m.dispose(); } catch { } });

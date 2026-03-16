@@ -1,5 +1,5 @@
 /**
- * PromptCard.ts — 5 Skill Card definitions for A2.
+ * PromptCard.ts — 8 Skill Card definitions for A2.
  * name/description use i18n keys — resolved at render time.
  */
 import type { PromptCardDef } from './types';
@@ -16,7 +16,7 @@ export const PROMPT_DEFS: PromptCardDef[] = [
         duration: 0,
         cooldown: 30,
         targetTeam: 'self',
-        imagePath: '/assets/images/skills/mana1.png',
+        imagePath: '/assets/images/skills/mana1.webp',
     },
     {
         id: 'skill_mana_freeze',
@@ -27,9 +27,9 @@ export const PROMPT_DEFS: PromptCardDef[] = [
         effectType: 'mana_freeze',
         magnitude: 0,
         duration: 5,
-        cooldown: 25,
+        cooldown: 20,
         targetTeam: 'self',
-        imagePath: '/assets/images/skills/mana2.png',
+        imagePath: '/assets/images/skills/mana2.webp',
     },
     {
         id: 'skill_ouroboros',
@@ -42,7 +42,7 @@ export const PROMPT_DEFS: PromptCardDef[] = [
         duration: 0,
         cooldown: 45,
         targetTeam: 'enemy',
-        imagePath: '/assets/images/skills/ouroboros.png',
+        imagePath: '/assets/images/skills/ouroboros.webp',
     },
     {
         id: 'skill_autocollect',
@@ -55,7 +55,7 @@ export const PROMPT_DEFS: PromptCardDef[] = [
         duration: 30,
         cooldown: 40,
         targetTeam: 'self',
-        imagePath: '/assets/images/skills/autocollect.png',
+        imagePath: '/assets/images/skills/autocollect.webp',
     },
     {
         id: 'skill_bancollect',
@@ -68,6 +68,45 @@ export const PROMPT_DEFS: PromptCardDef[] = [
         duration: 45,
         cooldown: 50,
         targetTeam: 'enemy',
-        imagePath: '/assets/images/skills/bancollect.png',
+        imagePath: '/assets/images/skills/bancollect.webp',
+    },
+    {
+        id: 'skill_heal_home',
+        nameKey: 'healHome',
+        descKey: 'healHomeDesc',
+        name: '', description: '',
+        manaCost: 0,
+        effectType: 'healthome',
+        magnitude: 75,
+        duration: 30,
+        cooldown: 60,
+        targetTeam: 'self',
+        imagePath: '/assets/images/skills/healthome.webp',
+    },
+    {
+        id: 'skill_recall',
+        nameKey: 'recall',
+        descKey: 'recallDesc',
+        name: '', description: '',
+        manaCost: 0,
+        effectType: 'recall',
+        magnitude: 0,
+        duration: 0,
+        cooldown: 9999,
+        targetTeam: 'self',
+        imagePath: '/assets/images/skills/recall.webp',
+    },
+    {
+        id: 'skill_unlucky',
+        nameKey: 'unlucky',
+        descKey: 'unluckyDesc',
+        name: '', description: '',
+        manaCost: 0,
+        effectType: 'unlucky',
+        magnitude: 0,
+        duration: 30,
+        cooldown: 60,
+        targetTeam: 'enemy',
+        imagePath: '/assets/images/skills/unlucky.webp',
     },
 ];

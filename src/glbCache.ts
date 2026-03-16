@@ -1,6 +1,7 @@
 /**
- * glbCache.ts — Sayfa açılır açılmaz GLB dosyalarını arka planda indirir
- * ve bellekte (objectURL) tutar. UnitManager.preload() bu cache'den yükler.
+ * glbCache.ts — GLB dosyalarını IndexedDB + bellekte cache'ler.
+ * İlk ziyarette network'ten indirir, IndexedDB'ye yazar.
+ * Sonraki sayfa yenilemelerinde IndexedDB'den okur (network sıfır).
  */
 
 const BASE = '/assets/character%20animation/';
@@ -17,7 +18,12 @@ const GLB_FILES = [
     'tulpar.glb',
     'sahmeranwalk.glb', 'sahmeranattack.glb', 'sahmerandie.glb',
 ];
-const BORU_FILES = ['boruwalk.glb', 'boruattack.glb', 'borudie.glb'];
+const BORU_FILES = ['boruwalk.glb', 'boruattack.glb', 'boruattack2.glb', 'borudie.glb'];
+
+// IndexedDB versiyonu — GLB degisirse artir, eski cache silinir
+const IDB_NAME = 'a2-glb-cache';
+const IDB_VERSION = 4; // v4: tepegozwalk.glb optimized (586KB)
+const IDB_STORE = 'blobs';
 
 /** file adı → objectURL (blob:...) eşlemesi */
 const cache = new Map<string, string>();
@@ -29,44 +35,82 @@ const urlToFile = new Map<string, string>();
 let _done = false;
 let _promise: Promise<void> | null = null;
 
-/** Cache'den objectURL al. Yoksa orijinal URL döner (fallback). */
+/** Download progress callback */
+let _onCacheProgress: ((loaded: number, total: number) => void) | null = null;
+export function setCacheProgressCallback(cb: ((loaded: number, total: number) => void) | null): void {
+    _onCacheProgress = cb;
+}
+
+const FETCH_TIMEOUT_MS = 45_000;
+
 export function getCachedUrl(file: string, boru = false): string {
     const cached = cache.get(file);
     if (cached) return cached;
-    // Fallback — cache'de yoksa orijinal URL
     return (boru ? BORU_BASE : BASE) + file;
 }
 
-/** objectURL → orijinal dosya adı (plugin seçimi için) */
 export function getOriginalFileName(objectUrl: string): string | undefined {
     return urlToFile.get(objectUrl);
 }
 
-/** Cache hazır mı? */
 export function isCacheReady(): boolean {
     return _done;
 }
 
-/** Toplam dosya sayısı ve inmiş dosya sayısı */
 export function getCacheProgress(): { loaded: number; total: number } {
     const total = GLB_FILES.length + BORU_FILES.length;
     return { loaded: cache.size, total };
 }
 
-/** Cache promise — boot() bu bitmesini bekleyebilir */
 export function waitForCache(): Promise<void> {
     return _promise ?? Promise.resolve();
 }
 
-/** Sayfa açılınca çağır — arka planda tüm GLB'leri indirir */
 export function startGLBWarmCache(): void {
-    if (_promise) return; // Zaten başlatıldı (veya bitti)
+    if (_promise) return;
     _promise = _downloadAll();
 }
 
+// ── IndexedDB helpers ──────────────────────────────────────────────
+function openDB(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(IDB_STORE)) {
+                db.createObjectStore(IDB_STORE);
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+function idbGet(db: IDBDatabase, key: string): Promise<Blob | undefined> {
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).get(key);
+        req.onsuccess = () => resolve(req.result as Blob | undefined);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+function idbPut(db: IDBDatabase, key: string, blob: Blob): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(blob, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+// ── Ana indirme ────────────────────────────────────────────────────
 async function _downloadAll(): Promise<void> {
-    console.log('📦 GLB warm-cache başlatılıyor...');
+    console.log('📦 GLB cache başlatılıyor...');
     const t0 = performance.now();
+
+    let db: IDBDatabase | null = null;
+    try { db = await openDB(); } catch { console.warn('IndexedDB açılamadı, sadece network kullanılacak'); }
 
     const allEntries = [
         ...GLB_FILES.map(f => ({ file: f, url: BASE + f })),
@@ -75,32 +119,48 @@ async function _downloadAll(): Promise<void> {
 
     let done = 0;
     const total = allEntries.length;
-    const BATCH = 4;
+    const BATCH = 6;
 
     for (let i = 0; i < allEntries.length; i += BATCH) {
         const batch = allEntries.slice(i, i + BATCH);
         await Promise.all(batch.map(async ({ file, url }) => {
-            // Zaten cache'de varsa (sayfa reload olmadan tekrar çağrıldı) atla
-            if (cache.has(file)) { done++; return; }
+            if (cache.has(file)) { done++; _onCacheProgress?.(done, total); return; }
             try {
-                // force-cache: tarayıcı disk cache'inde varsa network'e gitme
-                const resp = await fetch(url, { cache: 'force-cache' });
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const blob = await resp.blob();
+                let blob: Blob | undefined;
+
+                // 1) IndexedDB'den dene
+                if (db) {
+                    try { blob = await idbGet(db, file); } catch { /* ignore */ }
+                }
+
+                // 2) IndexedDB'de yoksa network'ten indir
+                if (!blob) {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+                    const resp = await fetch(url, { cache: 'force-cache', signal: controller.signal });
+                    clearTimeout(timer);
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    blob = await resp.blob();
+                    // IndexedDB'ye kaydet (arka planda, beklemeden)
+                    if (db) { idbPut(db, file, blob).catch(() => {}); }
+                }
+
                 const objectUrl = URL.createObjectURL(blob);
                 cache.set(file, objectUrl);
                 urlToFile.set(objectUrl, file);
                 done++;
                 const mb = (blob.size / 1024 / 1024).toFixed(1);
-                console.log(`  [${done}/${total}] ${file} — ${mb} MB`);
+                const src = blob ? 'idb' : 'net';
+                console.log(`  [${done}/${total}] ${file} — ${mb} MB (${src})`);
             } catch (err) {
                 done++;
                 console.warn(`  [${done}/${total}] ${file} basarisiz:`, err);
             }
+            _onCacheProgress?.(done, total);
         }));
     }
 
     _done = true;
     const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-    console.log(`🔥 GLB warm-cache tamamlandı — ${cache.size}/${total} dosya, ${elapsed}s`);
+    console.log(`🔥 GLB cache tamamlandı — ${cache.size}/${total} dosya, ${elapsed}s`);
 }

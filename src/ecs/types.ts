@@ -95,7 +95,10 @@ export type PromptEffectType =
     | 'mana_freeze'       // mana doesn't decrease for 5 seconds
     | 'ouroboros'         // convert an enemy unit to fight for you
     | 'autocollect'       // auto-collect AVX coins for 30 seconds
-    | 'bancollect';       // block enemy AVX collection for 45 seconds
+    | 'bancollect'        // block enemy AVX collection for 45 seconds
+    | 'healthome'         // heal base over time
+    | 'recall'            // teleport all friendly units back to base + lane pick
+    | 'unlucky';          // random lightning strikes on enemies
 
 export interface PromptCardDef {
     id: string;

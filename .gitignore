@@ -19,3 +19,20 @@ contracts/cache/
 contracts/typechain-types/
 index.html.disk_backup
 glb fix/
+
+# Media / animation assets
+*.png
+*.gif
+*.jpg
+*.jpeg
+*.webp
+*.glb
+*.fbx
+*.mp3
+*.wav
+*.ogg
+*.mp4
+*.webm
+"Effect and FX Pixel Part 12 Free/"
+"Effect and FX Pixel Part 12 Free.zip"
+Meshy_AI_biped/

@@ -27,13 +27,15 @@ export type MPMessage =
     | { type: 'ping'; ts: number }
     | { type: 'pong'; ts: number }
     | { type: 'surrender' }
+    | { type: 'start_game' }  // host oyunu başlattı, guest de geçsin
     // ── Bet messages ──
     | { type: 'bet_offer'; amountAvax: number; matchId: string; hostAddress: string }
     | { type: 'bet_accept'; txHash: string; guestAddress: string }
     | { type: 'bet_reject' }
     | { type: 'bet_cancel' }
     | { type: 'bet_claim'; winnerAddress: string }
-    | { type: 'game_over'; winner: 'fire' | 'ice'; reason: string };
+    | { type: 'game_over'; winner: 'fire' | 'ice'; reason: string }
+    | { type: 'base_sync'; fireHp: number; iceHp: number };
 
 type MessageHandler = (msg: MPMessage) => void;
 type StatusHandler = (status: MPStatus) => void;
@@ -47,32 +49,22 @@ export type MPStatus =
     | 'disconnected'
     | 'error';
 
-// ── ICE sunucuları (STUN + TURN) ──
-const ICE_SERVERS: RTCIceServer[] = [
+// ICE sunucuları sunucudan alınır (geçici HMAC token)
+const FALLBACK_ICE: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    // Ücretsiz TURN sunucuları (OpenRelay / metered.ca free)
-    {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-    },
-    {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-    },
-    {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-    },
 ];
 
-const JOIN_TIMEOUT_MS = 20_000;       // 20 saniye timeout
+async function fetchIceServers(): Promise<RTCIceServer[]> {
+    try {
+        const res = await fetch('/api/turn-credentials');
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.iceServers)) return data.iceServers;
+    } catch { /* sunucuya ulaşılamazsa fallback */ }
+    return FALLBACK_ICE;
+}
+
+const JOIN_TIMEOUT_MS = 45_000;       // 45 saniye timeout (TURN relay yavaş olabilir)
 const JOIN_RETRY_MAX = 2;            // 2 kez retry
 
 export class MultiplayerService {
@@ -83,6 +75,8 @@ export class MultiplayerService {
     public opponentTeam: 'fire' | 'ice' | null = null;
     /** Host: rakip 'loaded' gönderdi mi? (race condition için) */
     public _opponentLoaded: boolean = false;
+    /** Guest: host 'start' gönderdi mi? (race condition için) */
+    public _startReceived: boolean = false;
     public lobbyAmount: number = 0;
     public lobbyIsPublic: boolean = true;
     public lastError: string = '';
@@ -107,7 +101,7 @@ export class MultiplayerService {
     }
 
     /** Lobi oluştur (host) — rastgele 6 haneli kod */
-    async createLobby(myTeam: 'fire' | 'ice', amount: number = 0, isPublic: boolean = true): Promise<string> {
+    async createLobby(myTeam: 'fire' | 'ice', amount: number = 0, isPublic: boolean = true, lobbyName: string = ''): Promise<string> {
         this.myTeam = myTeam;
         this.role = 'host';
         this.lobbyAmount = amount;
@@ -117,6 +111,8 @@ export class MultiplayerService {
         const code = this.generateCode();
         this.lobbyCode = code;
 
+        const iceServers = await fetchIceServers();
+
         // Backend'e lobi kaydet
         try {
             const w = (window as any).walletAddress || null;
@@ -124,7 +120,7 @@ export class MultiplayerService {
             await fetch('/api/lobby', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code, team: myTeam, betAmount: amount, isPublic, wallet: w, nickname: nick }),
+                body: JSON.stringify({ code, team: myTeam, betAmount: amount, isPublic, wallet: w, nickname: nick, lobbyName: lobbyName.slice(0, 20) }),
             });
         } catch (e) {
             console.warn('[MP] Lobi backend kaydı başarısız:', e);
@@ -133,8 +129,12 @@ export class MultiplayerService {
         return new Promise((resolve, reject) => {
             this.lastError = '';
             this.peer = new Peer(`a2-${code}`, {
+                host: 'a2saga.me',
+                port: 443,
+                path: '/peerjs',
+                secure: true,
                 debug: 1,
-                config: { iceServers: ICE_SERVERS },
+                config: { iceServers },
             });
 
             this.peer.on('open', (id: string) => {
@@ -147,7 +147,7 @@ export class MultiplayerService {
                 // ID çakışması → yeni kod dene
                 if (err.type === 'unavailable-id') {
                     this.peer.destroy();
-                    resolve(this.createLobby(myTeam, amount, isPublic));
+                    resolve(this.createLobby(myTeam, amount, isPublic, lobbyName));
                 } else {
                     console.error('[MP] Peer error:', err);
                     this.lastError = err.message || err.type || String(err);
@@ -200,8 +200,10 @@ export class MultiplayerService {
         }
     }
 
-    private _tryJoin(attempt: number): Promise<void> {
+    private async _tryJoin(attempt: number): Promise<void> {
         this.setStatus('connecting');
+
+        const iceServers = await fetchIceServers();
 
         return new Promise((resolve, reject) => {
             let settled = false;
@@ -213,8 +215,12 @@ export class MultiplayerService {
             };
 
             this.peer = new Peer(undefined, {
+                host: 'a2saga.me',
+                port: 443,
+                path: '/peerjs',
+                secure: true,
                 debug: 1,
-                config: { iceServers: ICE_SERVERS },
+                config: { iceServers },
             });
 
             this.peer.on('open', () => {
@@ -269,6 +275,9 @@ export class MultiplayerService {
             } else if (data.type === 'loaded') {
                 // Rakip yüklemeyi bitirdi — host tarafında flag set et
                 this._opponentLoaded = true;
+            } else if (data.type === 'start') {
+                // Host start gönderdi — guest tarafında flag set et (race condition fix)
+                this._startReceived = true;
             } else if (data.type === 'ping') {
                 this.send({ type: 'pong', ts: data.ts });
                 return;
@@ -343,6 +352,11 @@ export class MultiplayerService {
         this.send({ type: 'game_over', winner, reason });
     }
 
+    /** Host → Guest: base HP senkronizasyonu */
+    sendBaseSync(fireHp: number, iceHp: number) {
+        this.send({ type: 'base_sync', fireHp, iceHp });
+    }
+
     private startPing() {
         this.pingInterval = window.setInterval(() => {
             this.pingTs = Date.now();
@@ -373,6 +387,8 @@ export class MultiplayerService {
         this.lobbyAmount = 0;
         this.lobbyIsPublic = true;
         this.opponentTeam = null;
+        this._opponentLoaded = false;
+        this._startReceived = false;
         this.setStatus('idle');
     }
 

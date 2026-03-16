@@ -166,15 +166,16 @@ class ProfileService {
     async registerProfile(username: string, avatarURI: string): Promise<boolean> {
         if (!this.walletAddress) return false;
 
+        const existing = lsGet(this.walletAddress);
         const profile: PlayerProfile = {
             address: this.walletAddress,
             username,
-            avatarURI,
-            gamesPlayed: 0,
-            wins: 0,
-            losses: 0,
-            draws: 0,
-            registeredAt: Math.floor(Date.now() / 1000),
+            avatarURI: avatarURI || existing?.avatarURI || '',
+            gamesPlayed: existing?.gamesPlayed ?? 0,
+            wins: existing?.wins ?? 0,
+            losses: existing?.losses ?? 0,
+            draws: existing?.draws ?? 0,
+            registeredAt: existing?.registeredAt ?? Math.floor(Date.now() / 1000),
             exists: true,
         };
 
