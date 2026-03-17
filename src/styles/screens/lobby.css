@@ -1183,9 +1183,12 @@
 }
 
 #lobby-back {
-  top: auto;
-  bottom: 32px;
-  left: 32px;
+  position: static;
+  top: auto; bottom: auto; left: auto; right: auto;
+  z-index: auto;
+  font-size: 10px;
+  height: 30px;
+  padding: 0 14px;
 }
 
 .lobby-inner {
@@ -2232,3 +2235,604 @@
   color: rgba(255, 255, 255, 0.18);
   text-align: center;
 }
+
+/* ══════════════════════════════════════════
+   KO-STYLE LOBİ
+══════════════════════════════════════════ */
+
+/* Ana kapsayıcı: grid — chat sağda tam alta kadar uzar */
+.ko-lobby {
+  display: grid;
+  grid-template-columns: 1fr 256px;
+  grid-template-rows: 40px 1fr 46px;
+  grid-template-areas:
+    "subbar    subbar"
+    "main      chat"
+    "bottombar chat";
+  position: absolute;
+  top: 64px;
+  left: 0; right: 0; bottom: 0;
+  background: #0d0b10;
+  overflow: hidden;
+}
+
+/* --- SUBBAR: takim + kod gir --- */
+.ko-subbar {
+  grid-area: subbar;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  background: linear-gradient(180deg, #1e0e0e 0%, #160a0a 100%);
+  flex-shrink: 0;
+}
+
+.ko-subbar-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: rgba(255,255,255,0.28);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ko-subbar-sep { flex: 1; }
+
+.ko-team-btn {
+  padding: 4px 16px;
+  height: 28px;
+  font-family: 'Cinzel', serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.03);
+  color: rgba(255,255,255,0.35);
+}
+.ko-team-btn.fire-pick:hover,
+.ko-team-btn.fire-pick.selected-fire {
+  background: rgba(200,50,20,0.22);
+  border-color: rgba(200,60,20,0.6);
+  color: #ff8855;
+}
+.ko-team-btn.ice-pick:hover,
+.ko-team-btn.ice-pick.selected-ice {
+  background: rgba(20,80,220,0.22);
+  border-color: rgba(40,100,230,0.6);
+  color: #70c0ff;
+}
+
+.ko-code-input {
+  width: 88px;
+  height: 26px;
+  padding: 0 8px;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 2px;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  text-align: center;
+  outline: none;
+}
+.ko-code-input:focus { border-color: rgba(255,185,50,0.4); }
+
+.ko-join-code-btn {
+  height: 26px;
+  padding: 0 14px;
+  background: rgba(20,60,20,0.6);
+  border: 1px solid rgba(50,120,50,0.6);
+  border-radius: 2px;
+  color: #68cc68;
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ko-join-code-btn:hover { background: rgba(30,80,30,0.8); color: #88ee88; }
+
+/* --- ANA ALAN --- */
+.ko-main {
+  grid-area: main;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ko-main-content {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* lobby-actions: tablo modu */
+.lobby-actions {
+  flex: 1 !important;
+  flex-direction: column !important;
+  display: flex;
+  overflow: hidden;
+}
+
+.ko-table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.ko-table-wrap::-webkit-scrollbar { width: 5px; }
+.ko-table-wrap::-webkit-scrollbar-track { background: transparent; }
+.ko-table-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+
+/* --- TABLO --- */
+.ko-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* Sütun genişlikleri (toplam = 100%) */
+.ko-table colgroup col:nth-child(1) { width: 5%; }   /* NO */
+.ko-table colgroup col:nth-child(2) { width: 36%; }  /* ODA ADI */
+.ko-table colgroup col:nth-child(3) { width: 10%; }  /* DURUM */
+.ko-table colgroup col:nth-child(4) { width: 8%; }   /* KİŞİ */
+.ko-table colgroup col:nth-child(5) { width: 12%; }  /* BAHİS */
+.ko-table colgroup col:nth-child(6) { width: 10%; }  /* TARAF */
+.ko-table colgroup col:nth-child(7) { width: 9%; }   /* KATIL */
+
+.ko-table thead tr {
+  background: linear-gradient(180deg, #2c1205 0%, #1e0d03 100%);
+  border-bottom: 2px solid rgba(160,80,20,0.4);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.ko-table thead th {
+  padding: 9px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: rgba(200,140,60,0.65);
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ko-table tbody tr {
+  border-bottom: 1px solid rgba(255,255,255,0.035);
+  transition: background 0.1s;
+  cursor: pointer;
+}
+.ko-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.012); }
+.ko-table tbody tr:hover { background: rgba(200,100,30,0.08); }
+
+.ko-table tbody td {
+  padding: 10px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  color: rgba(255,255,255,0.72);
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sütun özel stiller */
+.ko-table tbody td:nth-child(1) {
+  color: rgba(255,255,255,0.22);
+  font-size: 10px;
+  text-align: center;
+}
+.ko-table tbody td:nth-child(2) {
+  font-weight: 600;
+  color: #ddc880;
+}
+.ko-table tbody td:nth-child(3),
+.ko-table tbody td:nth-child(4) { text-align: center; }
+.ko-table tbody td:nth-child(5) {
+  text-align: center;
+  color: rgba(255,185,50,0.75);
+  font-size: 10px;
+  font-weight: 700;
+}
+.ko-table tbody td:nth-child(6),
+.ko-table tbody td:nth-child(7) { text-align: center; }
+
+.ko-status-open {
+  color: #5ddd5d;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.ko-team-fire { color: #ff7040; font-weight: 700; font-size: 10px; letter-spacing: 1px; }
+.ko-team-ice  { color: #60b8ff; font-weight: 700; font-size: 10px; letter-spacing: 1px; }
+
+.ko-empty-row td {
+  text-align: center !important;
+  color: rgba(255,255,255,0.18) !important;
+  font-size: 11px !important;
+  padding: 48px 0 !important;
+  letter-spacing: 1px;
+}
+
+.ko-row-join {
+  padding: 4px 12px;
+  height: 24px;
+  background: rgba(10,40,10,0.7);
+  border: 1px solid rgba(40,110,40,0.6);
+  border-radius: 2px;
+  color: #5dcc5d;
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.ko-row-join:hover { background: rgba(20,60,20,0.9); color: #88ee88; }
+
+/* --- ALT BAR --- */
+.ko-bottombar {
+  grid-area: bottombar;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 46px;
+  padding: 0 10px;
+  background: linear-gradient(180deg, #160a0a 0%, #0f0710 100%);
+  border-top: 2px solid rgba(140,30,20,0.4);
+}
+
+.ko-bar-btn {
+  height: 30px;
+  padding: 0 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 2px;
+  color: rgba(255,255,255,0.5);
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.ko-bar-btn:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); }
+
+.ko-bar-qm {
+  background: rgba(15,40,100,0.3);
+  border-color: rgba(40,80,180,0.4);
+  color: #80aaff;
+}
+.ko-bar-qm:hover { background: rgba(20,50,130,0.5); color: #a0c4ff; }
+
+.ko-bar-create {
+  margin-left: auto;
+  background: linear-gradient(180deg, #5a1010 0%, #3a0a0a 100%);
+  border-color: rgba(180,50,30,0.6);
+  color: #ffaa80;
+  font-family: 'Cinzel', serif;
+  letter-spacing: 3px;
+}
+.ko-bar-create:hover { background: linear-gradient(180deg, #782020 0%, #500f0f 100%); color: #ffcc99; }
+
+/* --- STATE PANELLERİ (bekleme/bağlandı/qm) --- */
+.ko-state-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #0d0b10;
+  padding: 32px 24px;
+  overflow-y: auto;
+}
+
+.ko-state-title {
+  font-family: 'Cinzel', serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: rgba(255,255,255,0.2);
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.ko-display-code {
+  font-family: 'Cinzel', serif;
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 10px;
+  color: #e8b060;
+  text-shadow: 0 0 24px rgba(232,176,96,0.3);
+  margin-bottom: 16px;
+}
+
+.ko-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 3px;
+  color: rgba(255,255,255,0.45);
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  margin-bottom: 28px;
+  transition: all 0.15s;
+}
+.ko-copy-btn:hover { background: rgba(255,255,255,0.09); color: #fff; }
+
+.ko-wait-dots { display: flex; gap: 8px; margin-bottom: 12px; }
+
+.ko-status-text {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 1px;
+}
+
+/* --- ODA KUR MODAL --- */
+.ko-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ko-modal {
+  width: 360px;
+  background: #0f0e16;
+  border: 1px solid rgba(160,100,30,0.3);
+  border-top: 3px solid #7a1010;
+  border-radius: 3px;
+  padding: 28px 24px 24px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+}
+
+.ko-modal-title {
+  font-family: 'Cinzel', serif;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 5px;
+  color: #e0a850;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.ko-modal-row { margin-bottom: 18px; }
+
+.ko-modal-label {
+  display: block;
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: rgba(255,255,255,0.28);
+  text-transform: uppercase;
+  margin-bottom: 7px;
+}
+
+.ko-modal-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 2px;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.ko-modal-input:focus { border-color: rgba(220,160,60,0.5); }
+
+.ko-privacy-btn {
+  padding: 5px 14px;
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 2px;
+  color: rgba(255,255,255,0.3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ko-privacy-btn.active {
+  background: rgba(160,100,20,0.2);
+  border-color: rgba(200,140,40,0.5);
+  color: #d4a040;
+}
+
+.ko-modal-btns { display: flex; gap: 8px; margin-top: 22px; }
+
+.ko-modal-confirm {
+  flex: 1;
+  height: 36px;
+  background: linear-gradient(180deg, #7a1414 0%, #4e0c0c 100%);
+  border: 1px solid rgba(180,50,30,0.6);
+  border-radius: 2px;
+  color: #ffb880;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ko-modal-confirm:hover { background: linear-gradient(180deg, #962020 0%, #6a1010 100%); }
+
+.ko-modal-cancel {
+  padding: 0 20px;
+  height: 36px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 2px;
+  color: rgba(255,255,255,0.35);
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ko-modal-cancel:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.65); }
+
+/* back butonu bottombar içinde */
+.ko-bar-back {
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.4);
+}
+.ko-bar-back:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.7); }
+
+.ko-subbar-colon {
+  color: rgba(255,255,255,0.2);
+  font-size: 11px;
+  margin-right: 2px;
+}
+
+/* ─── CHAT PANELİ (sağ kolon, tam alta kadar) ───────────── */
+.ko-chat-panel {
+  grid-area: chat;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgba(255,255,255,0.06);
+  background: rgba(8,6,14,0.95);
+  overflow: hidden;
+}
+
+.ko-chat-tabs {
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.ko-chat-tab {
+  flex: 1;
+  height: 31px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: rgba(255,255,255,0.28);
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ko-chat-tab:hover { color: rgba(255,255,255,0.55); }
+.ko-chat-tab.active {
+  color: #e8b060;
+  border-bottom-color: #e8b060;
+}
+
+.ko-chat-msgs {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ko-chat-msgs::-webkit-scrollbar { width: 4px; }
+.ko-chat-msgs::-webkit-scrollbar-track { background: transparent; }
+.ko-chat-msgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+.ko-chat-msg {
+  display: flex;
+  flex-direction: row;
+  gap: 5px;
+  align-items: baseline;
+}
+.ko-chat-nick {
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(232,176,96,0.65);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ko-chat-msg.ko-chat-msg-own .ko-chat-nick { color: rgba(100,180,255,0.65); }
+.ko-chat-text {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: rgba(255,255,255,0.72);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.ko-chat-system {
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  color: rgba(255,255,255,0.2);
+  text-align: center;
+  letter-spacing: 0.5px;
+  padding: 2px 0;
+}
+
+.ko-chat-input-row {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+}
+
+.ko-chat-input {
+  flex: 1;
+  height: 30px;
+  padding: 0 8px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 2px;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.ko-chat-input:focus { border-color: rgba(200,140,50,0.4); }
+
+.ko-chat-send {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  background: rgba(120,50,10,0.4);
+  border: 1px solid rgba(180,80,20,0.5);
+  border-radius: 2px;
+  color: #e8a050;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ko-chat-send:hover { background: rgba(160,60,10,0.6); color: #ffcc80; }

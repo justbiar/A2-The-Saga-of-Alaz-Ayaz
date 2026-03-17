@@ -316,6 +316,86 @@
 }
 
 /* ═══════════════════════════════════════════
+   MATCH HISTORY
+═══════════════════════════════════════════ */
+.pfs-matches-section {
+  width: 100%;
+  max-width: 760px;
+  margin-top: 4px;
+}
+
+.pfs-matches-title {
+  margin-bottom: 10px;
+}
+
+.pfs-matches-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pfs-match-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pfs-match-result {
+  font-family: 'Cinzel', serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  min-width: 44px;
+  text-align: center;
+}
+
+.pfs-match-result.win  { background: rgba(85,255,153,0.10); color: #55ff99; border: 1px solid rgba(85,255,153,0.2); }
+.pfs-match-result.loss { background: rgba(255,85,85,0.10);  color: #ff5555; border: 1px solid rgba(255,85,85,0.2); }
+.pfs-match-result.draw { background: rgba(255,204,68,0.10); color: #ffcc44; border: 1px solid rgba(255,204,68,0.2); }
+
+.pfs-match-opponent {
+  flex: 1;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pfs-match-bet {
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 80px;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.pfs-match-bet.won  { color: #55ff99; }
+.pfs-match-bet.lost { color: #ff5555; }
+
+.pfs-match-date {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.2);
+  min-width: 55px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pfs-matches-empty {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.2);
+  text-align: center;
+  padding: 18px 0;
+  letter-spacing: 1px;
+}
+
+/* ═══════════════════════════════════════════
    PROFILE MODAL
 ═══════════════════════════════════════════ */
 #profile-modal {

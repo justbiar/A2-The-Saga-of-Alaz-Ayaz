@@ -49,6 +49,54 @@ const iceBaseHpText = document.getElementById('ice-base-hp') as HTMLElement;
 const surgeIndicator = document.getElementById('surge-indicator') as HTMLElement;
 const bcmFill = document.getElementById('bcm-fill') as HTMLElement;
 
+// ─── COUNTDOWN ─────────────────────────────────────────────────────
+function showCountdown(team: 'fire' | 'ice'): Promise<void> {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.id = 'countdown-overlay';
+        overlay.style.cssText = `
+            position:fixed;inset:0;z-index:9999;
+            display:flex;align-items:center;justify-content:center;
+            pointer-events:none;
+        `;
+        document.body.appendChild(overlay);
+
+        const glow = team === 'fire' ? '#ff6633' : '#66ccff';
+        const label = document.createElement('div');
+        label.style.cssText = `
+            font-family:'Cinzel',serif;font-size:120px;font-weight:900;
+            color:#fff;letter-spacing:4px;
+            text-shadow:0 0 30px ${glow},0 0 70px ${glow}88;
+            opacity:0;transform:scale(1.6);
+            transition:transform 0.18s ease-out,opacity 0.12s ease-out;
+        `;
+        overlay.appendChild(label);
+
+        const steps = ['3', '2', '1', t('countdownFight')];
+        let i = 0;
+        function tick() {
+            if (i >= steps.length) {
+                label.style.opacity = '0';
+                label.style.transform = 'scale(1.6)';
+                setTimeout(() => { overlay.remove(); resolve(); }, 350);
+                return;
+            }
+            label.textContent = steps[i];
+            label.style.transition = 'none';
+            label.style.opacity = '0';
+            label.style.transform = 'scale(1.6)';
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                label.style.transition = 'transform 0.18s ease-out,opacity 0.12s ease-out';
+                label.style.opacity = '1';
+                label.style.transform = 'scale(1)';
+            }));
+            i++;
+            setTimeout(tick, i < steps.length ? 1000 : 850);
+        }
+        tick();
+    });
+}
+
 // ─── BASE HP UI ────────────────────────────────────────────────────
 let _fireGhostTimeout: ReturnType<typeof setTimeout> | null = null;
 let _iceGhostTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -706,10 +754,15 @@ export async function boot(mode: GameMode): Promise<void> {
             clearTimeout(mpConnTimeout);
             const ov = document.getElementById('mp-wait-overlay');
             if (ov) ov.remove();
+            const mpIntroTeam = ctx.lobbyTeam || 'fire';
+            ctx.isPaused = true;
             isGameReady = true;
             ctx.mpGameStarted = true;
             lowerBGMForGame();
             ctx._mpStartGame = null;
+            cam.playIntroAnimation(mpIntroTeam)
+                .then(() => showCountdown(mpIntroTeam))
+                .then(() => { ctx.isPaused = false; });
         };
 
         mpService.send({ type: 'loaded' });
@@ -723,8 +776,13 @@ export async function boot(mode: GameMode): Promise<void> {
             ctx._mpStartGame?.();
         }
     } else {
+        const introTeam = ctx.selectedTeam || 'fire';
+        ctx.isPaused = true;
         isGameReady = true;
         lowerBGMForGame();
+        cam.playIntroAnimation(introTeam)
+            .then(() => showCountdown(introTeam))
+            .then(() => { ctx.isPaused = false; });
     }
 
     const _resizeHandler = () => engine.resize();

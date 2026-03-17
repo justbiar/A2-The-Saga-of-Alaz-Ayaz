@@ -35,7 +35,8 @@ export type MPMessage =
     | { type: 'bet_cancel' }
     | { type: 'bet_claim'; winnerAddress: string }
     | { type: 'game_over'; winner: 'fire' | 'ice'; reason: string }
-    | { type: 'base_sync'; fireHp: number; iceHp: number };
+    | { type: 'base_sync'; fireHp: number; iceHp: number }
+    | { type: 'chat'; text: string; nickname: string };
 
 type MessageHandler = (msg: MPMessage) => void;
 type StatusHandler = (status: MPStatus) => void;

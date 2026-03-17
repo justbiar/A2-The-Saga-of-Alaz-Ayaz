@@ -257,7 +257,6 @@ export async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'b
                 <div class="lb-podium-avx-val">${totalAvx.toFixed(4)}</div>
                 <div class="lb-podium-avx-lbl">TOTAL AVAX</div>
             </div>`;
-
             const card = document.createElement('div');
             card.className = `lb-podium-card ${pClass}`;
             card.innerHTML = `
@@ -459,7 +458,7 @@ export function renderProfileScreen(): void {
     document.getElementById('pfs-local-losses')!.textContent = String(profile.losses);
     document.getElementById('pfs-draws')!.textContent = String(profile.draws);
 
-    // Fetch server stats for online/local split
+    // Fetch server stats for online/local split + match history
     void (async () => {
         try {
             const serverEntries = await leaderboardService.getServerLeaderboard();
@@ -473,6 +472,56 @@ export function renderProfileScreen(): void {
                 el('pfs-local-games')!.textContent = String(me.localGamesPlayed ?? 0);
                 el('pfs-local-wins')!.textContent = String(me.localWins ?? 0);
                 el('pfs-local-losses')!.textContent = String(me.localLosses ?? 0);
+            }
+        } catch { /* ignore */ }
+
+        // Match history
+        try {
+            const res = await fetch(`/api/leaderboard/matches/${ctx.walletAddress}`);
+            const data = await res.json();
+            const matchesSection = document.getElementById('pfs-matches-section');
+            const matchesList = document.getElementById('pfs-matches-list');
+            if (!matchesSection || !matchesList) return;
+
+            const matches: any[] = data.matches ?? [];
+            matchesSection.style.display = '';
+
+            if (matches.length === 0) {
+                matchesList.innerHTML = `<div class="pfs-matches-empty">${t('pfsMatchEmpty' as TransKey)}</div>`;
+                return;
+            }
+
+            matchesList.innerHTML = '';
+            for (const m of matches.slice(0, 15)) {
+                const row = document.createElement('div');
+                row.className = 'pfs-match-row';
+
+                const resultLabel = m.result === 'win' ? t('pfsMatchWin' as TransKey) : m.result === 'loss' ? t('pfsMatchLoss' as TransKey) : t('pfsMatchDraw' as TransKey);
+                const resClass = m.result === 'win' ? 'win' : m.result === 'loss' ? 'loss' : 'draw';
+
+                const opponent = m.opponentUsername
+                    ? m.opponentUsername
+                    : m.opponentAddress
+                        ? `${m.opponentAddress.slice(0, 6)}…${m.opponentAddress.slice(-4)}`
+                        : t('pfsMatchOpponent' as TransKey);
+
+                let betHtml = '<span class="pfs-match-bet">—</span>';
+                if (m.betWon > 0) {
+                    betHtml = `<span class="pfs-match-bet won">+${m.betWon.toFixed(4)} AVAX</span>`;
+                } else if (m.betLost > 0) {
+                    betHtml = `<span class="pfs-match-bet lost">-${m.betLost.toFixed(4)} AVAX</span>`;
+                }
+
+                const date = new Date(m.ts);
+                const dateStr = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+
+                row.innerHTML = `
+                    <span class="pfs-match-result ${resClass}">${resultLabel}</span>
+                    <span class="pfs-match-opponent">${opponent}</span>
+                    ${betHtml}
+                    <span class="pfs-match-date">${dateStr}</span>
+                `;
+                matchesList.appendChild(row);
             }
         } catch { /* ignore */ }
     })();

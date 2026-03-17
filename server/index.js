@@ -653,9 +653,18 @@ app.post('/api/leaderboard/upsert', rateLimit, (req, res) => {
     res.json({ ok: true });
 });
 
+/** GET /api/leaderboard/matches/:address — Son online maçlar */
+app.get('/api/leaderboard/matches/:address', (req, res) => {
+    const addr = validateAddress(req.params.address);
+    if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
+    const p = lbData[addr.toLowerCase()];
+    if (!p) return res.json({ ok: true, matches: [] });
+    res.json({ ok: true, matches: (p.matchHistory || []).slice().reverse() });
+});
+
 /** POST /api/leaderboard/result — Oyun sonucu kaydet (mode: online|local) */
 app.post('/api/leaderboard/result', rateLimit, (req, res) => {
-    const { address, result, betWon, betLost, mode } = req.body ?? {};
+    const { address, result, betWon, betLost, mode, opponentAddress, opponentUsername } = req.body ?? {};
     const addr = validateAddress(address);
     if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
     if (!['win', 'loss', 'draw'].includes(result)) {
@@ -696,6 +705,19 @@ app.post('/api/leaderboard/result', rateLimit, (req, res) => {
     const bl = parseFloat(betLost) || 0;
     if (bw > 0) { p.totalBetWon += bw; p.weeklyBetWon = (p.weeklyBetWon || 0) + bw; }
     if (bl > 0) p.totalBetLost = (p.totalBetLost || 0) + bl;
+    // Match history (online only, last 50)
+    if (isOnline) {
+        if (!p.matchHistory) p.matchHistory = [];
+        p.matchHistory.push({
+            result,
+            betWon: bw,
+            betLost: bl,
+            ts: Date.now(),
+            opponentAddress: opponentAddress || null,
+            opponentUsername: opponentUsername || null,
+        });
+        if (p.matchHistory.length > 50) p.matchHistory = p.matchHistory.slice(-50);
+    }
     p.lastUpdated = Date.now();
     saveLbData();
     console.log(`[LB] ${addr.slice(0, 8)} → ${result} (${isOnline ? 'online' : 'local'}) wins=${p.wins} online=${p.onlineWins}`);
@@ -1151,7 +1173,7 @@ app.get('/api/feedback', (req, res) => {
 // ══════════════════════════════════════════════════════════════════════
 
 const TURN_SECRET = process.env.TURN_SECRET;
-const TURN_HOST = '34.56.130.155';
+const TURN_HOST = '34.170.132.21';
 
 app.get('/api/turn-credentials', (req, res) => {
     const ttl = 3600; // 1 saat
@@ -1170,6 +1192,40 @@ app.get('/api/turn-credentials', (req, res) => {
         ],
         ttl,
     });
+});
+
+// ══════════════════════════════════════════════════════════════════════
+//  LOBİ CHAT — In-memory, 10 dk TTL, max 100 mesaj
+// ══════════════════════════════════════════════════════════════════════
+
+const chatMessages = []; // { id, nickname, text, ts }
+const CHAT_MAX = 100;
+const CHAT_TTL = 10 * 60 * 1000;
+
+function pruneChat() {
+    const cutoff = Date.now() - CHAT_TTL;
+    while (chatMessages.length > 0 && chatMessages[0].ts < cutoff) chatMessages.shift();
+    if (chatMessages.length > CHAT_MAX) chatMessages.splice(0, chatMessages.length - CHAT_MAX);
+}
+
+/** GET /api/chat?since=<timestamp> */
+app.get('/api/chat', (req, res) => {
+    pruneChat();
+    const since = parseInt(req.query.since) || 0;
+    res.json({ ok: true, messages: chatMessages.filter(m => m.ts > since) });
+});
+
+/** POST /api/chat — body: { nickname, text } */
+app.post('/api/chat', rateLimit, (req, res) => {
+    const { nickname, text } = req.body ?? {};
+    if (!text || typeof text !== 'string') return res.status(400).json({ error: 'text gerekli' });
+    const safe = String(text).trim().slice(0, 200);
+    if (!safe) return res.status(400).json({ error: 'Boş mesaj' });
+    const nick = String(nickname || 'Misafir').trim().slice(0, 20) || 'Misafir';
+    pruneChat();
+    const msg = { id: Date.now() + '_' + Math.random().toString(36).slice(2), nickname: nick, text: safe, ts: Date.now() };
+    chatMessages.push(msg);
+    res.json({ ok: true, id: msg.id });
 });
 
 // ── PeerJS Signaling Server ────────────────────────────────────────────

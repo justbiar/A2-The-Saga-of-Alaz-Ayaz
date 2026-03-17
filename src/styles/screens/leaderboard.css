@@ -289,6 +289,14 @@
   text-transform: uppercase;
 }
 
+.lb-podium-local {
+  font-size: 10px;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 1px;
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
 .lb-podium-avx {
   width: 100%;
   padding: 9px 12px;

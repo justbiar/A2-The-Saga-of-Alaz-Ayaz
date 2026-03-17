@@ -66,6 +66,39 @@ export class CameraSystem {
         });
     }
 
+    playIntroAnimation(team: 'fire' | 'ice'): Promise<void> {
+        return new Promise(resolve => {
+            this.panX = 0;
+            this.panZ = 0;
+            const alpha = team === 'fire' ? -Math.PI / 2 : Math.PI / 2;
+            // Tepeden başla (neredeyse tam dikey)
+            this.camera.alpha = alpha;
+            this.camera.beta = this.camera.upperBetaLimit ?? Math.PI / 2.05;
+            this.camera.radius = 80;
+            this.camera.target.set(0, 0, 0);
+
+            // 500ms bekle, sonra arkaya eğ
+            const startBeta = this.camera.beta;
+            const endBeta = Math.PI * 0.40;
+            const startRadius = 80;
+            const endRadius = 100;
+            const delay = 500;
+            const duration = 1100;
+
+            const startTime = performance.now() + delay;
+            const animate = (now: number) => {
+                const elapsed = now - startTime;
+                if (elapsed < 0) { requestAnimationFrame(animate); return; }
+                const t = Math.min(elapsed / duration, 1);
+                const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+                this.camera.beta = startBeta + (endBeta - startBeta) * ease;
+                this.camera.radius = startRadius + (endRadius - startRadius) * ease;
+                if (t < 1) { requestAnimationFrame(animate); } else { resolve(); }
+            };
+            requestAnimationFrame(animate);
+        });
+    }
+
     update(): void {
         // WASD / Arrow key pan
         const fwd = this.camera.alpha; // use camera yaw to pan relative to view

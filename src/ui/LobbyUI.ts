@@ -132,6 +132,133 @@ function updateLobbyConnectedUI(): void {
     document.getElementById('lc-opp-label')!.textContent = t('lobbyConnected');
 }
 
+// ─── CHAT ──────────────────────────────────────────────────────────
+let _chatActiveTab: 'lobby' | 'room' = 'lobby';
+let _chatPollTimer: number | null = null;
+let _chatLastTs = 0;
+let _chatNick = '';
+
+function getChatNick(): string {
+    if (!_chatNick) {
+        _chatNick = ctx.walletAddress
+            ? ctx.walletAddress.slice(0, 6) + '…' + ctx.walletAddress.slice(-4)
+            : 'Misafir' + Math.floor(Math.random() * 900 + 100);
+    }
+    return _chatNick;
+}
+
+function appendChatMsg(nickname: string, text: string, isOwn = false, tab: 'lobby' | 'room' = 'lobby'): void {
+    if (tab !== _chatActiveTab) return;
+    const msgs = document.getElementById('chat-msgs');
+    if (!msgs) return;
+    const div = document.createElement('div');
+    div.className = 'ko-chat-msg' + (isOwn ? ' ko-chat-msg-own' : '');
+    const nick = document.createElement('span');
+    nick.className = 'ko-chat-nick';
+    nick.textContent = nickname;
+    const text_ = document.createElement('span');
+    text_.className = 'ko-chat-text';
+    text_.textContent = text;
+    div.appendChild(nick);
+    div.appendChild(text_);
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+}
+
+function appendChatSystem(text: string): void {
+    const msgs = document.getElementById('chat-msgs');
+    if (!msgs) return;
+    const div = document.createElement('div');
+    div.className = 'ko-chat-system';
+    div.textContent = text;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+}
+
+async function pollLobbyChat(): Promise<void> {
+    try {
+        const res = await fetch(`/api/chat?since=${_chatLastTs}`);
+        const data = await res.json();
+        if (data.ok && data.messages?.length) {
+            const myNick = getChatNick();
+            for (const m of data.messages) {
+                if (m.ts > _chatLastTs) _chatLastTs = m.ts;
+                appendChatMsg(m.nickname, m.text, m.nickname === myNick, 'lobby');
+            }
+        }
+    } catch { /* ignore */ }
+}
+
+export function receiveChatFromPeer(nickname: string, text: string): void {
+    appendChatMsg(nickname, text, false, 'room');
+}
+
+function initChatPanel(): void {
+    _chatNick = '';
+    _chatLastTs = Date.now();
+    _chatActiveTab = 'lobby';
+
+    const tabLobby = document.getElementById('chat-tab-lobby')!;
+    const tabRoom = document.getElementById('chat-tab-room')!;
+    const msgs = document.getElementById('chat-msgs')!;
+    const input = document.getElementById('chat-input') as HTMLInputElement;
+    const sendBtn = document.getElementById('chat-send-btn')!;
+
+    tabLobby.onclick = () => {
+        _chatActiveTab = 'lobby';
+        tabLobby.classList.add('active');
+        tabRoom.classList.remove('active');
+        msgs.innerHTML = '';
+        // son 5 dakikayı yükle
+        _chatLastTs = Date.now() - 5 * 60 * 1000;
+        pollLobbyChat();
+    };
+
+    tabRoom.onclick = () => {
+        if (mpService.status !== 'connected') return;
+        _chatActiveTab = 'room';
+        tabRoom.classList.add('active');
+        tabLobby.classList.remove('active');
+        msgs.innerHTML = '';
+        appendChatSystem('P2P bağlantısı aktif');
+    };
+
+    const sendMsg = async () => {
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = '';
+        const nick = getChatNick();
+        if (_chatActiveTab === 'lobby') {
+            appendChatMsg(nick, text, true, 'lobby');
+            try {
+                await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nickname: nick, text }),
+                });
+            } catch { /* ignore */ }
+        } else if (_chatActiveTab === 'room' && mpService.status === 'connected') {
+            appendChatMsg(nick, text, true, 'room');
+            mpService.send({ type: 'chat', text, nickname: nick });
+        }
+    };
+
+    sendBtn.onclick = sendMsg;
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMsg(); });
+
+    if (_chatPollTimer) clearInterval(_chatPollTimer);
+    pollLobbyChat();
+    _chatPollTimer = setInterval(() => {
+        const lobbyScreen = document.getElementById('lobby-screen');
+        if (lobbyScreen && lobbyScreen.style.display !== 'none') {
+            if (_chatActiveTab === 'lobby') pollLobbyChat();
+        } else {
+            clearInterval(_chatPollTimer!);
+            _chatPollTimer = null;
+        }
+    }, 3000) as unknown as number;
+}
+
 // ─── QUICK MATCH ───────────────────────────────────────────────────
 let _qmPollTimer: number | null = null;
 let _qmCode: string = '';
@@ -147,16 +274,16 @@ async function fetchPublicLobbies(): Promise<void> {
             listEl.innerHTML = `<div class="lb-empty">${t('betNoLobbies')}</div>`;
             return;
         }
-        listEl.innerHTML = data.lobbies.map((l: any) => `
-            <div class="lb-item" data-code="${l.code}">
-                <span class="lb-item-team ${l.team}">${l.team === 'fire' ? 'ALAZ' : 'AYAZ'}</span>
-                <div class="lb-item-info">
-                    <div class="lb-item-nick">${l.lobbyName ? `<strong>${l.lobbyName}</strong> · ` : ''}${l.nickname || 'Anonim'}</div>
-                    <div class="lb-item-meta">${l.age}${t('betSecondsAgo')}</div>
-                </div>
-                <div class="lb-item-avax">${l.betAmount > 0 ? l.betAmount + ' AVAX' : '—'}</div>
-                <button class="lb-item-join" data-code="${l.code}">KATIL</button>
-            </div>
+        listEl.innerHTML = data.lobbies.map((l: any, i: number) => `
+            <tr class="ko-row" data-code="${l.code}">
+                <td>${String(i + 1).padStart(2, '0')}</td>
+                <td>${l.lobbyName ? l.lobbyName : (l.nickname || 'Adsız Oda')}</td>
+                <td><span class="ko-status-open">${t('lobbyStatusOpen')}</span></td>
+                <td>1/2</td>
+                <td>${l.betAmount > 0 ? l.betAmount + ' A' : '—'}</td>
+                <td class="${l.team === 'fire' ? 'ko-team-fire' : 'ko-team-ice'}">${l.team === 'fire' ? 'ALAZ' : 'AYAZ'}</td>
+                <td><button class="ko-row-join lb-item-join" data-code="${l.code}">KATIL</button></td>
+            </tr>
         `).join('');
         listEl.querySelectorAll('.lb-item-join').forEach((btn: Element) => {
             (btn as HTMLButtonElement).onclick = () => {
@@ -290,6 +417,10 @@ export function triggerWin(winner: 'fire' | 'ice', msg: string): void {
 }
 
 export function handleMPMessage(msg: import('../multiplayer/MultiplayerService').MPMessage): void {
+    if (msg.type === 'chat') {
+        appendChatMsg(msg.nickname, msg.text, false, 'room');
+        return;
+    }
     // BET MESSAGES
     if (msg.type === 'bet_offer') {
         betService.state = {
@@ -550,6 +681,7 @@ export function initLobbyScreen(): void {
                     const nameDisplay = document.getElementById('lobby-display-name');
                     if (nameDisplay) nameDisplay.textContent = lobbyName;
                 }
+                document.getElementById('room-create-modal')!.style.display = 'none';
                 setLobbyState('waiting');
                 document.getElementById('lobby-status-text')!.textContent = t('betDepositedWaiting');
                 showBetPanel('host-waiting');
@@ -570,6 +702,7 @@ export function initLobbyScreen(): void {
                     const nameDisplay = document.getElementById('lobby-display-name');
                     if (nameDisplay) nameDisplay.textContent = lobbyName;
                 }
+                document.getElementById('room-create-modal')!.style.display = 'none';
                 setLobbyState('waiting');
                 document.getElementById('lobby-status-text')!.textContent = t('lobbyWaiting');
             } catch (e: any) {
@@ -621,6 +754,14 @@ export function initLobbyScreen(): void {
         mpService.send({ type: 'start_game' });
         startMultiplayerGame();
     };
+
+    // ODA KUR modal open/close
+    const modal = document.getElementById('room-create-modal')!;
+    document.getElementById('lobby-open-modal-btn')!.onclick = () => { modal.style.display = 'flex'; };
+    document.getElementById('room-create-cancel')!.onclick = () => { modal.style.display = 'none'; };
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+    initChatPanel();
 
     betService.reset();
     showBetPanel(ctx.walletAddress ? 'host-idle' : 'no-wallet');
