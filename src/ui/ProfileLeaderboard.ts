@@ -152,6 +152,11 @@ export async function renderLocalLeaderboard(sortBy: 'wins' | 'weeklyWins' | 'be
             ? `<td class="lb-prize-cell">${e.weeklyPrize.toFixed(4)}</td>`
             : `<td class="lb-prize-none">—</td>`;
 
+        const donated = e.totalDonated ?? 0;
+        const donateCell = donated > 0
+            ? `<td class="lb-donate-cell">${donated.toFixed(3)}</td>`
+            : `<td class="lb-prize-none">—</td>`;
+
         const gamesPlayed = (e.onlineWins ?? 0) + (e.onlineLosses ?? 0) + (e.onlineDraws ?? 0);
         tr.innerHTML = `
             <td class="lb-rank ${e.rank <= 3 ? 'lb-rank-' + e.rank : ''}">${e.rank}</td>
@@ -159,13 +164,14 @@ export async function renderLocalLeaderboard(sortBy: 'wins' | 'weeklyWins' | 'be
             <td>${sortBy === 'weeklyWins' ? e.weeklyWins : (e.onlineWins ?? e.wins)}</td>
             <td>${gamesPlayed}</td>
             <td class="lb-winrate">${e.winRate}%</td>
+            ${donateCell}
             ${prizeCell}
         `;
         lbBody.appendChild(tr);
     }
 
     if (entries.length === 0) {
-        lbBody.innerHTML = `<tr><td colspan="6" style="color:rgba(255,255,255,0.25);padding:12px;text-align:center;">${t('lbTableEmpty' as TransKey)}</td></tr>`;
+        lbBody.innerHTML = `<tr><td colspan="7" style="color:rgba(255,255,255,0.25);padding:12px;text-align:center;">${t('lbTableEmpty' as TransKey)}</td></tr>`;
     }
 }
 
@@ -288,7 +294,7 @@ export async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'b
     lbBody.innerHTML = '';
 
     if (entries.length === 0) {
-        lbBody.innerHTML = `<tr><td colspan="6"><div class="lb-empty-state"><div class="lb-empty-state-icon">--</div>${t('lbTableEmpty' as TransKey)}</div></td></tr>`;
+        lbBody.innerHTML = `<tr><td colspan="7"><div class="lb-empty-state"><div class="lb-empty-state-icon">--</div>${t('lbTableEmpty' as TransKey)}</div></td></tr>`;
     }
 
     for (const e of top10) {
@@ -303,6 +309,10 @@ export async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'b
             : `<span class="lb-prize-empty">—</span>`;
 
         const rateClass = e.winRate >= 60 ? 'high' : e.winRate >= 40 ? 'mid' : '';
+        const donated = e.totalDonated ?? 0;
+        const donateHtml = donated > 0
+            ? `<span class="lb-donate-cell">${donated.toFixed(3)}</span>`
+            : `<span class="lb-prize-empty">—</span>`;
 
         tr.innerHTML = `
             <td><span class="lb-rank-num ${e.rank <= 3 ? 'lb-rank-' + e.rank : 'lb-rank-4up'}">${e.rank}</span></td>
@@ -318,6 +328,7 @@ export async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'b
             <td><span class="lb-win-count">${winVal}</span></td>
             <td><span class="lb-games-count">${gamesPlayed}</span></td>
             <td><span class="lb-rate-pill ${rateClass}">${e.winRate}%</span></td>
+            <td>${donateHtml}</td>
             <td>${prize}</td>
         `;
         lbBody.appendChild(tr);
@@ -617,4 +628,186 @@ export function initProfileLeaderboard(): void {
 
     // Profile screen connect button
     document.getElementById('pfs-connect-btn')?.addEventListener('click', () => showWalletModal());
+
+    // ── Askıda AVAX ──────────────────────────────────────────────
+    initFaucet();
+}
+
+// ─── ASKIDA AVAX (FAUCET) ──────────────────────────────────────────
+const HOUSE_WALLET = import.meta.env.VITE_HOUSE_WALLET as string;
+
+function setFaucetStatus(panelId: 'donate' | 'claim', msg: string, type: 'ok' | 'err' | ''): void {
+    const el = document.getElementById(`askida-${panelId}-status`) as HTMLElement;
+    if (!el) return;
+    el.innerHTML = msg;
+    el.className = `askida-${panelId}-status` + (type ? ' ' + type : '');
+    el.style.display = msg ? 'block' : 'none';
+}
+
+async function refreshFaucetInfo(): Promise<void> {
+    try {
+        const url = ctx.walletAddress ? `/api/faucet/info?address=${ctx.walletAddress}` : '/api/faucet/info';
+        const data = await fetch(url).then(r => r.json());
+        if (!data.ok) return;
+
+        // Banner
+        const bannerDonated = document.getElementById('lb-askida-donated');
+        if (bannerDonated) bannerDonated.textContent = (data.totalDonated || 0).toFixed(4);
+
+        // Modal stats
+        const elPool = document.getElementById('askida-faucet-pool');
+        const elDon = document.getElementById('askida-total-donated');
+        const elCla = document.getElementById('askida-total-claimed');
+        if (elPool) elPool.textContent = (data.faucetPool ?? 0).toFixed(4);
+        if (elDon) elDon.textContent = (data.totalDonated || 0).toFixed(4);
+        if (elCla) elCla.textContent = (data.totalClaimed || 0).toFixed(4);
+
+        // House wallet address
+        if (data.houseWallet) {
+            const addrEl = document.getElementById('askida-house-addr');
+            if (addrEl) addrEl.textContent = data.houseWallet;
+        }
+
+        // Claim eligibility
+        const claimBtn = document.getElementById('askida-claim-btn') as HTMLButtonElement | null;
+        const walletWarn = document.getElementById('askida-claim-wallet-warn');
+        const gamesRow = document.getElementById('askida-elig-games');
+        const cooldownRow = document.getElementById('askida-elig-cooldown');
+        const gamesBadge = document.getElementById('askida-elig-games-badge');
+        const cooldownBadge = document.getElementById('askida-elig-cooldown-badge');
+
+        if (!ctx.walletAddress) {
+            if (walletWarn) walletWarn.style.display = 'block';
+            if (claimBtn) claimBtn.disabled = true;
+        } else {
+            if (walletWarn) walletWarn.style.display = 'none';
+            const games = data.localGames ?? 0;
+            const gamesOk = games >= (data.minGames ?? 3);
+            const cooldownOk = (data.cooldownMs ?? 0) === 0;
+
+            if (gamesRow) gamesRow.classList.toggle('ok', gamesOk);
+            if (gamesBadge) gamesBadge.textContent = `${Math.min(games, data.minGames ?? 3)}/${data.minGames ?? 3}`;
+            if (cooldownRow) cooldownRow.classList.toggle('ok', cooldownOk);
+            if (cooldownBadge) {
+                if (cooldownOk) {
+                    cooldownBadge.textContent = t('askidaReady' as any);
+                } else {
+                    const h = Math.ceil((data.cooldownMs ?? 0) / 3600000);
+                    cooldownBadge.textContent = `${h} ${t('askidaCooldownLeft' as any)}`;
+                }
+            }
+            if (claimBtn) claimBtn.disabled = !(gamesOk && cooldownOk);
+        }
+    } catch { /* ignore */ }
+}
+
+export function openFaucetModal(tab: 'donate' | 'claim' = 'donate'): void {
+    const modal = document.getElementById('askida-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    const donatePanel = document.getElementById('askida-panel-donate');
+    const claimPanel = document.getElementById('askida-panel-claim');
+    const tabDonate = document.getElementById('askida-tab-donate');
+    const tabClaim = document.getElementById('askida-tab-claim');
+    if (donatePanel) donatePanel.style.display = tab === 'donate' ? 'flex' : 'none';
+    if (claimPanel) claimPanel.style.display = tab === 'claim' ? 'flex' : 'none';
+    if (tabDonate) tabDonate.classList.toggle('active', tab === 'donate');
+    if (tabClaim) tabClaim.classList.toggle('active', tab === 'claim');
+    void refreshFaucetInfo();
+}
+
+function initFaucet(): void {
+    const modal = document.getElementById('askida-modal')!;
+    function openModal(tab: 'donate' | 'claim'): void {
+        openFaucetModal(tab);
+    }
+
+    function showFaucetTab(tab: 'donate' | 'claim'): void {
+        document.getElementById('askida-panel-donate')!.style.display = tab === 'donate' ? 'flex' : 'none';
+        document.getElementById('askida-panel-claim')!.style.display = tab === 'claim' ? 'flex' : 'none';
+        document.getElementById('askida-tab-donate')!.classList.toggle('active', tab === 'donate');
+        document.getElementById('askida-tab-claim')!.classList.toggle('active', tab === 'claim');
+    }
+
+    // Banner buttons
+    document.getElementById('lb-askida-open-donate')?.addEventListener('click', () => openModal('donate'));
+    document.getElementById('lb-askida-open-claim')?.addEventListener('click', () => openModal('claim'));
+
+    // Close
+    document.getElementById('askida-close')?.addEventListener('click', () => { modal.style.display = 'none'; });
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+    // Tabs
+    document.getElementById('askida-tab-donate')?.addEventListener('click', () => showFaucetTab('donate'));
+    document.getElementById('askida-tab-claim')?.addEventListener('click', () => showFaucetTab('claim'));
+
+    // Copy address
+    document.getElementById('askida-copy-addr')?.addEventListener('click', () => {
+        const addr = (document.getElementById('askida-house-addr') as HTMLElement).textContent ?? '';
+        navigator.clipboard.writeText(addr).catch(() => { });
+        const btn = document.getElementById('askida-copy-addr') as HTMLButtonElement;
+        const orig = btn.textContent ?? '';
+        btn.textContent = t('lobbyCopied' as any);
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+    });
+
+    // MetaMask deposit
+    document.getElementById('askida-deposit-btn')?.addEventListener('click', async () => {
+        if (!ctx.walletAddress || !ctx._activeProvider) { setFaucetStatus('donate', t('askidaConnectWallet' as any), 'err'); return; }
+        const amtInput = document.getElementById('askida-deposit-amount') as HTMLInputElement;
+        const amount = parseFloat(amtInput.value);
+        if (!amount || amount <= 0) { setFaucetStatus('donate', 'Geçerli bir miktar gir', 'err'); return; }
+        const ethers = (window as any).ethers;
+        if (!ethers) { setFaucetStatus('donate', 'ethers yüklü değil', 'err'); return; }
+        const btn = document.getElementById('askida-deposit-btn') as HTMLButtonElement;
+        btn.disabled = true;
+        setFaucetStatus('donate', '', '');
+        try {
+            const provider = new ethers.BrowserProvider(ctx._activeProvider);
+            const signer = await provider.getSigner();
+            const tx = await signer.sendTransaction({
+                to: HOUSE_WALLET,
+                value: ethers.parseEther(amount.toFixed(6)),
+                gasLimit: 21000,
+            });
+            // TX yayınlandı, onay bekleme — Fuji testnet yavaş olabilir
+            void fetch('/api/faucet/donate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, address: ctx.walletAddress }) });
+            setFaucetStatus('donate', `${t('askidaDepositOk' as any)} <a href="https://testnet.snowtrace.io/tx/${tx.hash}" target="_blank" style="color:#4af;word-break:break-all">${tx.hash.slice(0,18)}…</a>`, 'ok');
+            amtInput.value = '';
+            void refreshFaucetInfo();
+        } catch (e: any) {
+            setFaucetStatus('donate', e?.message?.slice(0, 80) ?? 'Hata', 'err');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // Claim
+    document.getElementById('askida-claim-btn')?.addEventListener('click', async () => {
+        if (!ctx.walletAddress) { setFaucetStatus('claim', t('askidaConnectWallet' as any), 'err'); return; }
+        const btn = document.getElementById('askida-claim-btn') as HTMLButtonElement;
+        btn.disabled = true;
+        setFaucetStatus('claim', '', '');
+        try {
+            const res = await fetch('/api/faucet/claim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: ctx.walletAddress }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                setFaucetStatus('claim', t('askidaClaimOk' as any), 'ok');
+                void refreshFaucetInfo();
+            } else {
+                setFaucetStatus('claim', data.error ?? 'Hata', 'err');
+                btn.disabled = false;
+            }
+        } catch {
+            setFaucetStatus('claim', 'Bağlantı hatası', 'err');
+            btn.disabled = false;
+        }
+    });
+
+    // Banner donated on leaderboard load
+    void refreshFaucetInfo();
 }

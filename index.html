@@ -37,6 +37,7 @@
       <button class="header-nav-item" id="nav-leaderboard-header" data-i18n="navLeaderboard">LİDER TABLOSU</button>
       <button class="header-nav-item" id="nav-profile-header" data-i18n="navProfile">PROFİL</button>
       <button class="header-nav-item" id="nav-settings-header" data-i18n="navSettings">AYARLAR</button>
+      <button class="header-nav-item" id="nav-faucet-header" data-i18n="navFaucet">FAUCET</button>
       <button class="header-nav-item" id="nav-report-header" data-i18n="navReport" style="color:#ff6b6b;">REPORT</button>
     </nav>
     <div class="header-right">
@@ -340,6 +341,7 @@
             <th data-i18n="lbColWins">GALİBİYET</th>
             <th data-i18n="lbColGames">OYUN</th>
             <th data-i18n="lbColWR">W/R</th>
+            <th data-i18n="lbColDonate">BAĞIŞ</th>
             <th data-i18n="lbColPrize">ÖDÜL</th>
           </tr>
         </thead>
@@ -347,6 +349,80 @@
       </table>
     </div>
 
+  </div>
+
+  <!-- ═══ ASKIDA AVAX MODAL ═══ -->
+  <div class="askida-overlay" id="askida-modal" style="display:none">
+    <div class="askida-modal">
+      <button class="askida-close" id="askida-close">✕</button>
+
+      <div class="askida-modal-header">
+        <div class="askida-modal-title" id="askida-modal-title" data-i18n="askidaTitle">Askıda AVAX</div>
+        <div class="askida-modal-subtitle" data-i18n="askidaModalSubtitle">Topluluk bağış havuzu</div>
+      </div>
+
+      <!-- Stats -->
+      <div class="askida-stats-row">
+        <div class="askida-stat">
+          <div class="askida-stat-val" id="askida-faucet-pool">0.0000</div>
+          <div class="askida-stat-label" data-i18n="askidaPool">TOPLAM HAVUZ</div>
+        </div>
+        <div class="askida-stat">
+          <div class="askida-stat-val" id="askida-total-donated">0.0000</div>
+          <div class="askida-stat-label" data-i18n="askidaTotalDonated">DONATE EDİLEN</div>
+        </div>
+        <div class="askida-stat">
+          <div class="askida-stat-val" id="askida-total-claimed">0.0000</div>
+          <div class="askida-stat-label" data-i18n="askidaTotalClaimed">ÇEKİLEN</div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="askida-tabs">
+        <button class="askida-tab active" id="askida-tab-donate" data-i18n="askidaDeposit">Bağış Yap</button>
+        <button class="askida-tab" id="askida-tab-claim" data-i18n="askidaClaim">0.015 AVAX Çek</button>
+      </div>
+
+      <!-- Deposit Panel -->
+      <div class="askida-panel" id="askida-panel-donate">
+        <div class="askida-panel-desc" data-i18n="askidaDepositDesc">House wallet adresine istediğin miktarı gönderebilirsin.</div>
+        <div class="askida-addr-box">
+          <span class="askida-addr-text" id="askida-house-addr">—</span>
+          <button class="askida-copy-btn" id="askida-copy-addr" data-i18n="lobbyCopy">Kopyala</button>
+        </div>
+        <div class="askida-deposit-form">
+          <div class="askida-input-row">
+            <input class="askida-input" id="askida-deposit-amount" type="number" min="0.001" step="0.01" placeholder="0.00" />
+            <span class="askida-input-unit">AVAX</span>
+          </div>
+          <button class="askida-action-btn" id="askida-deposit-btn" data-i18n="askidaMetamaskBtn">MetaMask ile Yatır</button>
+        </div>
+        <div class="askida-donate-status" id="askida-donate-status" style="display:none"></div>
+      </div>
+
+      <!-- Claim Panel -->
+      <div class="askida-panel" id="askida-panel-claim" style="display:none">
+        <div class="askida-eligibility-box" id="askida-eligibility">
+          <div class="askida-elig-row" id="askida-elig-games">
+            <span class="askida-elig-icon">◌</span>
+            <span class="askida-elig-text" data-i18n="askidaEligGames">3 yerel oyun oyna</span>
+            <span class="askida-elig-badge" id="askida-elig-games-badge">0/3</span>
+          </div>
+          <div class="askida-elig-row" id="askida-elig-cooldown">
+            <span class="askida-elig-icon">◌</span>
+            <span class="askida-elig-text" data-i18n="askidaElig24h">24 saat bekleme süresi</span>
+            <span class="askida-elig-badge" id="askida-elig-cooldown-badge" data-i18n="askidaReady">Hazır</span>
+          </div>
+        </div>
+        <div class="askida-claim-wallet" id="askida-claim-wallet-warn" style="display:none">
+          <span data-i18n="askidaConnectWallet">Çekmek için cüzdanını bağla</span>
+        </div>
+        <button class="askida-action-btn askida-claim-btn" id="askida-claim-btn" disabled>
+          <span data-i18n="askidaClaimBtn">0.015 AVAX Çek</span>
+        </button>
+        <div class="askida-claim-status" id="askida-claim-status" style="display:none"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ═══ PROFILE SCREEN ═══ -->
@@ -799,6 +875,7 @@
               <th data-i18n="profileWins">GALİBİYET</th>
               <th data-i18n="profileGames">OYUN</th>
               <th data-i18n="profileWinRate">ORAN</th>
+              <th class="lb-col-donate">BAĞIŞ</th>
               <th class="lb-col-prize">ÖDÜL</th>
             </tr>
           </thead>

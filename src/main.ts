@@ -12,7 +12,7 @@ initReportUI();
 import { ctx, type GameMode } from './game/GameContext';
 import { showScreen, setModeSelectBadgeCallback, difficultyScreen, _initScreen } from './ui/ScreenRouter';
 import { initWalletUI, showWalletModal, lockGameUntilProfile } from './ui/WalletUI';
-import { initProfileLeaderboard } from './ui/ProfileLeaderboard';
+import { initProfileLeaderboard, openFaucetModal } from './ui/ProfileLeaderboard';
 import { initCharacterSelect, selectCharacter } from './ui/CharacterSelectUI';
 import { initLobbyBackHandlers, showToast } from './ui/LobbyUI';
 import { initMiniPlayer, initGlobalKeybindCapture } from './ui/SettingsUI';
@@ -168,6 +168,7 @@ document.getElementById('nav-map-header')?.addEventListener('click', () => showS
 document.getElementById('nav-leaderboard-header')?.addEventListener('click', () => showScreen('leaderboard'));
 document.getElementById('nav-profile-header')?.addEventListener('click', () => showScreen('profile'));
 document.getElementById('nav-settings-header')?.addEventListener('click', () => showScreen('settings'));
+document.getElementById('nav-faucet-header')?.addEventListener('click', () => openFaucetModal('donate'));
 document.getElementById('header-logo')?.addEventListener('click', () => showScreen('home'));
 document.getElementById('mode-back')!.addEventListener('click', () => showScreen('home'));
 document.getElementById('team-back')?.addEventListener('click', () => showScreen('mode-select'));

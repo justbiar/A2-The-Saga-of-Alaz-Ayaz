@@ -828,6 +828,16 @@
   color: rgba(255, 185, 50, 0.5) !important;
 }
 
+.lb-col-donate {
+  color: rgba(100, 220, 255, 0.5) !important;
+}
+
+.lb-donate-cell {
+  color: #64dcff;
+  font-weight: 600;
+  font-size: 11px;
+}
+
 .lb-prize-cell {
   color: #ffc94d;
   font-weight: 700;
@@ -1057,4 +1067,384 @@
   .lb-pp-prize-box {
     flex: 1;
   }
+}
+
+/* ═══════════════════════════════════════════
+   ASKIDA AVAX BANNER (leaderboard satırı)
+═══════════════════════════════════════════ */
+.lb-askida-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: min(860px, 96vw);
+  background: linear-gradient(135deg, rgba(255,170,0,0.08) 0%, rgba(0,200,150,0.06) 100%);
+  border: 1px solid rgba(255,185,50,0.25);
+  border-radius: 12px;
+  padding: 16px 24px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+.lb-askida-left { display: flex; flex-direction: column; gap: 4px; }
+.lb-askida-label {
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #ffc94d;
+  text-transform: uppercase;
+}
+.lb-askida-donated {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: 'Cinzel', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+}
+.lb-askida-unit { font-size: 13px; color: rgba(255,255,255,0.6); }
+.lb-askida-sublabel { font-size: 11px; color: rgba(255,200,50,0.7); letter-spacing: 1px; }
+.lb-askida-desc { font-size: 11px; color: rgba(255,255,255,0.45); letter-spacing: 0.5px; margin-top: 2px; }
+.lb-askida-right { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.lb-askida-btn {
+  padding: 9px 20px;
+  border-radius: 6px;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  border: 1px solid;
+  transition: opacity 0.15s;
+}
+.lb-askida-btn:hover { opacity: 0.8; }
+.lb-askida-btn-donate {
+  background: rgba(255,185,50,0.12);
+  border-color: rgba(255,185,50,0.4);
+  color: #ffc94d;
+}
+.lb-askida-btn-claim {
+  background: rgba(0,200,150,0.12);
+  border-color: rgba(0,200,150,0.4);
+  color: #00c896;
+}
+
+/* ═══════════════════════════════════════════
+   FAUCET MODAL
+═══════════════════════════════════════════ */
+.askida-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.82);
+  backdrop-filter: blur(8px);
+}
+
+.askida-modal {
+  position: relative;
+  width: min(500px, 95vw);
+  background: rgba(10, 8, 20, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 30px 30px 26px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 24px 80px rgba(0,0,0,0.7),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+  overflow: hidden;
+}
+
+.askida-modal::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 20%; right: 20%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,185,50,0.3), transparent);
+}
+
+.askida-close {
+  position: absolute;
+  top: 14px; right: 16px;
+  background: none; border: none;
+  color: rgba(255,255,255,0.35);
+  font-size: 16px; cursor: pointer;
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  transition: all 0.15s;
+}
+.askida-close:hover { color: #fff; background: rgba(255,255,255,0.08); }
+
+.askida-modal-header { margin-bottom: 20px; }
+.askida-modal-title {
+  font-family: 'Cinzel', serif;
+  font-size: 20px;
+  letter-spacing: 3px;
+  color: #fff;
+  text-shadow: none;
+}
+.askida-modal-subtitle {
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+  margin-top: 4px;
+  letter-spacing: 0.8px;
+}
+
+.askida-stats-row {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.askida-stat {
+  flex: 1;
+  text-align: center;
+  padding: 14px 8px;
+  background: rgba(10,8,20,0.6);
+}
+
+.askida-stat:not(:last-child) {
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+.askida-stat-val {
+  font-family: 'Cinzel', serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: none;
+}
+
+.askida-stat-label {
+  font-size: 9px;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 1.2px;
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+.askida-stat-sep { display: none; }
+
+.askida-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.askida-tab {
+  flex: 1;
+  padding: 9px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.35);
+  font-family: 'Cinzel', serif;
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  cursor: pointer;
+  transition: all 0.18s;
+  text-transform: uppercase;
+}
+
+.askida-tab:hover {
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.6);
+}
+
+.askida-tab.active {
+  background: rgba(255,185,50,0.07);
+  color: #ffc94d;
+  border: 1px solid rgba(255,185,50,0.3);
+  text-shadow: none;
+}
+
+.askida-panel { display: flex; flex-direction: column; gap: 12px; }
+.askida-panel-desc { font-size: 12px; color: rgba(255,255,255,0.4); line-height: 1.6; }
+
+.askida-addr-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.askida-addr-text {
+  flex: 1;
+  font-family: monospace;
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  word-break: break-all;
+  min-width: 0;
+}
+
+.askida-copy-btn {
+  padding: 5px 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  color: rgba(255,255,255,0.5);
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.askida-copy-btn:hover {
+  background: rgba(255,255,255,0.09);
+  color: rgba(255,255,255,0.8);
+  border-color: rgba(255,255,255,0.18);
+}
+
+.askida-deposit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.askida-input-row {
+  position: relative;
+}
+
+.askida-input {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 12px 52px 12px 14px;
+  color: #fff;
+  font-size: 16px;
+  font-family: 'Cinzel', serif;
+  transition: border-color 0.15s, background 0.15s;
+  box-sizing: border-box;
+}
+.askida-input:focus {
+  outline: none;
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,185,50,0.35);
+}
+
+.askida-input-unit {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: rgba(255,255,255,0.3);
+  font-family: 'Inter', sans-serif;
+  pointer-events: none;
+}
+
+.askida-action-btn {
+  width: 100%;
+  padding: 13px 18px;
+  background: rgba(255,185,50,0.06);
+  border: 1px solid rgba(255,185,50,0.3);
+  border-radius: 6px;
+  color: #ffc94d;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  transition: all 0.18s;
+  text-shadow: none;
+  text-transform: uppercase;
+}
+.askida-action-btn:hover {
+  background: rgba(255,185,50,0.12);
+  border-color: rgba(255,185,50,0.5);
+  box-shadow: none;
+}
+.askida-action-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+
+.askida-claim-btn {
+  background: rgba(0,200,150,0.05);
+  border-color: rgba(0,200,150,0.3);
+  color: #00c896;
+  text-shadow: none;
+}
+.askida-claim-btn:hover {
+  background: rgba(0,200,150,0.11);
+  border-color: rgba(0,200,150,0.5);
+}
+
+.askida-eligibility-box { display: flex; flex-direction: column; gap: 8px; }
+.askida-elig-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: all 0.2s;
+}
+.askida-elig-row.ok {
+  background: rgba(0,200,150,0.06);
+  border-color: rgba(0,200,150,0.2);
+}
+.askida-elig-icon { font-size: 14px; color: rgba(255,255,255,0.2); }
+.askida-elig-row.ok .askida-elig-icon { color: #00c896; }
+.askida-elig-text { flex: 1; font-size: 12px; color: rgba(255,255,255,0.55); }
+.askida-elig-badge {
+  font-family: 'Cinzel', serif;
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.5px;
+}
+.askida-elig-row.ok .askida-elig-badge {
+  background: rgba(0,200,150,0.15);
+  color: #00c896;
+}
+
+.askida-claim-wallet {
+  font-size: 12px;
+  color: rgba(255,185,50,0.7);
+  text-align: center;
+  padding: 8px;
+  background: rgba(255,185,50,0.05);
+  border-radius: 7px;
+  border: 1px solid rgba(255,185,50,0.1);
+}
+
+.askida-donate-status,
+.askida-claim-status {
+  font-size: 12px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  text-align: center;
+  line-height: 1.5;
+}
+.askida-donate-status.ok, .askida-claim-status.ok {
+  background: rgba(0,200,150,0.08);
+  color: #00c896;
+  border: 1px solid rgba(0,200,150,0.25);
+}
+.askida-donate-status.err, .askida-claim-status.err {
+  background: rgba(255,80,80,0.08);
+  color: #ff8080;
+  border: 1px solid rgba(255,80,80,0.25);
+}
+
+@media (max-width: 600px) {
+  .lb-askida-banner { flex-direction: column; align-items: flex-start; }
+  .lb-askida-right { flex-direction: row; width: 100%; }
+  .lb-askida-btn { flex: 1; text-align: center; }
 }

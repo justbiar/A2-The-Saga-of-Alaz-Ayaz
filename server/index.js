@@ -619,6 +619,7 @@ app.get('/api/leaderboard', (req, res) => {
             winRate: onlineGP > 0 ? Math.round((ow / onlineGP) * 100) : 0,
             score,
             lastUpdated: p.lastUpdated || 0,
+            totalDonated: (faucetData.donations?.[p.address?.toLowerCase()] || 0),
         };
     });
     // Default sort: composite score desc
@@ -1226,6 +1227,108 @@ app.post('/api/chat', rateLimit, (req, res) => {
     const msg = { id: Date.now() + '_' + Math.random().toString(36).slice(2), nickname: nick, text: safe, ts: Date.now() };
     chatMessages.push(msg);
     res.json({ ok: true, id: msg.id });
+});
+
+// ══════════════════════════════════════════════════════════════════════
+//  ASKIDA AVAX (FAUCET)
+// ══════════════════════════════════════════════════════════════════════
+
+const FAUCET_FILE = path.join(__dirname, 'data', 'faucet.json');
+const FAUCET_AMOUNT = 0.015;       // AVAX per claim
+const FAUCET_COOLDOWN = 24 * 60 * 60 * 1000; // 24h in ms
+const FAUCET_MIN_GAMES = 3;        // local games required
+
+let faucetData = { totalDonated: 0, totalClaimed: 0, claims: {} };
+try {
+    if (fs.existsSync(FAUCET_FILE)) {
+        faucetData = { ...faucetData, ...JSON.parse(fs.readFileSync(FAUCET_FILE, 'utf8')) };
+    }
+} catch { /* baştan başla */ }
+
+function saveFaucetData() {
+    try { fs.writeFileSync(FAUCET_FILE, JSON.stringify(faucetData, null, 2)); } catch { }
+}
+
+function getFaucetEligibility(addr) {
+    const key = addr.toLowerCase();
+    const p = lbData[key];
+    const localGames = p ? ((p.localWins || 0) + (p.localLosses || 0) + (p.localDraws || 0)) : 0;
+    const eligible = localGames >= FAUCET_MIN_GAMES;
+    const lastClaim = faucetData.claims[key] || 0;
+    const cooldownMs = Math.max(0, lastClaim + FAUCET_COOLDOWN - Date.now());
+    return { eligible, localGames, cooldownMs };
+}
+
+/** GET /api/faucet/info?address=0x... */
+app.get('/api/faucet/info', async (req, res) => {
+    let houseBalanceAVAX = null;
+    try {
+        if (houseSigner) {
+            const bal = await provider.getBalance(houseSigner.address);
+            houseBalanceAVAX = parseFloat(ethers.formatEther(bal)).toFixed(4);
+        }
+    } catch {}
+    const faucetPool = Math.max(0, (faucetData.totalDonated || 0) - (faucetData.totalClaimed || 0));
+    const info = {
+        ok: true,
+        totalDonated: faucetData.totalDonated,
+        totalClaimed: faucetData.totalClaimed,
+        faucetPool: parseFloat(faucetPool.toFixed(4)),
+        houseBalanceAVAX,
+        claimAmount: FAUCET_AMOUNT,
+        minGames: FAUCET_MIN_GAMES,
+        cooldownHours: 24,
+        houseWallet: process.env.HOUSE_WALLET_PK ? (() => { try { return new ethers.Wallet(process.env.HOUSE_WALLET_PK).address; } catch { return null; } })() : null,
+    };
+    const addr = validateAddress(req.query.address);
+    if (addr) {
+        const { eligible, localGames, cooldownMs } = getFaucetEligibility(addr);
+        info.eligible = eligible;
+        info.localGames = localGames;
+        info.cooldownMs = cooldownMs;
+    }
+    res.json(info);
+});
+
+/** POST /api/faucet/claim — { address } */
+app.post('/api/faucet/claim', rateLimit, async (req, res) => {
+    const addr = validateAddress(req.body?.address);
+    if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
+
+    const { eligible, localGames, cooldownMs } = getFaucetEligibility(addr);
+    if (!eligible) return res.status(403).json({ error: `En az ${FAUCET_MIN_GAMES} yerel oyun gerekli (${localGames}/${FAUCET_MIN_GAMES})` });
+    if (cooldownMs > 0) return res.status(429).json({ error: '24 saat dolmadan tekrar çekemezsin', cooldownMs });
+
+    if (!houseSigner) return res.status(503).json({ error: 'House wallet yapılandırılmamış' });
+
+    try {
+        const amountWei = ethers.parseEther(FAUCET_AMOUNT.toFixed(6));
+        const tx = await houseSigner.sendTransaction({ to: addr, value: amountWei });
+        faucetData.claims[addr.toLowerCase()] = Date.now();
+        faucetData.totalClaimed = (faucetData.totalClaimed || 0) + FAUCET_AMOUNT;
+        saveFaucetData();
+        console.log(`[Faucet] Claim: ${addr.slice(0, 8)} ← ${FAUCET_AMOUNT} AVAX TX: ${tx.hash}`);
+        res.json({ ok: true, txHash: tx.hash, amount: FAUCET_AMOUNT });
+    } catch (e) {
+        console.error('[Faucet] Claim failed:', e.message);
+        res.status(500).json({ error: 'Gönderim başarısız: ' + e.message });
+    }
+});
+
+/** POST /api/faucet/donate — { amount, address } (bağış kaydı) */
+app.post('/api/faucet/donate', rateLimit, (req, res) => {
+    const amount = parseFloat(req.body?.amount);
+    if (!amount || amount <= 0 || amount > 1000) return res.status(400).json({ error: 'Geçersiz miktar' });
+    faucetData.totalDonated = (faucetData.totalDonated || 0) + amount;
+    const addr = validateAddress(req.body?.address);
+    if (addr) {
+        if (!faucetData.donations) faucetData.donations = {};
+        const key = addr.toLowerCase();
+        faucetData.donations[key] = (faucetData.donations[key] || 0) + amount;
+    }
+    saveFaucetData();
+    console.log(`[Faucet] Donate recorded: ${amount} AVAX${addr ? ' from ' + addr.slice(0,8) : ''} — total: ${faucetData.totalDonated.toFixed(4)}`);
+    res.json({ ok: true, totalDonated: faucetData.totalDonated });
 });
 
 // ── PeerJS Signaling Server ────────────────────────────────────────────
