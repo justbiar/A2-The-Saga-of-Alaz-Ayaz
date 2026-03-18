@@ -33,6 +33,7 @@ export type MPMessage =
     | { type: 'bet_accept'; txHash: string; guestAddress: string }
     | { type: 'bet_reject' }
     | { type: 'bet_cancel' }
+    | { type: 'bet_counter'; amountAvax: number }
     | { type: 'bet_claim'; winnerAddress: string }
     | { type: 'game_over'; winner: 'fire' | 'ice'; reason: string }
     | { type: 'base_sync'; fireHp: number; iceHp: number }
@@ -81,6 +82,8 @@ export class MultiplayerService {
     public lobbyAmount: number = 0;
     public lobbyIsPublic: boolean = true;
     public lastError: string = '';
+    /** Rakibin cüzdan adresi (bet mesajlarından çıkarılır) */
+    public opponentWallet: string | null = null;
 
     private peer: any = null;
     private conn: any = null;

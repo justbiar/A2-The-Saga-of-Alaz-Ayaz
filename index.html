@@ -24,6 +24,7 @@
   <link rel="stylesheet" href="/src/styles/screens/profile.css">
   <link rel="stylesheet" href="/src/styles/screens/lobby.css">
   <link rel="stylesheet" href="/src/styles/screens/game.css">
+  <link rel="stylesheet" href="/src/styles/screens/admin.css">
 </head>
 
 <body>
@@ -349,6 +350,13 @@
       </table>
     </div>
 
+    <!-- Pagination -->
+    <div id="lb-pagination" style="display:none;justify-content:center;align-items:center;gap:8px;padding:12px 0;flex-wrap:wrap;">
+      <button id="lb-page-prev" style="padding:5px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);border-radius:4px;cursor:pointer;">‹</button>
+      <span id="lb-page-info" style="font-family:'Cinzel',serif;font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1px;min-width:80px;text-align:center;"></span>
+      <button id="lb-page-next" style="padding:5px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);border-radius:4px;cursor:pointer;">›</button>
+    </div>
+
   </div>
 
   <!-- ═══ ASKIDA AVAX MODAL ═══ -->
@@ -447,9 +455,13 @@
         <label data-i18n="pfsLabelName">Kullanıcı Adı</label>
         <input type="text" id="pfs-name-input" maxlength="32" data-i18n-placeholder="pfsNamePlaceholder"
           placeholder="Savaşçı adını gir..." />
-        <label data-i18n="pfsLabelAvatar">Avatar URL</label>
-        <input type="text" id="pfs-avatar-input" data-i18n-placeholder="pfsAvatarPlaceholder"
-          placeholder="https://... (opsiyonel)" />
+        <label data-i18n="pfsLabelAvatar">Avatar</label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" id="pfs-avatar-input" data-i18n-placeholder="pfsAvatarPlaceholder"
+            placeholder="https://... (opsiyonel)" style="flex:1;" />
+          <button type="button" id="pfs-reg-file-btn" style="padding:6px 10px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:#ccc;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;">📁 Dosya</button>
+          <input type="file" id="pfs-reg-avatar-file" accept="image/*" style="display:none" />
+        </div>
         <img class="pfs-form-avatar-preview" id="pfs-avatar-preview" src="/assets/images/logo.webp" alt="avatar" />
         <button class="pfs-register-btn" id="pfs-register-btn" data-i18n="pfsRegisterBtn">KAYIT OL</button>
       </div>
@@ -458,9 +470,17 @@
     <!-- Profile view (registered) -->
     <div class="pfs-card" id="pfs-view" style="display:none;">
       <div class="pfs-avatar-col">
-        <img class="pfs-avatar-img" id="pfs-avatar-img" src="/assets/images/logo.webp" alt="avatar" />
+        <div id="pfs-avatar-wrap" style="position:relative;cursor:pointer;display:inline-block;" title="Tıkla — bilgisayardan yükle">
+          <img class="pfs-avatar-img" id="pfs-avatar-img" src="/assets/images/logo.webp" alt="avatar" />
+          <div style="position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,0.75);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;pointer-events:none;">✎</div>
+          <input type="file" id="pfs-avatar-file" accept="image/*" style="display:none" />
+        </div>
         <div class="pfs-avatar-name" id="pfs-display-name">—</div>
         <div class="pfs-avatar-addr" id="pfs-display-addr">0x...</div>
+        <div style="display:flex;gap:4px;margin-top:8px;width:150px;">
+          <input type="text" id="pfs-avatar-url-input" placeholder="https://... URL" style="flex:1;min-width:0;font-size:9px;padding:4px 6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:4px;font-family:'Cinzel',serif;" />
+          <button id="pfs-avatar-url-btn" style="font-size:9px;padding:4px 7px;background:rgba(255,185,50,0.12);border:1px solid rgba(255,185,50,0.3);color:#ffc94d;border-radius:4px;cursor:pointer;white-space:nowrap;font-family:'Cinzel',serif;">↑</button>
+        </div>
       </div>
       <div class="pfs-info-col">
         <!-- Local Stats -->
@@ -643,38 +663,6 @@
     </div>
   </div>
 
-  <!-- Kite AI Status Panel -->
-  <div id="kite-panel" style="display:none">
-    <div class="kite-header">
-      <!-- Kite diamond logomark -->
-      <svg class="kite-logo-mark" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M10 2L17 10L10 18L3 10Z" stroke="rgba(60,160,255,0.7)" stroke-width="1.2"
-          fill="rgba(40,100,200,0.12)" />
-        <path d="M10 5L14.5 10L10 15L5.5 10Z" stroke="rgba(60,200,255,0.5)" stroke-width="0.8"
-          fill="rgba(60,140,255,0.08)" />
-        <circle cx="10" cy="10" r="1.5" fill="rgba(100,200,255,0.6)" />
-      </svg>
-      <span class="kite-brand">KITE AI</span>
-      <div class="kite-status-dot mock" id="kite-ai-dot" title="AI Kaynağı"></div>
-      <div class="kite-status-dot" id="kite-chain-dot" title="Zincir Bağlantısı" style="margin-left:3px"></div>
-    </div>
-
-    <div class="kite-divider"></div>
-
-    <div class="kite-row">
-      <span class="kite-row-label">KAYNAK</span>
-      <span class="kite-row-val orange" id="kite-source-label">MOCK AI</span>
-    </div>
-    <div class="kite-row">
-      <span class="kite-row-label">ZİNCİR</span>
-      <span class="kite-row-val" id="kite-chain-label">BAĞLANIYOR</span>
-    </div>
-    <div class="kite-row">
-      <span class="kite-row-label">PoAI PUANI</span>
-      <span class="kite-row-val blue" id="kite-poai-val">— —</span>
-    </div>
-  </div>
-
   <!-- Enemy status -->
   <div id="enemy-status">Düşman birim sürüyor...</div>
 
@@ -696,11 +684,26 @@
   <!-- Active Effects Sidebar -->
   <div id="active-effects"></div>
 
+  <!-- DRAFT TIMER -->
+  <div id="draft-timer" style="display:none;">
+    <span class="dt-label">SONRAKİ KART</span>
+    <span class="dt-count">45</span>
+  </div>
+
+  <!-- DRAFT OVERLAY -->
+  <div id="draft-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9000;align-items:center;justify-content:center;">
+    <div id="draft-popup" style="background:rgba(4,3,20,0.97);border:1px solid rgba(255,185,50,0.4);border-radius:12px;padding:24px 28px;min-width:340px;max-width:90vw;display:flex;flex-direction:column;gap:14px;align-items:center;">
+      <div id="draft-popup-title" style="font-family:'Cinzel',serif;font-size:14px;letter-spacing:2px;color:#ffc94d;text-transform:uppercase;">KART SEÇ</div>
+      <div id="draft-cards" style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;"></div>
+      <div id="draft-deck-row" style="display:none;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:4px;border-top:1px solid rgba(255,255,255,0.1);padding-top:10px;width:100%;"></div>
+      <button id="draft-reroll" style="margin-top:4px;padding:6px 18px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;background:rgba(255,185,50,0.1);border:1px solid rgba(255,185,50,0.3);color:#ffc94d;border-radius:6px;cursor:pointer;">Yeniden At (10 AVX)</button>
+    </div>
+  </div>
+
   <!-- BOTTOM CARD TRAY -->
   <div id="card-tray">
     <div id="card-area">
-      <div id="controls-hint">Drag = Kamera &nbsp;·&nbsp; Scroll = Zoom &nbsp;·&nbsp; WASD = Pan &nbsp;·&nbsp; Space =
-        Hero</div>
+
       <div id="card-row">
         <div id="prompt-container"></div>
         <div class="card-divider"></div>
@@ -928,6 +931,14 @@
       font-weight:700; letter-spacing:2px; cursor:pointer;
       transition:all 0.2s ease;
     ">ANA MENÜ</button>
+    <button id="win-report-btn" style="
+      display:none; margin-top:8px; padding:7px 20px; border-radius:20px;
+      border:1px solid rgba(239,68,68,0.4);
+      background:rgba(239,68,68,0.1); color:#ef4444;
+      font-family:'Inter',sans-serif; font-size:11px;
+      font-weight:600; cursor:pointer; letter-spacing:0.05em;
+      transition:all 0.2s ease;
+    ">Rakibi Raporla</button>
   </div>
 
   <!-- MOD SEÇİM EKRANI -->
@@ -1127,6 +1138,14 @@
               <div class="bet-locked-amount" id="bet-locked-amount"></div>
             </div>
             <div class="bet-skip-note" id="bet-skip-note" style="display:none">Bahissiz oynuyorsunuz.</div>
+            <div class="bet-counter" id="bet-counter" style="display:none">
+              <div style="font-size:11px;color:rgba(255,185,50,0.7);margin-bottom:6px">Farklı bir miktar öner:</div>
+              <div class="bet-input-row">
+                <input id="bet-counter-input" class="bet-amount-input" type="number" min="0.01" max="100" step="0.01" placeholder="0.01" />
+                <span class="bet-avax-label">AVAX</span>
+              </div>
+              <button class="bet-send-btn" id="bet-counter-btn">Teklif Gönder</button>
+            </div>
           </div>
 
           <button class="lobby-start-btn" id="lobby-start-btn" data-i18n="lobbyStartBtn">OYUNU BAŞLAT &rarr;</button>
@@ -1150,6 +1169,7 @@
         <button class="ko-bar-btn ko-bar-back" id="lobby-back" data-i18n="back">← Geri</button>
         <button class="ko-bar-btn" id="lobby-refresh-btn" data-i18n="lobbyRefresh">↻ YENİLE</button>
         <button class="ko-bar-btn ko-bar-qm" id="lobby-qm-btn" data-i18n="lobbyQuickMatch">HIZLI EŞLEŞME</button>
+        <button class="ko-bar-btn ko-bar-offline" id="lobby-offline-btn">OFFLINE MOD</button>
         <button class="ko-bar-btn ko-bar-create" id="lobby-open-modal-btn" data-i18n="lobbyCreateRoom">ODA KUR</button>
       </div>
 

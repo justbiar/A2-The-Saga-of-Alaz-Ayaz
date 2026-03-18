@@ -180,6 +180,7 @@ class BetService {
 
         try {
             const ethProvider = new ethers.BrowserProvider(provider);
+            await provider.request({ method: 'eth_requestAccounts' });
             const signer = await ethProvider.getSigner();
             const signerAddress = await signer.getAddress();
 

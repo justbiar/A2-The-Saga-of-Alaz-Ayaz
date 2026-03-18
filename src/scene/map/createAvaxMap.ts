@@ -502,17 +502,7 @@ function buildIceFeatures(scene: Scene, iceTex: BaseTexture): void {
         // kristal isiklari kaldirildi — GPU uniform buffer limitine takmamak icin
     });
 
-    // ── BUZ BLOKLARI (ırmak üstünde yüzen) ──
-    [{ x: -8, z: 12, s: 1.6 }, { x: 8, z: 12, s: 1.6 },
-    { x: -12, z: 16, s: 1.3 }, { x: 12, z: 16, s: 1.3 },
-    { x: -4, z: 24, s: 1.1 }, { x: 4, z: 24, s: 1.1 }].forEach((ib, i) => {
-        const b = MeshBuilder.CreateBox(`iceB_${i}`, {
-            width: ib.s * 1.3, height: ib.s * .5, depth: ib.s * 1.3,
-        }, scene);
-        b.position.set(ib.x, SURF + ib.s * .5, ib.z);
-        b.rotation.y = i * .5;
-        b.material = tMat(`iceBM_${i}`, iceTex, scene, { a: .5, sp: new Color3(.4, .4, .5) });
-    });
+    // Buz blokları kaldırıldı — tower/birim geçişine engel oluyordu
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

@@ -57,9 +57,9 @@ class LeaderboardService {
     // ─── STATS ────────────────────────────────────────────────────────────
 
     /** Register/update player (call after wallet connect) */
-    upsertPlayer(address: string, username: string) {
+    upsertPlayer(address: string, username: string, avatarURI?: string) {
         const addr = address.toLowerCase();
-        void this._serverUpsert(address, username);
+        void this._serverUpsert(address, username, avatarURI);
         if (!this.stats.has(addr)) {
             this.stats.set(addr, {
                 address: addr,
@@ -125,12 +125,12 @@ class LeaderboardService {
         } catch { /* ignore */ }
     }
 
-    private async _serverUpsert(address: string, username: string) {
+    private async _serverUpsert(address: string, username: string, avatarURI?: string) {
         try {
             await fetch('/api/leaderboard/upsert', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address, username }),
+                body: JSON.stringify({ address, username, ...(avatarURI ? { avatarURI } : {}) }),
             });
         } catch { /* ignore */ }
     }

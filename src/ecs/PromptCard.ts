@@ -1,8 +1,26 @@
 /**
- * PromptCard.ts — 8 Skill Card definitions for A2.
- * name/description use i18n keys — resolved at render time.
+ * PromptCard.ts — Skill Card + Tower Card definitions for A2.
  */
 import type { PromptCardDef } from './types';
+
+/** Takıma göre topçu kulesi kartı oluştur (45. saniyede otomatik eklenir). */
+export function getTowerCard(team: 'fire' | 'ice'): PromptCardDef {
+    return {
+        id: 'tower_place',
+        name: 'Topçu Kulesi',
+        description: 'Savunma kulesi kur. Her 5 AVX ile seviye atla (max 5).',
+        manaCost: 0,
+        avxCost: 5,
+        effectType: 'tower_place',
+        magnitude: 0,
+        duration: 0,
+        cooldown: 0,
+        targetTeam: 'self',
+        imagePath: team === 'ice'
+            ? '/assets/game%20asset/ayaztop.png'
+            : '/assets/game%20asset/alaztop.png',
+    };
+}
 
 export const PROMPT_DEFS: PromptCardDef[] = [
     {

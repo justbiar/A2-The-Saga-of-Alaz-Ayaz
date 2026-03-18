@@ -620,6 +620,7 @@ app.get('/api/leaderboard', (req, res) => {
             score,
             lastUpdated: p.lastUpdated || 0,
             totalDonated: (faucetData.donations?.[p.address?.toLowerCase()] || 0),
+            avatarURI: p.avatarURI || '',
         };
     });
     // Default sort: composite score desc
@@ -628,14 +629,59 @@ app.get('/api/leaderboard', (req, res) => {
     res.json({ ok: true, entries });
 });
 
+/** POST /api/avatar/upload — Base64 görsel yükle → WebP'ye çevir → kaydet */
+const AVATARS_DIR = '/var/www/html/avatars';
+try { fs.mkdirSync(AVATARS_DIR, { recursive: true }); } catch {}
+let sharp;
+try { sharp = require('sharp'); } catch { sharp = null; }
+
+app.post('/api/avatar/upload', rateLimit, async (req, res) => {
+    const { address, dataUrl } = req.body ?? {};
+    const addr = validateAddress(address);
+    if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
+
+    const match = typeof dataUrl === 'string' && dataUrl.match(/^data:image\/(jpeg|jpg|png|webp|gif);base64,(.+)$/);
+    if (!match) return res.status(400).json({ error: 'Geçersiz görsel formatı' });
+
+    const rawBuffer = Buffer.from(match[2], 'base64');
+    if (rawBuffer.length > 1024 * 1024) return res.status(400).json({ error: 'Max 1MB' });
+
+    try {
+        const filename = `${addr.toLowerCase()}.webp`;
+        const outPath = path.join(AVATARS_DIR, filename);
+        if (sharp) {
+            await sharp(rawBuffer)
+                .resize(256, 256, { fit: 'cover', position: 'centre' })
+                .webp({ quality: 82 })
+                .toFile(outPath);
+        } else {
+            fs.writeFileSync(outPath, rawBuffer);
+        }
+        const avatarUrl = `/avatars/${filename}`;
+        // Leaderboard kaydını da güncelle
+        const lbKey = addr.toLowerCase();
+        if (lbData[lbKey]) {
+            lbData[lbKey].avatarURI = avatarUrl;
+            saveLbData();
+        }
+        res.json({ ok: true, url: avatarUrl });
+    } catch {
+        res.status(500).json({ error: 'Kayıt hatası' });
+    }
+});
+
 /** POST /api/leaderboard/upsert — Oyuncu kayıt / isim güncelle */
 app.post('/api/leaderboard/upsert', rateLimit, (req, res) => {
-    const { address, username } = req.body ?? {};
+    const { address, username, avatarURI } = req.body ?? {};
     const addr = validateAddress(address);
     if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
     if (!username || typeof username !== 'string' || username.length > 32) {
         return res.status(400).json({ error: 'Geçersiz username' });
     }
+    // avatarURI: sadece http/https URL kabul et, base64 reddet
+    const safeAvatar = (typeof avatarURI === 'string' &&
+        (/^https?:\/\/.{1,280}$/.test(avatarURI) || /^\/avatars\/0x[0-9a-fA-F]{40}\.webp$/.test(avatarURI)))
+        ? avatarURI : null;
     const key = addr.toLowerCase();
     if (!lbData[key]) {
         lbData[key] = {
@@ -644,11 +690,13 @@ app.post('/api/leaderboard/upsert', rateLimit, (req, res) => {
             totalBetWon: 0, totalBetLost: 0,
             weeklyWins: 0, weeklyBetWon: 0,
             lastWeek: getISOWeek(), lastUpdated: Date.now(),
+            avatarURI: safeAvatar || '',
         };
     } else {
         lbData[key].username = username;
         lbData[key].address = addr;
         lbData[key].lastUpdated = Date.now();
+        if (safeAvatar !== null) lbData[key].avatarURI = safeAvatar;
     }
     saveLbData();
     res.json({ ok: true });
@@ -1329,6 +1377,395 @@ app.post('/api/faucet/donate', rateLimit, (req, res) => {
     saveFaucetData();
     console.log(`[Faucet] Donate recorded: ${amount} AVAX${addr ? ' from ' + addr.slice(0,8) : ''} — total: ${faucetData.totalDonated.toFixed(4)}`);
     res.json({ ok: true, totalDonated: faucetData.totalDonated });
+});
+
+// ══════════════════════════════════════════════════════════════════════
+//  ADMIN PANEL — Kimlik doğrulama, ban, raporlar, kampanyalar
+// ══════════════════════════════════════════════════════════════════════
+
+const ADMIN_WALLETS = (process.env.ADMIN_WALLETS || '')
+    .split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
+console.log(`[Admin] Admin cüzdanlar: ${ADMIN_WALLETS.length} adet`, ADMIN_WALLETS);
+const ADMIN_SESSIONS = new Map(); // token → { address, expiresAt }
+
+// Süresi dolan session'ları temizle
+setInterval(() => {
+    const now = Date.now();
+    for (const [token, session] of ADMIN_SESSIONS) {
+        if (session.expiresAt < now) ADMIN_SESSIONS.delete(token);
+    }
+}, 60_000);
+
+// ── Ban Verisi ─────────────────────────────────────────────────────────
+const BANS_FILE = path.join(__dirname, 'data', 'bans.json');
+let bansData = {};
+try {
+    if (fs.existsSync(BANS_FILE)) bansData = JSON.parse(fs.readFileSync(BANS_FILE, 'utf8'));
+} catch { bansData = {}; }
+
+function saveBansData() {
+    try { fs.writeFileSync(BANS_FILE, JSON.stringify(bansData, null, 2)); }
+    catch (e) { console.error('[Bans] Save failed:', e.message); }
+}
+
+// ── Raporlar Verisi ────────────────────────────────────────────────────
+const REPORTS_FILE = path.join(__dirname, 'data', 'reports.json');
+let reportsData = [];
+try {
+    if (fs.existsSync(REPORTS_FILE)) reportsData = JSON.parse(fs.readFileSync(REPORTS_FILE, 'utf8'));
+} catch { reportsData = []; }
+
+function saveReportsData() {
+    try { fs.writeFileSync(REPORTS_FILE, JSON.stringify(reportsData, null, 2)); }
+    catch (e) { console.error('[Reports] Save failed:', e.message); }
+}
+
+// ── Kampanyalar Verisi ──────────────────────────────────────────────────
+const CAMPAIGNS_FILE = path.join(__dirname, 'data', 'campaigns.json');
+let campaignsData = [];
+try {
+    if (fs.existsSync(CAMPAIGNS_FILE)) campaignsData = JSON.parse(fs.readFileSync(CAMPAIGNS_FILE, 'utf8'));
+} catch { campaignsData = []; }
+
+function saveCampaignsData() {
+    try { fs.writeFileSync(CAMPAIGNS_FILE, JSON.stringify(campaignsData, null, 2)); }
+    catch (e) { console.error('[Campaigns] Save failed:', e.message); }
+}
+
+// ── Admin Auth Middleware ──────────────────────────────────────────────
+function requireAdmin(req, res, next) {
+    const token = req.headers['x-admin-token'];
+    if (!token) return res.status(401).json({ error: 'Admin token gerekli' });
+    const session = ADMIN_SESSIONS.get(token);
+    if (!session || session.expiresAt < Date.now()) {
+        ADMIN_SESSIONS.delete(token);
+        return res.status(401).json({ error: 'Oturum süresi dolmuş' });
+    }
+    req.adminAddress = session.address;
+    next();
+}
+
+/** POST /api/admin/auth — Cüzdan imzasıyla oturum aç */
+app.post('/api/admin/auth', async (req, res) => {
+    const { address, signature, challenge } = req.body ?? {};
+    const addr = validateAddress(address);
+    if (!addr || !signature || !challenge) {
+        return res.status(400).json({ error: 'address, signature, challenge gerekli' });
+    }
+    const m = challenge.match(/^A2 Admin: (\d+)$/);
+    if (!m) return res.status(400).json({ error: 'Geçersiz challenge formatı' });
+    if (Math.abs(Date.now() - parseInt(m[1])) > 5 * 60 * 1000) {
+        return res.status(400).json({ error: 'Challenge süresi dolmuş (5dk)' });
+    }
+    try {
+        const recovered = ethers.verifyMessage(challenge, signature);
+        if (recovered.toLowerCase() !== addr.toLowerCase()) {
+            return res.status(401).json({ error: 'İmza doğrulanamadı' });
+        }
+        if (!ADMIN_WALLETS.includes(addr.toLowerCase())) {
+            return res.status(403).json({ error: 'Bu cüzdan admin değil' });
+        }
+        const token = crypto.randomBytes(32).toString('hex');
+        ADMIN_SESSIONS.set(token, { address: addr, expiresAt: Date.now() + 60 * 60 * 1000 });
+        console.log(`[Admin] Auth: ${addr.slice(0, 10)} → token verildi`);
+        res.json({ ok: true, token });
+    } catch (e) {
+        res.status(401).json({ error: 'İmza hatası: ' + e.message });
+    }
+});
+
+/** GET /api/admin/dashboard — Genel istatistikler */
+app.get('/api/admin/dashboard', requireAdmin, async (req, res) => {
+    const players = Object.values(lbData);
+    const now = Date.now();
+    let houseBalance = '0';
+    try {
+        const bal = await provider.getBalance(houseSigner.address);
+        houseBalance = parseFloat(ethers.formatEther(bal)).toFixed(4);
+    } catch {}
+    const totalOnlineGames = players.reduce((s, p) =>
+        s + ((p.onlineWins || 0) + (p.onlineLosses || 0) + (p.onlineDraws || 0)), 0);
+    const totalLocalGames = players.reduce((s, p) =>
+        s + ((p.localWins || 0) + (p.localLosses || 0) + (p.localDraws || 0)), 0);
+    const totalBetVolume = players.reduce((s, p) => s + (p.totalBetWon || 0), 0);
+    res.json({
+        ok: true,
+        stats: {
+            totalPlayers: players.length,
+            activeLast24h: players.filter(p => p.lastUpdated && (now - p.lastUpdated) < 86400000).length,
+            activeLast7d: players.filter(p => p.lastUpdated && (now - p.lastUpdated) < 7 * 86400000).length,
+            totalOnlineGames,
+            totalLocalGames,
+            totalBetVolume: parseFloat(totalBetVolume.toFixed(4)),
+            houseBalance,
+            activeMatches: Array.from(matches.values()).filter(m =>
+                ['host_deposited', 'locked', 'settling'].includes(m.status)).length,
+            totalBanned: Object.keys(bansData).length,
+            totalReports: reportsData.length,
+            openReports: reportsData.filter(r => r.status === 'open').length,
+            feePool: poolData.totalFee,
+            totalDistributed: poolData.totalDistributed || 0,
+            activeCampaigns: campaignsData.filter(c => c.status === 'active').length,
+            activeLobbies: lobbies.size,
+        },
+    });
+});
+
+/** GET /api/admin/players — Tüm oyuncular + detaylar */
+app.get('/api/admin/players', requireAdmin, (req, res) => {
+    const entries = Object.values(lbData).map(p => {
+        const key = (p.address || '').toLowerCase();
+        const ow = p.onlineWins || 0, ol = p.onlineLosses || 0, od = p.onlineDraws || 0;
+        const lw = p.localWins || 0, ll = p.localLosses || 0, ld = p.localDraws || 0;
+        return {
+            address: p.address,
+            username: p.username,
+            onlineWins: ow, onlineLosses: ol, onlineDraws: od,
+            onlineGamesPlayed: ow + ol + od,
+            localWins: lw, localLosses: ll, localDraws: ld,
+            localGamesPlayed: lw + ll + ld,
+            totalGamesPlayed: ow + ol + od + lw + ll + ld,
+            totalBetWon: p.totalBetWon || 0,
+            totalBetLost: p.totalBetLost || 0,
+            weeklyWins: p.weeklyWins || 0,
+            lastUpdated: p.lastUpdated || 0,
+            avatarURI: p.avatarURI || '',
+            isBanned: !!bansData[key],
+            banInfo: bansData[key] || null,
+            reportCount: reportsData.filter(r => r.reportedAddress?.toLowerCase() === key).length,
+        };
+    });
+    entries.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+    res.json({ ok: true, players: entries });
+});
+
+/** GET /api/ban/check/:address — Public: ban kontrolü */
+app.get('/api/ban/check/:address', (req, res) => {
+    const addr = validateAddress(req.params.address);
+    if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
+    const ban = bansData[addr.toLowerCase()];
+    res.json({ banned: !!ban, reason: ban?.reason || null });
+});
+
+/** GET /api/admin/bans — Ban listesi */
+app.get('/api/admin/bans', requireAdmin, (req, res) => {
+    const bans = Object.entries(bansData).map(([address, b]) => ({ address, ...b }));
+    bans.sort((a, b) => (b.bannedAt || 0) - (a.bannedAt || 0));
+    res.json({ ok: true, bans });
+});
+
+/** POST /api/admin/ban — Oyuncu banla */
+app.post('/api/admin/ban', requireAdmin, (req, res) => {
+    const { address, reason, notes } = req.body ?? {};
+    const addr = validateAddress(address);
+    if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
+    if (!reason) return res.status(400).json({ error: 'reason gerekli' });
+    bansData[addr.toLowerCase()] = {
+        address: addr, reason,
+        notes: (notes || '').slice(0, 500),
+        bannedAt: Date.now(),
+        bannedBy: req.adminAddress,
+    };
+    saveBansData();
+    console.log(`[Admin] Ban: ${addr.slice(0, 10)} by ${req.adminAddress.slice(0, 10)} — ${reason}`);
+    res.json({ ok: true });
+});
+
+/** DELETE /api/admin/ban/:address — Ban kaldır */
+app.delete('/api/admin/ban/:address', requireAdmin, (req, res) => {
+    const addr = validateAddress(req.params.address);
+    if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
+    const key = addr.toLowerCase();
+    if (!bansData[key]) return res.status(404).json({ error: 'Ban kaydı bulunamadı' });
+    delete bansData[key];
+    saveBansData();
+    console.log(`[Admin] Unban: ${addr.slice(0, 10)} by ${req.adminAddress.slice(0, 10)}`);
+    res.json({ ok: true });
+});
+
+/** POST /api/report/player — Public: oyuncu raporla */
+app.post('/api/report/player', rateLimit, (req, res) => {
+    const { reporterAddress, reportedAddress, reason, matchId, details } = req.body ?? {};
+    const reporter = validateAddress(reporterAddress);
+    const reported = validateAddress(reportedAddress);
+    if (!reporter || !reported) return res.status(400).json({ error: 'Geçersiz adresler' });
+    if (!reason || typeof reason !== 'string') return res.status(400).json({ error: 'reason gerekli' });
+    if (reporter.toLowerCase() === reported.toLowerCase()) {
+        return res.status(400).json({ error: 'Kendini raporlayamazsın' });
+    }
+    const recent = reportsData.filter(r =>
+        r.reporterAddress?.toLowerCase() === reporter.toLowerCase() &&
+        r.reportedAddress?.toLowerCase() === reported.toLowerCase() &&
+        (Date.now() - r.createdAt) < 86400000
+    );
+    if (recent.length >= 2) return res.status(429).json({ error: 'Bu oyuncuyu son 24 saatte zaten raporladın' });
+    const report = {
+        id: crypto.randomBytes(8).toString('hex'),
+        reporterAddress: reporter,
+        reportedAddress: reported,
+        reason: reason.slice(0, 200),
+        details: typeof details === 'string' ? details.slice(0, 500) : '',
+        matchId: matchId || null,
+        status: 'open',
+        createdAt: Date.now(),
+        resolvedAt: null, resolvedBy: null, action: null, adminNotes: '',
+    };
+    reportsData.push(report);
+    if (reportsData.length > 5000) reportsData = reportsData.slice(-5000);
+    saveReportsData();
+    console.log(`[Report] ${reporter.slice(0, 8)} → ${reported.slice(0, 8)} : ${reason}`);
+    res.json({ ok: true, reportId: report.id });
+});
+
+/** GET /api/admin/reports — Raporlar listesi */
+app.get('/api/admin/reports', requireAdmin, (req, res) => {
+    const status = req.query.status;
+    let reports = [...reportsData];
+    if (status) reports = reports.filter(r => r.status === status);
+    reports.sort((a, b) => b.createdAt - a.createdAt);
+    res.json({
+        ok: true,
+        reports: reports.map(r => ({
+            ...r,
+            isReportedBanned: !!bansData[r.reportedAddress?.toLowerCase()],
+            reportedUsername: lbData[r.reportedAddress?.toLowerCase()]?.username || null,
+            reporterUsername: lbData[r.reporterAddress?.toLowerCase()]?.username || null,
+        })),
+    });
+});
+
+/** PATCH /api/admin/report/:id — Raporu çöz */
+app.patch('/api/admin/report/:id', requireAdmin, (req, res) => {
+    const report = reportsData.find(r => r.id === req.params.id);
+    if (!report) return res.status(404).json({ error: 'Report bulunamadı' });
+    report.status = 'resolved';
+    report.resolvedAt = Date.now();
+    report.resolvedBy = req.adminAddress;
+    report.action = (req.body?.action || 'reviewed').slice(0, 100);
+    report.adminNotes = (req.body?.notes || '').slice(0, 500);
+    saveReportsData();
+    res.json({ ok: true });
+});
+
+/** GET /api/admin/campaigns — Kampanyalar */
+app.get('/api/admin/campaigns', requireAdmin, (req, res) => {
+    res.json({ ok: true, campaigns: campaignsData });
+});
+
+/** POST /api/admin/campaign — Yeni kampanya */
+app.post('/api/admin/campaign', requireAdmin, (req, res) => {
+    const { name, description, network, poolAvax, rules, startDate, endDate } = req.body ?? {};
+    if (!name || !network) return res.status(400).json({ error: 'name ve network gerekli' });
+    const campaign = {
+        id: crypto.randomBytes(8).toString('hex'),
+        name: String(name).slice(0, 100),
+        description: String(description || '').slice(0, 500),
+        network: ['testnet', 'mainnet', 'both'].includes(network) ? network : 'testnet',
+        status: 'active',
+        poolAvax: parseFloat(poolAvax) || 0,
+        rules: rules || { minGames: 0, minOnlineGames: 0, minWins: 0 },
+        startDate: startDate || new Date().toISOString(),
+        endDate: endDate || null,
+        createdAt: Date.now(),
+        createdBy: req.adminAddress,
+        snapshots: [],
+        distributions: [],
+    };
+    campaignsData.push(campaign);
+    saveCampaignsData();
+    res.json({ ok: true, campaign });
+});
+
+/** PUT /api/admin/campaign/:id — Kampanya güncelle */
+app.put('/api/admin/campaign/:id', requireAdmin, (req, res) => {
+    const campaign = campaignsData.find(c => c.id === req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadı' });
+    const { name, description, status, poolAvax, rules, endDate } = req.body ?? {};
+    if (name) campaign.name = String(name).slice(0, 100);
+    if (description !== undefined) campaign.description = String(description).slice(0, 500);
+    if (status && ['active', 'paused', 'ended'].includes(status)) campaign.status = status;
+    if (poolAvax !== undefined) campaign.poolAvax = parseFloat(poolAvax) || 0;
+    if (rules) campaign.rules = rules;
+    if (endDate !== undefined) campaign.endDate = endDate;
+    saveCampaignsData();
+    res.json({ ok: true, campaign });
+});
+
+/** POST /api/admin/campaign/:id/snapshot — Leaderboard snapshot al */
+app.post('/api/admin/campaign/:id/snapshot', requireAdmin, (req, res) => {
+    const campaign = campaignsData.find(c => c.id === req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadı' });
+    const rules = campaign.rules || {};
+    const snapshot = Object.values(lbData)
+        .filter(p => !bansData[(p.address || '').toLowerCase()])
+        .map(p => {
+            const ow = p.onlineWins || 0, ol = p.onlineLosses || 0, od = p.onlineDraws || 0;
+            const total = (p.wins || 0) + (p.losses || 0) + (p.draws || 0);
+            return {
+                address: p.address,
+                username: p.username,
+                wins: p.wins || 0,
+                onlineWins: ow,
+                onlineGamesPlayed: ow + ol + od,
+                totalGamesPlayed: total,
+                totalBetWon: p.totalBetWon || 0,
+                score: ow * 10 + (p.totalBetWon || 0) * 100,
+            };
+        })
+        .filter(p => {
+            if (rules.minGames && p.totalGamesPlayed < rules.minGames) return false;
+            if (rules.minOnlineGames && p.onlineGamesPlayed < rules.minOnlineGames) return false;
+            if (rules.minWins && p.wins < rules.minWins) return false;
+            return true;
+        })
+        .sort((a, b) => b.score - a.score);
+    campaign.snapshots.push({ takenAt: Date.now(), takenBy: req.adminAddress, players: snapshot });
+    saveCampaignsData();
+    res.json({ ok: true, playerCount: snapshot.length, top10: snapshot.slice(0, 10) });
+});
+
+/** POST /api/admin/campaign/:id/distribute — Kampanya ödülü dağıt */
+app.post('/api/admin/campaign/:id/distribute', requireAdmin, async (req, res) => {
+    const campaign = campaignsData.find(c => c.id === req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadı' });
+    const { recipients } = req.body ?? {};
+    if (!Array.isArray(recipients) || recipients.length === 0) {
+        return res.status(400).json({ error: 'recipients gerekli' });
+    }
+    const results = [];
+    for (const r of recipients.slice(0, 20)) {
+        const addr = validateAddress(r.address);
+        const amt = validateAmount(r.avax);
+        if (!addr || !amt) { results.push({ address: r.address, error: 'Geçersiz' }); continue; }
+        try {
+            const tx = await houseSigner.sendTransaction({
+                to: addr, value: ethers.parseEther(amt.toFixed(6)),
+            });
+            await tx.wait(1);
+            results.push({ address: addr, avax: amt, txHash: tx.hash, ok: true });
+            console.log(`[Campaign:${campaign.id}] ${addr.slice(0, 10)} ← ${amt} AVAX TX=${tx.hash}`);
+        } catch (e) {
+            results.push({ address: addr, avax: amt, error: e.message });
+        }
+    }
+    campaign.distributions.push({ at: Date.now(), by: req.adminAddress, results });
+    if (results.length > 0 && results.every(r => r.ok)) campaign.status = 'ended';
+    saveCampaignsData();
+    res.json({ ok: true, results });
+});
+
+/** GET /api/admin/chat — Chat logları (sadece admin) */
+app.get('/api/admin/chat', requireAdmin, (req, res) => {
+    pruneChat();
+    res.json({ ok: true, messages: [...chatMessages].reverse() });
+});
+
+/** DELETE /api/admin/chat/:id — Mesaj sil */
+app.delete('/api/admin/chat/:id', requireAdmin, (req, res) => {
+    const idx = chatMessages.findIndex(m => m.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Mesaj bulunamadı' });
+    chatMessages.splice(idx, 1);
+    res.json({ ok: true });
 });
 
 // ── PeerJS Signaling Server ────────────────────────────────────────────

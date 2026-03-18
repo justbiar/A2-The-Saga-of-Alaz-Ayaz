@@ -68,8 +68,13 @@ export const ctx = {
     draftTimer: 45,
     draftPopupOpen: false,
     recallUsed: false,
+    towerCardAdded: false,
     healHomeInterval: null as ReturnType<typeof setInterval> | null,
     unluckyInterval: null as ReturnType<typeof setInterval> | null,
+
+    // ── Tower system ──
+    spawnTower: null as (() => boolean) | null,
+    disposeTowers: null as (() => void) | null,
 
     // ── Cooldown ──
     skillCooldowns: {} as Record<string, number>,
@@ -113,4 +118,8 @@ export function resetGameState(): void {
     ctx._mpGameEnded = false;
     ctx.mpGameStarted = false;
     ctx.unitCooldowns = {};
+    ctx.towerCardAdded = false;
+    ctx.disposeTowers?.();
+    ctx.spawnTower = null;
+    ctx.disposeTowers = null;
 }

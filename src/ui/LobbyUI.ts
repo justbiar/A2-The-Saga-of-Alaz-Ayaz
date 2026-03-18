@@ -46,7 +46,7 @@ function showLobbyError(msg: string): void {
 type BetPanelState =
     | 'host-idle' | 'host-depositing' | 'host-waiting'
     | 'guest-incoming' | 'guest-depositing' | 'guest-wait'
-    | 'locked' | 'no-wallet' | 'no-bet';
+    | 'locked' | 'no-wallet' | 'no-bet' | 'guest-counter';
 
 function showBetPanel(state: BetPanelState): void {
     const hostSection = document.getElementById('bet-host-section');
@@ -56,6 +56,7 @@ function showBetPanel(state: BetPanelState): void {
     const skipNote = document.getElementById('bet-skip-note');
     const noWallet = document.getElementById('bet-no-wallet');
     const guestWait = document.getElementById('bet-guest-wait');
+    const counterSection = document.getElementById('bet-counter');
 
     if (!hostSection) return;
 
@@ -66,6 +67,7 @@ function showBetPanel(state: BetPanelState): void {
     skipNote!.style.display = 'none';
     if (noWallet) noWallet.style.display = 'none';
     if (guestWait) guestWait.style.display = 'none';
+    if (counterSection) counterSection.style.display = 'none';
 
     const sendBtn = document.getElementById('bet-send-btn') as HTMLButtonElement | null;
 
@@ -109,6 +111,9 @@ function showBetPanel(state: BetPanelState): void {
             break;
         case 'no-bet':
             skipNote!.style.display = 'block';
+            break;
+        case 'guest-counter':
+            if (counterSection) counterSection.style.display = 'block';
             break;
     }
 }
@@ -282,13 +287,15 @@ async function fetchPublicLobbies(): Promise<void> {
                 <td>1/2</td>
                 <td>${l.betAmount > 0 ? l.betAmount + ' A' : '—'}</td>
                 <td class="${l.team === 'fire' ? 'ko-team-fire' : 'ko-team-ice'}">${l.team === 'fire' ? 'ALAZ' : 'AYAZ'}</td>
-                <td><button class="ko-row-join lb-item-join" data-code="${l.code}">KATIL</button></td>
+                <td><button class="ko-row-join lb-item-join" data-code="${l.code}" data-team="${l.team}">KATIL</button></td>
             </tr>
         `).join('');
         listEl.querySelectorAll('.lb-item-join').forEach((btn: Element) => {
             (btn as HTMLButtonElement).onclick = () => {
                 const code = btn.getAttribute('data-code') ?? '';
-                if (!ctx.lobbyTeam) ctx.lobbyTeam = 'fire';
+                const hostTeam = (btn.getAttribute('data-team') ?? 'fire') as 'fire' | 'ice';
+                ctx.lobbyTeam = hostTeam === 'fire' ? 'ice' : 'fire';
+                ctx.selectedTeam = ctx.lobbyTeam;
                 joinLobbyByCode(code);
             };
         });
@@ -423,6 +430,8 @@ export function handleMPMessage(msg: import('../multiplayer/MultiplayerService')
     }
     // BET MESSAGES
     if (msg.type === 'bet_offer') {
+        // Guest tarafı: host adresini kaydet (rapor için)
+        mpService.opponentWallet = msg.hostAddress || null;
         betService.state = {
             amount: msg.amountAvax,
             status: 'pending_guest',
@@ -434,6 +443,8 @@ export function handleMPMessage(msg: import('../multiplayer/MultiplayerService')
         return;
     }
     if (msg.type === 'bet_accept') {
+        // Host tarafı: guest adresini kaydet (rapor için)
+        mpService.opponentWallet = msg.guestAddress || null;
         betService.state.status = 'locked';
         betService.state.guestTxHash = msg.txHash;
         showBetPanel('locked');
@@ -467,22 +478,34 @@ export function handleMPMessage(msg: import('../multiplayer/MultiplayerService')
         if (mpService.role === 'guest' && (msg as any).team) {
             const hostTeam: 'fire' | 'ice' = (msg as any).team;
             const forcedTeam: 'fire' | 'ice' = hostTeam === 'fire' ? 'ice' : 'fire';
-            if (ctx.lobbyTeam !== forcedTeam) {
-                ctx.lobbyTeam = forcedTeam;
-                ctx.selectedTeam = forcedTeam;
+            const wasWrongTeam = ctx.lobbyTeam !== forcedTeam;
+            ctx.lobbyTeam = forcedTeam;
+            ctx.selectedTeam = forcedTeam;
+            mpService.opponentTeam = hostTeam;
+            if (wasWrongTeam) {
                 console.log(`[MP] Guest team forced to ${forcedTeam} (host is ${hostTeam})`);
-                // Tell host our corrected team
                 mpService.send({ type: 'ready', team: forcedTeam });
-                // Update lobby team buttons
-                const fireBtn = document.getElementById('lobby-pick-fire');
-                const iceBtn = document.getElementById('lobby-pick-ice');
-                if (fireBtn && iceBtn) {
-                    fireBtn.classList.remove('selected-fire');
-                    iceBtn.classList.remove('selected-ice');
-                    if (forcedTeam === 'fire') fireBtn.classList.add('selected-fire');
-                    else iceBtn.classList.add('selected-ice');
-                }
             }
+            // Update lobby team buttons
+            const fireBtn = document.getElementById('lobby-pick-fire');
+            const iceBtn = document.getElementById('lobby-pick-ice');
+            if (fireBtn && iceBtn) {
+                fireBtn.classList.remove('selected-fire');
+                iceBtn.classList.remove('selected-ice');
+                if (forcedTeam === 'fire') fireBtn.classList.add('selected-fire');
+                else iceBtn.classList.add('selected-ice');
+            }
+            updateLobbyConnectedUI();
+        }
+        return;
+    }
+
+    if (msg.type === 'bet_counter') {
+        if (mpService.role === 'host') {
+            const amountInput = document.getElementById('bet-amount-input') as HTMLInputElement;
+            if (amountInput) amountInput.value = String(msg.amountAvax);
+            showToast(`Rakip ${msg.amountAvax} AVAX öneriyor`);
+            showBetPanel('host-idle');
         }
         return;
     }
@@ -755,6 +778,12 @@ export function initLobbyScreen(): void {
         startMultiplayerGame();
     };
 
+    // OFFLINE MOD
+    document.getElementById('lobby-offline-btn')!.onclick = () => {
+        mpService.disconnect();
+        showScreen('mode-select');
+    };
+
     // ODA KUR modal open/close
     const modal = document.getElementById('room-create-modal')!;
     document.getElementById('lobby-open-modal-btn')!.onclick = () => { modal.style.display = 'flex'; };
@@ -809,7 +838,18 @@ export function initLobbyScreen(): void {
     document.getElementById('bet-decline-btn')!.onclick = () => {
         mpService.sendBetReject();
         betService.reset();
-        showBetPanel('no-bet');
+        showBetPanel('guest-counter');
+    };
+
+    document.getElementById('bet-counter-btn')!.onclick = () => {
+        const input = document.getElementById('bet-counter-input') as HTMLInputElement;
+        const amount = parseFloat(input.value);
+        if (!amount || amount < MIN_BET || amount > MAX_BET) {
+            return showLobbyError(t('betValidAmount'));
+        }
+        mpService.send({ type: 'bet_counter', amountAvax: amount });
+        showBetPanel('guest-wait');
+        showToast(`${amount} AVAX teklif gönderildi`);
     };
 }
 
@@ -831,7 +871,7 @@ export function initLobbyBackHandlers(): void {
         }
         leaveQuickMatch();
         mpService.disconnect();
-        showScreen('mode-select');
+        showScreen('home');
     });
 
     window.addEventListener('beforeunload', () => {

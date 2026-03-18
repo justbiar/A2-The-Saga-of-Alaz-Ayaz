@@ -2531,6 +2531,15 @@
 }
 .ko-bar-create:hover { background: linear-gradient(180deg, #782020 0%, #500f0f 100%); color: #ffcc99; }
 
+.ko-bar-offline {
+  background: rgba(20,20,50,0.4);
+  border-color: rgba(100,100,200,0.4);
+  color: #b0b8e8;
+  font-family: 'Cinzel', serif;
+  letter-spacing: 2px;
+}
+.ko-bar-offline:hover { background: rgba(40,40,100,0.5); color: #d0d8ff; }
+
 /* --- STATE PANELLERİ (bekleme/bağlandı/qm) --- */
 .ko-state-panel {
   position: absolute;

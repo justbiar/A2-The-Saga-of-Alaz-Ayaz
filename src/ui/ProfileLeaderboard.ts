@@ -265,9 +265,12 @@ export async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'b
             </div>`;
             const card = document.createElement('div');
             card.className = `lb-podium-card ${pClass}`;
+            const avatarSrc = e.avatarURI
+                || localStorage.getItem(`a2_avatar_${e.address.toLowerCase()}`)
+                || '/assets/images/logo.webp';
             card.innerHTML = `
                 <div class="lb-podium-rank">${rankLabel}</div>
-                <img class="lb-podium-avatar" src="/assets/images/logo.webp" alt="" onerror="this.src='/assets/images/logo.webp'" />
+                <img class="lb-podium-avatar" src="${avatarSrc}" alt="" onerror="this.src='/assets/images/logo.webp'" />
                 <div class="lb-podium-name">${e.username}</div>
                 <div class="lb-podium-addr">${e.address.slice(0, 8)}…${e.address.slice(-4)}</div>
                 <div class="lb-podium-stats">
@@ -288,51 +291,79 @@ export async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'b
         }
     }
 
-    // Table (top 10)
+    // Table with pagination (100 entries, 10 per page)
     const lbBody = document.getElementById('lb-screen-body')!;
-    const top10 = entries.slice(0, 10);
-    lbBody.innerHTML = '';
+    const paginationEl = document.getElementById('lb-pagination') as HTMLElement | null;
+    const pageInfoEl = document.getElementById('lb-page-info') as HTMLElement | null;
+    const prevBtn = document.getElementById('lb-page-prev') as HTMLButtonElement | null;
+    const nextBtn = document.getElementById('lb-page-next') as HTMLButtonElement | null;
 
-    if (entries.length === 0) {
-        lbBody.innerHTML = `<tr><td colspan="7"><div class="lb-empty-state"><div class="lb-empty-state-icon">--</div>${t('lbTableEmpty' as TransKey)}</div></td></tr>`;
+    const PAGE_SIZE = 10;
+    const MAX_ENTRIES = 100;
+    const pagedEntries = entries.slice(0, MAX_ENTRIES);
+    const totalPages = Math.max(1, Math.ceil(pagedEntries.length / PAGE_SIZE));
+    let currentPage = 0;
+
+    function renderPage(page: number): void {
+        currentPage = Math.max(0, Math.min(page, totalPages - 1));
+        const slice = pagedEntries.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+        lbBody.innerHTML = '';
+
+        if (pagedEntries.length === 0) {
+            lbBody.innerHTML = `<tr><td colspan="7"><div class="lb-empty-state"><div class="lb-empty-state-icon">--</div>${t('lbTableEmpty' as TransKey)}</div></td></tr>`;
+            return;
+        }
+
+        for (const e of slice) {
+            const isMe = e.address.toLowerCase() === (ctx.walletAddress ?? '').toLowerCase();
+            const tr = document.createElement('tr');
+            if (isMe) tr.className = 'lb-me';
+
+            const gamesPlayed = (e.onlineWins ?? 0) + (e.onlineLosses ?? 0) + (e.onlineDraws ?? 0);
+            const winVal = sortBy === 'weeklyWins' ? e.weeklyWins : (e.onlineWins ?? e.wins);
+            const prize = e.weeklyPrize && e.weeklyPrize > 0
+                ? `<span class="lb-prize-val">${e.weeklyPrize.toFixed(4)}</span>`
+                : `<span class="lb-prize-empty">—</span>`;
+
+            const rateClass = e.winRate >= 60 ? 'high' : e.winRate >= 40 ? 'mid' : '';
+            const donated = e.totalDonated ?? 0;
+            const donateHtml = donated > 0
+                ? `<span class="lb-donate-cell">${donated.toFixed(3)}</span>`
+                : `<span class="lb-prize-empty">—</span>`;
+
+            const rowAvatar = e.avatarURI
+                || localStorage.getItem(`a2_avatar_${e.address.toLowerCase()}`)
+                || '/assets/images/logo.webp';
+            tr.innerHTML = `
+                <td><span class="lb-rank-num ${e.rank <= 3 ? 'lb-rank-' + e.rank : 'lb-rank-4up'}">${e.rank}</span></td>
+                <td>
+                  <div class="lb-player-cell">
+                    <img class="lb-player-avatar" src="${rowAvatar}" alt="" onerror="this.src='/assets/images/logo.webp'" />
+                    <div>
+                      <div class="lb-player-name">${e.username}</div>
+                      <div class="lb-player-addr">${e.address.slice(0, 6)}…${e.address.slice(-4)}</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="lb-win-count">${winVal}</span></td>
+                <td><span class="lb-games-count">${gamesPlayed}</span></td>
+                <td><span class="lb-rate-pill ${rateClass}">${e.winRate}%</span></td>
+                <td>${donateHtml}</td>
+                <td>${prize}</td>
+            `;
+            lbBody.appendChild(tr);
+        }
+
+        if (pageInfoEl) pageInfoEl.textContent = `${currentPage + 1} / ${totalPages}`;
+        if (prevBtn) prevBtn.disabled = currentPage === 0;
+        if (nextBtn) nextBtn.disabled = currentPage >= totalPages - 1;
     }
 
-    for (const e of top10) {
-        const isMe = e.address.toLowerCase() === (ctx.walletAddress ?? '').toLowerCase();
-        const tr = document.createElement('tr');
-        if (isMe) tr.className = 'lb-me';
+    if (paginationEl) paginationEl.style.display = totalPages > 1 ? 'flex' : 'none';
+    if (prevBtn) prevBtn.onclick = () => renderPage(currentPage - 1);
+    if (nextBtn) nextBtn.onclick = () => renderPage(currentPage + 1);
 
-        const gamesPlayed = (e.onlineWins ?? 0) + (e.onlineLosses ?? 0) + (e.onlineDraws ?? 0);
-        const winVal = sortBy === 'weeklyWins' ? e.weeklyWins : (e.onlineWins ?? e.wins);
-        const prize = e.weeklyPrize && e.weeklyPrize > 0
-            ? `<span class="lb-prize-val">${e.weeklyPrize.toFixed(4)}</span>`
-            : `<span class="lb-prize-empty">—</span>`;
-
-        const rateClass = e.winRate >= 60 ? 'high' : e.winRate >= 40 ? 'mid' : '';
-        const donated = e.totalDonated ?? 0;
-        const donateHtml = donated > 0
-            ? `<span class="lb-donate-cell">${donated.toFixed(3)}</span>`
-            : `<span class="lb-prize-empty">—</span>`;
-
-        tr.innerHTML = `
-            <td><span class="lb-rank-num ${e.rank <= 3 ? 'lb-rank-' + e.rank : 'lb-rank-4up'}">${e.rank}</span></td>
-            <td>
-              <div class="lb-player-cell">
-                <img class="lb-player-avatar" src="/assets/images/logo.webp" alt="" onerror="this.src='/assets/images/logo.webp'" />
-                <div>
-                  <div class="lb-player-name">${e.username}</div>
-                  <div class="lb-player-addr">${e.address.slice(0, 6)}…${e.address.slice(-4)}</div>
-                </div>
-              </div>
-            </td>
-            <td><span class="lb-win-count">${winVal}</span></td>
-            <td><span class="lb-games-count">${gamesPlayed}</span></td>
-            <td><span class="lb-rate-pill ${rateClass}">${e.winRate}%</span></td>
-            <td>${donateHtml}</td>
-            <td>${prize}</td>
-        `;
-        lbBody.appendChild(tr);
-    }
+    renderPage(0);
 }
 
 // ─── PROFILE MODAL ─────────────────────────────────────────────────
@@ -436,17 +467,54 @@ export function renderProfileScreen(): void {
             avatarPreviewEl.src = url || '/assets/images/logo.webp';
         };
 
+        // Kayıt formunda dosya seçme
+        const regFileBtn = document.getElementById('pfs-reg-file-btn');
+        const regAvatarFile = document.getElementById('pfs-reg-avatar-file') as HTMLInputElement;
+        if (regFileBtn && regAvatarFile) {
+            regFileBtn.onclick = () => regAvatarFile.click();
+            regAvatarFile.onchange = () => {
+                const file = regAvatarFile.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const dataUrl = ev.target?.result as string;
+                    avatarPreviewEl.src = dataUrl;
+                    avatarInput.value = '';
+                    (regAvatarFile as any)._pendingDataUrl = dataUrl;
+                };
+                reader.readAsDataURL(file);
+            };
+        }
+
         regBtn.onclick = async () => {
             const username = nameInput.value.trim();
             if (!username || username.length > 32) { nameInput.style.borderColor = '#ff5555'; return; }
             nameInput.style.borderColor = '';
             regBtn.disabled = true;
             regBtn.textContent = '...';
-            const ok = await profileService.registerProfile(username, avatarInput.value.trim());
+            // Dosya yüklemesi varsa onu kullan, yoksa URL
+            const pendingDataUrl = (regAvatarFile as any)?._pendingDataUrl as string | undefined;
+            let avatarVal = avatarInput.value.trim();
+            if (pendingDataUrl) {
+                try {
+                    const upRes = await fetch('/api/avatar/upload', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ address: ctx.walletAddress, dataUrl: pendingDataUrl }),
+                    });
+                    const upData = await upRes.json();
+                    avatarVal = upData.ok ? upData.url : '';
+                    if (!upData.ok) localStorage.setItem(`a2_avatar_${ctx.walletAddress!.toLowerCase()}`, pendingDataUrl);
+                } catch {
+                    avatarVal = '';
+                    localStorage.setItem(`a2_avatar_${ctx.walletAddress!.toLowerCase()}`, pendingDataUrl);
+                }
+            }
+            const ok = await profileService.registerProfile(username, avatarVal);
             regBtn.disabled = false;
             regBtn.textContent = t('pfsRegisterBtn' as TransKey);
             if (ok) {
-                leaderboardService.upsertPlayer(ctx.walletAddress!, username);
+                leaderboardService.upsertPlayer(ctx.walletAddress!, username, avatarVal);
                 lockGameUntilProfile(false);
                 renderProfileScreen();
             } else {
@@ -537,7 +605,7 @@ export function renderProfileScreen(): void {
         } catch { /* ignore */ }
     })();
 
-    // Avatar değiştir
+    // Avatar değiştir — dosya
     const avatarWrap = document.getElementById('pfs-avatar-wrap');
     const avatarFile = document.getElementById('pfs-avatar-file') as HTMLInputElement;
     if (avatarWrap && avatarFile) {
@@ -546,14 +614,46 @@ export function renderProfileScreen(): void {
             const file = avatarFile.files?.[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = async (e) => {
-                const dataUrl = e.target?.result as string;
-                avatarImg.src = dataUrl;
-                localStorage.setItem(`a2_avatar_${ctx.walletAddress!.toLowerCase()}`, dataUrl);
-                await profileService.registerProfile(profile!.username, dataUrl);
+            reader.onload = async (ev) => {
+                const dataUrl = ev.target?.result as string;
+                avatarImg.src = dataUrl; // geçici önizleme
+                try {
+                    const res = await fetch('/api/avatar/upload', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ address: ctx.walletAddress, dataUrl }),
+                    });
+                    const data = await res.json();
+                    const finalUrl = data.ok ? data.url : dataUrl;
+                    if (data.ok) localStorage.removeItem(`a2_avatar_${ctx.walletAddress!.toLowerCase()}`);
+                    else localStorage.setItem(`a2_avatar_${ctx.walletAddress!.toLowerCase()}`, dataUrl);
+                    await profileService.registerProfile(profile!.username, finalUrl);
+                    leaderboardService.upsertPlayer(ctx.walletAddress!, profile!.username, finalUrl);
+                } catch {
+                    localStorage.setItem(`a2_avatar_${ctx.walletAddress!.toLowerCase()}`, dataUrl);
+                }
                 showToast('Görsel güncellendi', 2000);
             };
             reader.readAsDataURL(file);
+        };
+    }
+
+    // Avatar değiştir — URL
+    const avatarUrlInput = document.getElementById('pfs-avatar-url-input') as HTMLInputElement;
+    const avatarUrlBtn = document.getElementById('pfs-avatar-url-btn');
+    if (avatarUrlBtn && avatarUrlInput) {
+        avatarUrlBtn.onclick = async () => {
+            const url = avatarUrlInput.value.trim();
+            if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
+                showToast('Geçerli bir URL gir', 1500);
+                return;
+            }
+            avatarImg.src = url;
+            localStorage.removeItem(`a2_avatar_${ctx.walletAddress!.toLowerCase()}`);
+            await profileService.registerProfile(profile!.username, url);
+            leaderboardService.upsertPlayer(ctx.walletAddress!, profile!.username, url);
+            avatarUrlInput.value = '';
+            showToast('Görsel güncellendi', 2000);
         };
     }
 

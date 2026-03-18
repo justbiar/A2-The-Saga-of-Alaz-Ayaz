@@ -5,7 +5,7 @@
 import { ctx, MAX_MANA } from '../game/GameContext';
 import { t, TransKey } from '../i18n';
 import { CARD_DEFS, AI_CARDS, CardDef, UnitType } from '../ecs/Unit';
-import { PROMPT_DEFS } from '../ecs/PromptCard';
+import { PROMPT_DEFS, getTowerCard } from '../ecs/PromptCard';
 import type { PromptCardDef } from '../ecs/types';
 import type { UnitManager } from '../ecs/UnitManager';
 import { mpService } from '../multiplayer/MultiplayerService';
@@ -377,8 +377,11 @@ function createPromptCardEl(def: PromptCardDef): HTMLElement {
     const el = document.createElement('div');
     el.className = 'prompt-card';
     el.id = `prompt-${def.id}`;
+    const costHtml = def.avxCost
+        ? `<div class="prompt-card-cost avx-cost">${def.avxCost}<img src="${avxCoinUrl}" class="avx-icon" alt="AVX" style="width:10px;height:10px;vertical-align:middle;margin-left:1px;"></div>`
+        : `<div class="prompt-card-cost">${def.manaCost > 0 ? def.manaCost : ''}</div>`;
     el.innerHTML = `
-        <div class="prompt-card-cost">${def.manaCost > 0 ? def.manaCost : ''}</div>
+        ${costHtml}
         <div class="prompt-card-icon"><img src="${def.imagePath}" alt="${cardName}" /></div>
         <div class="prompt-card-footer">
             <div class="prompt-card-name">${cardName}</div>
@@ -388,12 +391,22 @@ function createPromptCardEl(def: PromptCardDef): HTMLElement {
 
     el.addEventListener('click', () => {
         if (ctx.gameMode === 'multiplayer' && !ctx.mpGameStarted) { pulseRed(el); return; }
-        if (ctx.phase !== 'player' || ctx.playerMana < def.manaCost) {
-            pulseRed(el); return;
+        if (ctx.phase !== 'player') { pulseRed(el); return; }
+
+        // Tower kart özel akışı
+        if (def.effectType === 'tower_place') {
+            if (ctx.playerAvx < (def.avxCost ?? 5)) { pulseRed(el); return; }
+            if (!ctx.spawnTower?.()) { pulseRed(el); return; }
+            ctx.playerAvx -= (def.avxCost ?? 5);
+            updateAvxUI();
+            updatePromptStates();
+            playCardAnim(el);
+            return;
         }
-        if ((ctx.skillCooldowns[def.id] ?? 0) > 0) {
-            pulseRed(el); return;
-        }
+
+        if (ctx.playerMana < def.manaCost) { pulseRed(el); return; }
+        if ((ctx.skillCooldowns[def.id] ?? 0) > 0) { pulseRed(el); return; }
+
         applyPromptEffect(def);
         if (!ctx.manaFrozen) ctx.playerMana -= def.manaCost;
         ctx.skillCooldowns[def.id] = def.cooldown;
@@ -417,9 +430,19 @@ export function updatePromptStates(): void {
     ctx.playerDeck.forEach(def => {
         const el = document.getElementById(`prompt-${def.id}`);
         if (!el) return;
-        const onCooldown = (ctx.skillCooldowns[def.id] ?? 0) > 0;
-        const isRecallUsed = def.effectType === 'recall' && ctx.recallUsed;
-        const canPlay = ctx.phase === 'player' && ctx.playerMana >= def.manaCost && !onCooldown && !isRecallUsed;
+
+        let canPlay = ctx.phase === 'player';
+        if (def.effectType === 'tower_place') {
+            // tower kart: AVX yeterli mi + slot boş mu
+            const hasAvx = ctx.playerAvx >= (def.avxCost ?? 5);
+            const hasSlot = !!ctx.spawnTower; // spawnTower null ise oyun başlamamış
+            canPlay = canPlay && hasAvx && hasSlot;
+        } else {
+            const onCooldown = (ctx.skillCooldowns[def.id] ?? 0) > 0;
+            const isRecallUsed = def.effectType === 'recall' && ctx.recallUsed;
+            canPlay = canPlay && ctx.playerMana >= def.manaCost && !onCooldown && !isRecallUsed;
+        }
+
         el.classList.toggle('card-disabled', !canPlay);
         el.style.opacity = canPlay ? '1' : '0.4';
         el.style.cursor = canPlay ? 'pointer' : 'not-allowed';
@@ -732,6 +755,13 @@ export function tickDraft(dt: number): void {
     ctx.draftTimer -= dt;
     if (draftCountEl) draftCountEl.textContent = String(Math.max(0, Math.ceil(ctx.draftTimer)));
     if (ctx.draftTimer <= 0) {
+        // İlk draft'ta tower kartını otomatik ekle
+        if (!ctx.towerCardAdded) {
+            const towerCard = getTowerCard(ctx.selectedTeam);
+            ctx.playerDeck.push(towerCard);
+            ctx.towerCardAdded = true;
+            buildPromptUI();
+        }
         openDraftPopup();
     }
 }

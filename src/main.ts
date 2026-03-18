@@ -5,8 +5,10 @@
 // ─── GLOBAL ERROR REPORTER + REPORT UI ──────────────────────────────
 import { initErrorReporter } from './ui/ErrorReporter';
 import { initReportUI } from './ui/ReportUI';
+import { initAdminPanel } from './ui/AdminPanel';
 initErrorReporter();
 initReportUI();
+initAdminPanel();
 
 // ─── MODULE IMPORTS ─────────────────────────────────────────────────
 import { ctx, type GameMode } from './game/GameContext';
@@ -158,8 +160,8 @@ document.getElementById('nav-play')!.addEventListener('click', () => {
         showToast('Oyuna girmek icin cuzdanini bagla ve profil olustur!');
         return;
     }
-    console.log('[DEBUG] Showing mode-select');
-    showScreen('mode-select');
+    console.log('[DEBUG] Showing lobby');
+    showScreen('lobby');
 });
 
 document.getElementById('nav-characters-header')?.addEventListener('click', () => showScreen('characters'));

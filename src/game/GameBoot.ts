@@ -16,7 +16,7 @@ import { BaseBuilding } from '../scene/map/BaseBuilding';
 import { WinConditionSystem } from '../scene/systems/winConditionSystem';
 import { WinCondition, calcManaGain, calcBoardControl, checkEquilibriumSurge } from '../game/GameState';
 import { PROMPT_DEFS } from '../ecs/PromptCard';
-import { kiteService } from '../ai/KiteService';
+import { DefenseTower, UPGRADE_COST } from '../scene/units/DefenseTower';
 import { switchBGM, lowerBGMForGame, getCurrentTrack, preloadSFX } from '../audio/SoundManager';
 import { mpService } from '../multiplayer/MultiplayerService';
 import { betService, BET_FEE_PERCENT } from '../chain/BetService';
@@ -28,7 +28,7 @@ import { ctx, resetGameState, MAX_MANA, MANA_REGEN_INTERVAL, type GameMode } fro
 import { showScreen, canvas } from '../ui/ScreenRouter';
 import { showToast, triggerWin } from '../ui/LobbyUI';
 import { showBetResultOnWin, showWinScreen, winOverlay, winTitle, winMessage } from '../ui/WinScreenUI';
-import { buildCardUI, updateManaUI, setupLaneOverlay, setupPlayerKeyboard, initDraft, tickDraft, cleanupDraft, resetAllCooldowns, startCooldownTicker, applyPromptEffect, updateBoardControlUI as _noop, aiPool, enemyTeam, showBoruCard, updateAvxUI } from '../ui/CardUI';
+import { buildCardUI, updateManaUI, updateAvxUI, setupLaneOverlay, setupPlayerKeyboard, initDraft, tickDraft, cleanupDraft, resetAllCooldowns, startCooldownTicker, applyPromptEffect, aiPool, enemyTeam, showBoruCard } from '../ui/CardUI';
 import { setup2Player, updateIceManaUI } from './TwoPlayerSetup';
 import { spawnAvxCoin } from './AvxCoinSystem';
 import { showMiniPlayer, hideMiniPlayer } from '../ui/SettingsUI';
@@ -167,37 +167,6 @@ function updateBoardControlUI(um: UnitManager): void {
     surgeIndicator.style.display = surge.triggered ? 'block' : 'none';
 }
 
-// ─── KITE UI ───────────────────────────────────────────────────────
-function kiteUpdatePanel(): void {
-    const aiDot = document.getElementById('kite-ai-dot');
-    const chainDot = document.getElementById('kite-chain-dot');
-    const srcLbl = document.getElementById('kite-source-label');
-    const chainLbl = document.getElementById('kite-chain-label');
-    const panel = document.getElementById('kite-panel');
-    if (!aiDot || !chainDot || !srcLbl || !chainLbl) return;
-
-    if (kiteService.isLiveAI) {
-        aiDot.className = 'kite-status-dot live';
-        srcLbl.textContent = t('kiteLlm');
-        srcLbl.className = 'kite-row-val green';
-        panel?.classList.add('live');
-    } else {
-        aiDot.className = 'kite-status-dot mock';
-        srcLbl.textContent = t('mockAi');
-        srcLbl.className = 'kite-row-val orange';
-    }
-
-    if (kiteService.isChainActive) {
-        chainDot.className = 'kite-status-dot chain';
-        chainLbl.textContent = t('connected');
-        chainLbl.className = 'kite-row-val blue';
-        panel?.classList.add('chain');
-    } else {
-        chainDot.className = 'kite-status-dot';
-        chainLbl.textContent = t('offline');
-        chainLbl.className = 'kite-row-val';
-    }
-}
 
 // ─── AI DIFFICULTY ─────────────────────────────────────────────────
 function getAiDeployInterval(): number {
@@ -433,6 +402,40 @@ export async function boot(mode: GameMode): Promise<void> {
     const iceBase = new BaseBuilding(scene, 'ice');
     const winSystem = new WinConditionSystem(fireBase, iceBase, shards);
     um.setBaseRefs(fireBase, iceBase);
+
+    // ── Tower sistemi ──────────────────────────────────────────────
+    const towers: { fire: [DefenseTower | null, DefenseTower | null]; ice: [DefenseTower | null, DefenseTower | null] } = {
+        fire: [null, null],
+        ice:  [null, null],
+    };
+
+    ctx.spawnTower = (): boolean => {
+        const team = ctx.selectedTeam as 'fire' | 'ice';
+        const slots = towers[team];
+        const slot = slots[0] === null ? 0 : slots[1] === null ? 1 : -1;
+        if (slot === -1) { showToast('Maksimum 2 kule', 1500); return false; }
+        const tower = new DefenseTower(scene, team, slot as 0 | 1);
+        tower.onUpgradeRequest = () => {
+            const cost = UPGRADE_COST[tower.level] ?? 99;
+            if (ctx.playerAvx >= cost && tower.levelUp()) {
+                ctx.playerAvx -= cost;
+                updateAvxUI();
+            } else {
+                showToast(`Yeterli AVX yok (${cost} AVX lazım)`, 1500);
+            }
+        };
+        slots[slot] = tower;
+        return true;
+    };
+
+    ctx.disposeTowers = (): void => {
+        for (const team of ['fire', 'ice'] as const) {
+            for (let i = 0; i < 2; i++) {
+                towers[team][i]?.dispose();
+                towers[team][i] = null;
+            }
+        }
+    };
     // Multiplayer guest: base hasari host'tan gelir, lokal hesaplama yapma
     if (mode === 'multiplayer' && mpService.role === 'guest') {
         um.skipBaseDamage = true;
@@ -444,6 +447,9 @@ export async function boot(mode: GameMode): Promise<void> {
     preloadSFX();
     um.onUnitDeath = (unit) => {
         const killerTeam = unit.team === 'fire' ? 'ice' : 'fire';
+        // 2 oyunculu modda her iki taraf da coin toplayabilir;
+        // diğer modlarda sadece oyuncu düşmanı öldürünce coin düşer
+        if (mode !== 'twoplayer' && killerTeam !== ctx.selectedTeam) return;
         const wasCrit = !!unit.abilityState._critKill;
         const coinCount = wasCrit ? 2 : 1;
         unit.mesh.computeWorldMatrix(true);
@@ -461,8 +467,6 @@ export async function boot(mode: GameMode): Promise<void> {
     ctx._shards = shards;
     ctx._fireBase = fireBase;
     ctx._iceBase = iceBase;
-
-    kiteService.init().then(() => kiteUpdatePanel()).catch(() => kiteUpdatePanel());
 
     buildCardUI(um);
     initDraft();
@@ -524,6 +528,7 @@ export async function boot(mode: GameMode): Promise<void> {
             if (winOverlay.classList.contains('show')) return;
             ctx._mpGameEnded = true;
 
+            cleanupDraft();
             winTitle.textContent = winner === 'fire' ? 'ALAZ KAZANDI' : 'AYAZ KAZANDI';
             winMessage.textContent = msg;
             winOverlay.classList.add('show');
@@ -622,6 +627,16 @@ export async function boot(mode: GameMode): Promise<void> {
         shards.update(dt, um.units);
         fireBase.update(dt, um.units);
         iceBase.update(dt, um.units);
+
+        // Tower tick
+        for (const team of ['fire', 'ice'] as const) {
+            const enemyT = team === 'fire' ? 'ice' : 'fire';
+            const enemyBase = team === 'fire' ? iceBase : fireBase;
+            const enemyTower = (towers[enemyT][0] ?? towers[enemyT][1]) ?? null;
+            for (const tower of towers[team]) {
+                if (tower && !tower.isDestroyed) tower.tick(dt, um.units, enemyTower, enemyBase);
+            }
+        }
 
         // Multiplayer: sadece HOST win condition kontrol eder (desync onleme)
         // Guest sadece game_over P2P mesajini veya server poll'u dinler
@@ -788,4 +803,15 @@ export async function boot(mode: GameMode): Promise<void> {
     const _resizeHandler = () => engine.resize();
     window.addEventListener('resize', _resizeHandler);
     (window as any).__a2ResizeHandler = _resizeHandler;
+
+    // ── DEBUG: Shift+T → anında kule kur (test için) ──────────────
+    const _debugKeyHandler = (e: KeyboardEvent) => {
+        if (e.shiftKey && e.key === 'T' && isGameReady && ctx.spawnTower) {
+            ctx.playerAvx += 5; // geçici AVX ver
+            const ok = ctx.spawnTower();
+            if (!ok) showToast('2 kule limiti doldu', 1200);
+        }
+    };
+    window.addEventListener('keydown', _debugKeyHandler);
+    (window as any).__a2DebugKeyHandler = _debugKeyHandler;
 }

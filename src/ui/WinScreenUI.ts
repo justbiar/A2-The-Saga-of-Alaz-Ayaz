@@ -11,7 +11,75 @@ import { kiteService } from '../ai/KiteService';
 import { betService } from '../chain/BetService';
 import { mpService } from '../multiplayer/MultiplayerService';
 import { showToast } from './LobbyUI';
+
+/** Oyuncu rapor et (multiplayer maç sonrası) */
+function showReportModal(opponentAddress: string, matchId: string | null): void {
+    const existing = document.getElementById('win-report-modal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'win-report-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:10001;';
+    modal.innerHTML = `
+        <div style="background:#161b22;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:28px 32px;min-width:340px;max-width:440px;font-family:Inter,sans-serif;color:#e2e8f0;">
+            <h3 style="font-family:Cinzel,serif;margin:0 0 14px;font-size:16px;color:#fff;">Oyuncu Raporla</h3>
+            <p style="font-size:12px;color:#64748b;margin:0 0 16px;">${opponentAddress.slice(0,10)}…${opponentAddress.slice(-4)}</p>
+            <div style="margin-bottom:12px;">
+                <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;text-transform:uppercase;">Sebep:</label>
+                <select id="wrm-reason" style="width:100%;background:#0a0c10;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:8px;font-size:13px;outline:none;">
+                    <option value="Hile / Cheating">Hile / Cheating</option>
+                    <option value="Toksik Davranış">Toksik Davranış</option>
+                    <option value="Oyunu Terk Etti">Oyunu Terk Etti</option>
+                    <option value="Spam / Flood">Spam / Flood</option>
+                    <option value="Diğer">Diğer</option>
+                </select>
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;text-transform:uppercase;">Detay (opsiyonel):</label>
+                <textarea id="wrm-details" style="width:100%;box-sizing:border-box;background:#0a0c10;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e2e8f0;padding:8px;font-size:13px;resize:vertical;min-height:60px;outline:none;font-family:inherit;" placeholder="Ek bilgi…"></textarea>
+            </div>
+            <div style="display:flex;gap:10px;">
+                <button id="wrm-send" style="flex:1;background:#f59e0b;color:#000;border:none;border-radius:6px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;">Gönder</button>
+                <button id="wrm-cancel" style="background:rgba(255,255,255,0.08);color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:9px 18px;font-size:13px;cursor:pointer;">İptal</button>
+            </div>
+            <p id="wrm-status" style="font-size:12px;color:#64748b;margin:10px 0 0;text-align:center;"></p>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelector('#wrm-cancel')!.addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    (modal.querySelector('#wrm-send') as HTMLButtonElement).addEventListener('click', async () => {
+        const reason = (modal.querySelector('#wrm-reason') as HTMLSelectElement).value;
+        const details = (modal.querySelector('#wrm-details') as HTMLTextAreaElement).value;
+        const statusEl = modal.querySelector('#wrm-status') as HTMLElement;
+        const sendBtn = modal.querySelector('#wrm-send') as HTMLButtonElement;
+        sendBtn.disabled = true;
+        statusEl.textContent = 'Gönderiliyor…';
+        try {
+            const res = await fetch('/api/report/player', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reporterAddress: ctx.walletAddress,
+                    reportedAddress: opponentAddress,
+                    reason,
+                    details,
+                    matchId,
+                }),
+            });
+            const data = await res.json();
+            if (!data.ok) throw new Error(data.error || 'Rapor gönderilemedi');
+            statusEl.style.color = '#10b981';
+            statusEl.textContent = 'Rapor gönderildi. Teşekkürler.';
+            setTimeout(() => modal.remove(), 1500);
+        } catch (e: any) {
+            statusEl.style.color = '#ef4444';
+            statusEl.textContent = e.message;
+            sendBtn.disabled = false;
+        }
+    });
+}
 import type { WinConditionSystem } from '../scene/systems/winConditionSystem';
+import { cleanupDraft } from './CardUI';
 
 const winOverlay = document.getElementById('win-overlay') as HTMLElement;
 const winTitle = document.getElementById('win-title') as HTMLElement;
@@ -49,6 +117,7 @@ export function showBetResultOnWin(didWin: boolean, amountAvax: number, txHash: 
 }
 
 export function showWinScreen(sys: WinConditionSystem): void {
+    cleanupDraft();
     const betRow = document.getElementById('bet-result-row');
     if (betRow) betRow.style.display = 'none';
 
@@ -116,6 +185,17 @@ export function showWinScreen(sys: WinConditionSystem): void {
             (window as any).__cleanupGame?.();
             showScreen('team-select');
         };
+    }
+
+    // Rakibi Raporla butonu — sadece multiplayer modda
+    const reportBtn = document.getElementById('win-report-btn');
+    if (reportBtn) {
+        if (ctx.gameMode === 'multiplayer' && ctx.walletAddress && mpService.opponentWallet) {
+            reportBtn.style.display = 'inline-block';
+            reportBtn.onclick = () => showReportModal(mpService.opponentWallet!, betService.state.matchId ?? null);
+        } else {
+            reportBtn.style.display = 'none';
+        }
     }
 
     winOverlay.classList.add('show');

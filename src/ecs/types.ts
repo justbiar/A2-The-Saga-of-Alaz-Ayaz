@@ -98,7 +98,8 @@ export type PromptEffectType =
     | 'bancollect'        // block enemy AVX collection for 45 seconds
     | 'healthome'         // heal base over time
     | 'recall'            // teleport all friendly units back to base + lane pick
-    | 'unlucky';          // random lightning strikes on enemies
+    | 'unlucky'           // random lightning strikes on enemies
+    | 'tower_place';      // savunma kulesi kur (AVX maliyetli)
 
 export interface PromptCardDef {
     id: string;
@@ -107,6 +108,7 @@ export interface PromptCardDef {
     nameKey?: string;
     descKey?: string;
     manaCost: number;
+    avxCost?: number;           // AVX maliyetli kartlar için
     effectType: PromptEffectType;
     magnitude: number;
     duration: number;           // seconds
