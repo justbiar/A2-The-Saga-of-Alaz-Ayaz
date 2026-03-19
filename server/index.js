@@ -54,6 +54,15 @@ app.use(cors({
 const provider = new ethers.JsonRpcProvider(FUJI_RPC);
 const houseSigner = new ethers.Wallet(HOUSE_WALLET_PK, provider);
 
+// Mainnet provider (kampanya dagitimi icin)
+const MAINNET_RPC = 'https://api.avax.network/ext/bc/C/rpc';
+const mainnetProvider = new ethers.JsonRpcProvider(MAINNET_RPC);
+const mainnetSigner = new ethers.Wallet(HOUSE_WALLET_PK, mainnetProvider);
+
+function getSignerForNetwork(network) {
+    return network === 'mainnet' ? mainnetSigner : houseSigner;
+}
+
 console.log('[A2 API] House wallet:', houseSigner.address);
 
 // ── Rate limit (basit, per-IP) ────────────────────────────────────────
@@ -135,11 +144,14 @@ async function verifyDepositTx(txHash, expectedFrom, expectedAmountAvax, expecte
     }
 }
 
-/** Auto-refund: 10 dakika içinde guest deposit olmazsa host'a iade */
-const MATCH_TIMEOUT = 10 * 60 * 1000; // 10 min
+/** Auto-refund & auto-resolve stuck matches */
+const MATCH_TIMEOUT = 10 * 60 * 1000;          // 10 min — host deposit, guest never joined
+const LOCKED_REPORT_TIMEOUT = 2 * 60 * 1000;   // 2 min — one side reported, other abandoned
+const LOCKED_ABANDON_TIMEOUT = 15 * 60 * 1000; // 15 min — both deposited, neither reported (game abandoned)
 setInterval(() => {
     const now = Date.now();
     for (const [matchId, match] of matches) {
+        // 1) Host deposited, guest never joined → refund host
         if (match.status === 'host_deposited' && (now - match.createdAt) > MATCH_TIMEOUT) {
             console.log(`[AutoRefund] Match ${matchId} timed out — refunding host`);
             match.status = 'refunded';
@@ -148,14 +160,57 @@ setInterval(() => {
                 to: match.hostAddress,
                 value: refundWei,
             }).then(tx => {
+                match.settledAt = Date.now();
                 console.log(`[AutoRefund] ${matchId} → ${match.hostAddress} TX: ${tx.hash}`);
             }).catch(err => {
                 console.error(`[AutoRefund] ${matchId} failed:`, err.message);
                 match.status = 'host_deposited'; // retry next cycle
             });
         }
-        // Clean up old settled/refunded matches after 1 hour
-        if (['settled', 'refunded'].includes(match.status) && (now - (match.settledAt || match.createdAt)) > 60 * 60 * 1000) {
+
+        // 2) Locked: one side reported, opponent abandoned → auto-settle after 2 min
+        if (match.status === 'locked' && match.firstReportAt) {
+            const hasOneReport = (match.hostResult && !match.guestResult) || (!match.hostResult && match.guestResult);
+            if (hasOneReport && (now - match.firstReportAt) > LOCKED_REPORT_TIMEOUT) {
+                const reporterWon = (match.hostResult === 'win') || (match.guestResult === 'win');
+                if (reporterWon) {
+                    const winnerAddr = match.hostResult === 'win' ? match.hostAddress : match.guestAddress;
+                    const totalPot = match.amount * 2;
+                    const fee = totalPot * (BET_FEE_PERCENT / 100);
+                    const prize = totalPot - fee;
+                    console.log(`[AutoResolve] Match ${matchId} — one side reported win, settling`);
+                    match.status = 'settling';
+                    houseSigner.sendTransaction({
+                        to: winnerAddr,
+                        value: ethers.parseEther(prize.toFixed(6)),
+                    }).then(tx => {
+                        match.status = 'settled';
+                        match.settledAt = Date.now();
+                        match.winnerAddress = winnerAddr;
+                        addFeeToPool(fee, matchId);
+                        console.log(`[AutoResolve] ✅ ${matchId} → ${winnerAddr.slice(0, 10)} ${prize} AVAX tx=${tx.hash}`);
+                    }).catch(err => {
+                        match.status = 'locked';
+                        console.error(`[AutoResolve] ${matchId} settle failed:`, err.message);
+                    });
+                } else {
+                    // Reporter said they lost, opponent didn't report → refund both
+                    console.log(`[AutoResolve] Match ${matchId} — reporter said loss, refunding both`);
+                    refundBothPlayers(matchId, match);
+                }
+            }
+        }
+
+        // 3) Locked: no reports at all for 15 min → game abandoned, refund both
+        if (match.status === 'locked' && !match.hostResult && !match.guestResult) {
+            if ((now - match.createdAt) > LOCKED_ABANDON_TIMEOUT) {
+                console.log(`[AutoRefund] Match ${matchId} locked 15min, no reports — refunding both`);
+                refundBothPlayers(matchId, match);
+            }
+        }
+
+        // Clean up old settled/refunded/disputed matches after 1 hour
+        if (['settled', 'refunded', 'disputed'].includes(match.status) && (now - (match.settledAt || match.createdAt)) > 60 * 60 * 1000) {
             matches.delete(matchId);
         }
     }
@@ -367,6 +422,7 @@ app.post('/api/report-result', rateLimit, async (req, res) => {
 
     if (isHost) match.hostResult = result;
     if (isGuest) match.guestResult = result;
+    if (!match.firstReportAt) match.firstReportAt = Date.now();
 
     console.log(`[ReportResult] ${matchId} ${isHost ? 'host' : 'guest'}(${addr.slice(0, 8)}) → ${result}`);
 
@@ -415,6 +471,7 @@ app.post('/api/report-result', rateLimit, async (req, res) => {
 
             match.status = 'settled';
             match.settledAt = Date.now();
+            match.winnerAddress = winnerAddr;
             settledMatches.add(matchId);
             addFeeToPool(fee, matchId);
             console.log(`[Settle] ✅ ${matchId} → winner=${winnerAddr.slice(0, 10)} prize=${prize} AVAX fee=${fee.toFixed(4)} AVAX tx=${tx.hash}`);
@@ -468,7 +525,37 @@ app.get('/api/match/:matchId', (req, res) => {
         guestVerified: match.guestVerified,
         hostResult: match.hostResult,
         guestResult: match.guestResult,
+        winnerAddress: match.winnerAddress || null,
     });
+});
+
+/**
+ * POST /api/match/:matchId/refund-both
+ * Body: { address }
+ * → Locked maçta her iki tarafa da iade (oyun başlamadan kopma durumu)
+ */
+app.post('/api/match/:matchId/refund-both', rateLimit, async (req, res) => {
+    const { address } = req.body ?? {};
+    const addr = validateAddress(address);
+    if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
+
+    const match = matches.get(req.params.matchId);
+    if (!match) return res.status(404).json({ error: 'Maç bulunamadı' });
+
+    const isPlayer = addr.toLowerCase() === match.hostAddress?.toLowerCase() ||
+                     addr.toLowerCase() === match.guestAddress?.toLowerCase();
+    if (!isPlayer) return res.status(403).json({ error: 'Bu maçın oyuncusu değilsin' });
+
+    if (['settled', 'refunded', 'disputed'].includes(match.status)) {
+        return res.status(409).json({ error: 'Maç zaten sonuçlandı', status: match.status });
+    }
+    if (match.status !== 'locked') {
+        return res.status(409).json({ error: 'Maç locked değil', status: match.status });
+    }
+
+    console.log(`[RefundBoth] ${req.params.matchId} — requested by ${addr.slice(0, 10)}`);
+    await refundBothPlayers(req.params.matchId, match);
+    res.json({ ok: true, status: 'refunded' });
 });
 
 /**
@@ -769,6 +856,23 @@ app.post('/api/leaderboard/result', rateLimit, (req, res) => {
     }
     p.lastUpdated = Date.now();
     saveLbData();
+
+    // Aktif kampanya leaderboard'larini guncelle
+    if (isOnline) {
+        for (const camp of campaignsData) {
+            if (camp.status !== 'active') continue;
+            if (!camp.participants?.[key]) continue;
+            if (!camp.campaignLeaderboard) camp.campaignLeaderboard = {};
+            if (!camp.campaignLeaderboard[key]) {
+                camp.campaignLeaderboard[key] = { points: 0, tasksCompleted: 0, username: p.username || key.slice(0, 10) };
+            }
+            const ce = camp.campaignLeaderboard[key];
+            if (result === 'win') ce.points += 10;
+            if (bw > 0) ce.points += Math.floor(bw * 100);
+        }
+        saveCampaignsData();
+    }
+
     console.log(`[LB] ${addr.slice(0, 8)} → ${result} (${isOnline ? 'online' : 'local'}) wins=${p.wins} online=${p.onlineWins}`);
     res.json({ ok: true });
 });
@@ -913,6 +1017,80 @@ async function runWeeklyDistribution() {
 
 // Her saat çalıştır (3_600_000 ms)
 setInterval(() => { runWeeklyDistribution().catch(e => console.error('[WeeklyPrize] Hata:', e.message)); }, 3_600_000);
+
+// ── Kampanya Otomatik Dagitim — 30 dakikada bir kontrol ────────────────
+let campaignDistributing = false;
+
+async function runCampaignDistributions() {
+    if (campaignDistributing) return;
+    campaignDistributing = true;
+    const now = Date.now();
+
+    try {
+        for (const camp of campaignsData) {
+            if (camp.status !== 'active' || !camp.autoDistribute) continue;
+            const dist = camp.distribution;
+            if (!dist || !dist.dailyAvax || !dist.intervalHours) continue;
+
+            const intervalMs = dist.intervalHours * 60 * 60 * 1000;
+            const lastDist = dist.lastDistributionAt || camp.createdAt;
+            if (now - lastDist < intervalMs) continue;
+
+            // Top N kampanya leaderboard'undan
+            const sorted = Object.entries(camp.campaignLeaderboard || {})
+                .map(([addr, stats]) => ({ address: addr, ...stats }))
+                .filter(e => e.points > 0)
+                .sort((a, b) => b.points - a.points)
+                .slice(0, dist.topN || 1);
+
+            if (sorted.length === 0) {
+                console.log(`[CampaignDist:${camp.id}] Leaderboard bos, atlandi`);
+                dist.lastDistributionAt = now;
+                saveCampaignsData();
+                continue;
+            }
+
+            const signer = getSignerForNetwork(dist.network || camp.network);
+            const ratios = dist.ratios || [100];
+            const results = [];
+
+            console.log(`[CampaignDist:${camp.id}] Dagitim basliyor — ${dist.dailyAvax} AVAX, top ${sorted.length}, network=${dist.network || camp.network}`);
+
+            for (let i = 0; i < sorted.length && i < ratios.length; i++) {
+                const ratio = ratios[i] || 0;
+                if (ratio <= 0) continue;
+                const amt = +(dist.dailyAvax * ratio / 100).toFixed(6);
+                if (amt < 0.0001) continue;
+
+                try {
+                    const tx = await signer.sendTransaction({
+                        to: sorted[i].address,
+                        value: ethers.parseEther(String(amt)),
+                    });
+                    await tx.wait(1);
+                    results.push({ address: sorted[i].address, avax: amt, txHash: tx.hash, ok: true });
+                    console.log(`[CampaignDist:${camp.id}] ${i + 1}. ${sorted[i].address.slice(0, 10)} ← ${amt} AVAX TX=${tx.hash}`);
+                } catch (e) {
+                    results.push({ address: sorted[i].address, avax: amt, error: e.message });
+                    console.error(`[CampaignDist:${camp.id}] ${sorted[i].address.slice(0, 10)} BASARISIZ:`, e.message);
+                }
+            }
+
+            camp.distributions.push({ at: now, by: 'auto', results });
+            dist.lastDistributionAt = now;
+            saveCampaignsData();
+
+            const totalSent = results.filter(r => r.ok).reduce((s, r) => s + r.avax, 0);
+            console.log(`[CampaignDist:${camp.id}] Tamamlandi: ${totalSent.toFixed(4)} AVAX, ${results.filter(r => r.ok).length}/${results.length} basarili`);
+        }
+    } catch (e) {
+        console.error('[CampaignDist] Genel hata:', e.message);
+    } finally {
+        campaignDistributing = false;
+    }
+}
+
+setInterval(() => { runCampaignDistributions().catch(e => console.error('[CampaignDist] Hata:', e.message)); }, 30 * 60 * 1000);
 
 // ══════════════════════════════════════════════════════════════════════
 //  LOBBY BROWSER & QUICK MATCH
@@ -1654,8 +1832,30 @@ app.get('/api/admin/campaigns', requireAdmin, (req, res) => {
 
 /** POST /api/admin/campaign — Yeni kampanya */
 app.post('/api/admin/campaign', requireAdmin, (req, res) => {
-    const { name, description, network, poolAvax, rules, startDate, endDate } = req.body ?? {};
+    const { name, description, network, poolAvax, rules, startDate, endDate, tasks, distribution, autoDistribute } = req.body ?? {};
     if (!name || !network) return res.status(400).json({ error: 'name ve network gerekli' });
+
+    // Gorevleri hazirla
+    const safeTasks = Array.isArray(tasks) ? tasks.slice(0, 20).map(t => ({
+        id: crypto.randomBytes(4).toString('hex'),
+        type: ['twitter_follow', 'twitter_rt', 'twitter_like', 'custom'].includes(t.type) ? t.type : 'custom',
+        title: String(t.title || '').slice(0, 100),
+        description: String(t.description || '').slice(0, 300),
+        url: String(t.url || '').slice(0, 500),
+        points: Math.max(1, parseInt(t.points) || 10),
+    })) : [];
+
+    // Dagitim ayarlari
+    const dist = distribution || {};
+    const safeDist = {
+        dailyAvax: parseFloat(dist.dailyAvax) || 0,
+        intervalHours: Math.max(1, parseInt(dist.intervalHours) || 24),
+        topN: Math.max(1, Math.min(10, parseInt(dist.topN) || 3)),
+        ratios: Array.isArray(dist.ratios) ? dist.ratios.map(r => parseFloat(r) || 0).slice(0, 10) : [50, 30, 20],
+        lastDistributionAt: null,
+        network: ['testnet', 'mainnet'].includes(dist.network) ? dist.network : (network === 'mainnet' ? 'mainnet' : 'testnet'),
+    };
+
     const campaign = {
         id: crypto.randomBytes(8).toString('hex'),
         name: String(name).slice(0, 100),
@@ -1668,11 +1868,17 @@ app.post('/api/admin/campaign', requireAdmin, (req, res) => {
         endDate: endDate || null,
         createdAt: Date.now(),
         createdBy: req.adminAddress,
+        tasks: safeTasks,
+        participants: {},
+        campaignLeaderboard: {},
+        distribution: safeDist,
+        autoDistribute: !!autoDistribute,
         snapshots: [],
         distributions: [],
     };
     campaignsData.push(campaign);
     saveCampaignsData();
+    console.log(`[Campaign] Created: ${campaign.id} "${campaign.name}" tasks=${safeTasks.length} autoDist=${campaign.autoDistribute}`);
     res.json({ ok: true, campaign });
 });
 
@@ -1680,13 +1886,33 @@ app.post('/api/admin/campaign', requireAdmin, (req, res) => {
 app.put('/api/admin/campaign/:id', requireAdmin, (req, res) => {
     const campaign = campaignsData.find(c => c.id === req.params.id);
     if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadı' });
-    const { name, description, status, poolAvax, rules, endDate } = req.body ?? {};
+    const { name, description, status, poolAvax, rules, endDate, tasks, distribution, autoDistribute } = req.body ?? {};
     if (name) campaign.name = String(name).slice(0, 100);
     if (description !== undefined) campaign.description = String(description).slice(0, 500);
     if (status && ['active', 'paused', 'ended'].includes(status)) campaign.status = status;
     if (poolAvax !== undefined) campaign.poolAvax = parseFloat(poolAvax) || 0;
     if (rules) campaign.rules = rules;
     if (endDate !== undefined) campaign.endDate = endDate;
+    if (Array.isArray(tasks)) {
+        campaign.tasks = tasks.slice(0, 20).map(t => ({
+            id: t.id || crypto.randomBytes(4).toString('hex'),
+            type: ['twitter_follow', 'twitter_rt', 'twitter_like', 'custom'].includes(t.type) ? t.type : 'custom',
+            title: String(t.title || '').slice(0, 100),
+            description: String(t.description || '').slice(0, 300),
+            url: String(t.url || '').slice(0, 500),
+            points: Math.max(1, parseInt(t.points) || 10),
+        }));
+    }
+    if (distribution) {
+        if (!campaign.distribution) campaign.distribution = {};
+        const d = distribution;
+        if (d.dailyAvax !== undefined) campaign.distribution.dailyAvax = parseFloat(d.dailyAvax) || 0;
+        if (d.intervalHours !== undefined) campaign.distribution.intervalHours = Math.max(1, parseInt(d.intervalHours) || 24);
+        if (d.topN !== undefined) campaign.distribution.topN = Math.max(1, Math.min(10, parseInt(d.topN) || 3));
+        if (Array.isArray(d.ratios)) campaign.distribution.ratios = d.ratios.map(r => parseFloat(r) || 0).slice(0, 10);
+        if (d.network) campaign.distribution.network = ['testnet', 'mainnet'].includes(d.network) ? d.network : 'testnet';
+    }
+    if (autoDistribute !== undefined) campaign.autoDistribute = !!autoDistribute;
     saveCampaignsData();
     res.json({ ok: true, campaign });
 });
@@ -1738,7 +1964,8 @@ app.post('/api/admin/campaign/:id/distribute', requireAdmin, async (req, res) =>
         const amt = validateAmount(r.avax);
         if (!addr || !amt) { results.push({ address: r.address, error: 'Geçersiz' }); continue; }
         try {
-            const tx = await houseSigner.sendTransaction({
+            const signer = getSignerForNetwork(campaign.distribution?.network || campaign.network);
+            const tx = await signer.sendTransaction({
                 to: addr, value: ethers.parseEther(amt.toFixed(6)),
             });
             await tx.wait(1);
@@ -1752,6 +1979,245 @@ app.post('/api/admin/campaign/:id/distribute', requireAdmin, async (req, res) =>
     if (results.length > 0 && results.every(r => r.ok)) campaign.status = 'ended';
     saveCampaignsData();
     res.json({ ok: true, results });
+});
+
+// ══════════════════════════════════════════════════════════════════════
+//  KAMPANYA — Public endpointler (kullanici tarafli)
+// ══════════════════════════════════════════════════════════════════════
+
+/** GET /api/campaigns/active — Aktif kampanyalari listele (public) */
+app.get('/api/campaigns/active', (req, res) => {
+    const active = campaignsData
+        .filter(c => c.status === 'active')
+        .map(c => {
+            const participantCount = Object.keys(c.participants || {}).length;
+            // Kampanya leaderboard top 10
+            const lb = Object.entries(c.campaignLeaderboard || {})
+                .map(([addr, s]) => ({
+                    address: addr,
+                    username: s.username || (lbData[addr]?.username) || addr.slice(0, 8) + '...',
+                    points: s.points || 0,
+                    tasksCompleted: s.tasksCompleted || 0,
+                }))
+                .sort((a, b) => b.points - a.points)
+                .slice(0, 50);
+            return {
+                id: c.id,
+                name: c.name,
+                description: c.description,
+                network: c.network,
+                poolAvax: c.poolAvax,
+                tasks: (c.tasks || []).map(t => ({ id: t.id, type: t.type, title: t.title, description: t.description, url: t.url, points: t.points })),
+                participantCount,
+                leaderboard: lb,
+                distribution: c.distribution ? {
+                    dailyAvax: c.distribution.dailyAvax,
+                    intervalHours: c.distribution.intervalHours,
+                    topN: c.distribution.topN,
+                    ratios: c.distribution.ratios,
+                    lastDistributionAt: c.distribution.lastDistributionAt,
+                    network: c.distribution.network,
+                } : null,
+                sponsors: (c.sponsors || []).map(s => {
+                    const lbKey = s.address?.toLowerCase();
+                    const profile = lbData[lbKey];
+                    return {
+                        address: s.address,
+                        amount: s.amount,
+                        txHash: s.txHash,
+                        timestamp: s.timestamp,
+                        username: profile?.username || s.address.slice(0, 6) + '...' + s.address.slice(-4),
+                        avatarURI: profile?.avatarURI || '',
+                    };
+                }),
+                houseWallet: houseSigner.address,
+                startDate: c.startDate,
+                endDate: c.endDate,
+                createdAt: c.createdAt,
+            };
+        });
+    res.json({ ok: true, campaigns: active });
+});
+
+/** GET /api/campaign/:id/info — Tek kampanya detayi + kullanicinin durumu (public) */
+app.get('/api/campaign/:id/info', (req, res) => {
+    const campaign = campaignsData.find(c => c.id === req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadi' });
+
+    const addr = req.query.address ? validateAddress(req.query.address) : null;
+    const participant = addr ? (campaign.participants || {})[addr.toLowerCase()] : null;
+
+    const lb = Object.entries(campaign.campaignLeaderboard || {})
+        .map(([a, s]) => ({
+            address: a,
+            username: s.username || (lbData[a]?.username) || a.slice(0, 8) + '...',
+            points: s.points || 0,
+            tasksCompleted: s.tasksCompleted || 0,
+        }))
+        .sort((a, b) => b.points - a.points);
+    lb.forEach((e, i) => { e.rank = i + 1; });
+
+    res.json({
+        ok: true,
+        campaign: {
+            id: campaign.id,
+            name: campaign.name,
+            description: campaign.description,
+            status: campaign.status,
+            network: campaign.network,
+            poolAvax: campaign.poolAvax,
+            tasks: (campaign.tasks || []),
+            participantCount: Object.keys(campaign.participants || {}).length,
+            leaderboard: lb.slice(0, 50),
+            distribution: campaign.distribution,
+            startDate: campaign.startDate,
+            endDate: campaign.endDate,
+        },
+        joined: !!participant,
+        completedTasks: participant?.completedTasks || {},
+    });
+});
+
+/** POST /api/campaign/:id/join — Kampanyaya katil (public) */
+app.post('/api/campaign/:id/join', rateLimit, (req, res) => {
+    const campaign = campaignsData.find(c => c.id === req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadi' });
+    if (campaign.status !== 'active') return res.status(409).json({ error: 'Kampanya aktif degil' });
+
+    const addr = validateAddress(req.body?.address);
+    if (!addr) return res.status(400).json({ error: 'Gecersiz address' });
+
+    const key = addr.toLowerCase();
+    if (!campaign.participants) campaign.participants = {};
+    if (campaign.participants[key]) {
+        return res.status(409).json({ error: 'Zaten katildiniz', joined: true });
+    }
+
+    campaign.participants[key] = { joinedAt: Date.now(), completedTasks: {} };
+    if (!campaign.campaignLeaderboard) campaign.campaignLeaderboard = {};
+    const username = lbData[key]?.username || addr.slice(0, 6) + '...' + addr.slice(-4);
+    campaign.campaignLeaderboard[key] = { points: 0, tasksCompleted: 0, username };
+
+    saveCampaignsData();
+    console.log(`[Campaign:${campaign.id}] Join: ${addr.slice(0, 10)} — total: ${Object.keys(campaign.participants).length}`);
+    res.json({ ok: true, joined: true });
+});
+
+/** POST /api/campaign/:id/sponsor — Kampanyaya sponsor ol (public) */
+app.post('/api/campaign/:id/sponsor', rateLimit, async (req, res) => {
+    const { address, txHash, amount } = req.body ?? {};
+    const campaign = campaignsData.find(c => c.id === req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadi' });
+    if (campaign.status !== 'active') return res.status(409).json({ error: 'Kampanya aktif degil' });
+
+    const addr = validateAddress(address);
+    if (!addr) return res.status(400).json({ error: 'Gecersiz address' });
+    if (!txHash || typeof txHash !== 'string' || !txHash.startsWith('0x')) {
+        return res.status(400).json({ error: 'Gecersiz txHash' });
+    }
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) return res.status(400).json({ error: 'Gecersiz amount' });
+
+    // Ayni TX tekrar kullanilmasin
+    if (!campaign.sponsors) campaign.sponsors = [];
+    if (campaign.sponsors.some(s => s.txHash === txHash)) {
+        return res.status(409).json({ error: 'Bu TX zaten kayitli' });
+    }
+
+    // On-chain dogrulama — kampanya network'une gore provider sec
+    const isMainnet = campaign.network === 'mainnet';
+    const verifyProvider = isMainnet ? mainnetProvider : provider;
+    try {
+        const tx = await verifyProvider.getTransaction(txHash);
+        if (!tx) return res.status(400).json({ error: 'TX bulunamadi — ' + (isMainnet ? 'mainnet' : 'testnet') + ' uzerinde kontrol edildi' });
+
+        const receipt = await verifyProvider.getTransactionReceipt(txHash);
+        if (!receipt || receipt.status !== 1) return res.status(400).json({ error: 'TX onaylanmamis veya basarisiz' });
+
+        if (tx.to?.toLowerCase() !== houseSigner.address.toLowerCase()) {
+            return res.status(400).json({ error: 'TX house wallet\'a gonderilmemis' });
+        }
+        if (tx.from?.toLowerCase() !== addr.toLowerCase()) {
+            return res.status(400).json({ error: 'TX gonderici uyusmuyor' });
+        }
+
+        const expectedWei = ethers.parseEther(amt.toFixed(6));
+        const diff = tx.value > expectedWei ? tx.value - expectedWei : expectedWei - tx.value;
+        const tolerance = expectedWei / 100n; // 1%
+        if (diff > tolerance) {
+            return res.status(400).json({ error: `Miktar uyusmuyor: beklenen ${amt}, gelen ${ethers.formatEther(tx.value)}` });
+        }
+
+        campaign.sponsors.push({
+            address: addr,
+            amount: parseFloat(ethers.formatEther(tx.value)),
+            txHash,
+            timestamp: Date.now(),
+        });
+        campaign.poolAvax = (campaign.poolAvax || 0) + parseFloat(ethers.formatEther(tx.value));
+        saveCampaignsData();
+        console.log(`[Campaign:${campaign.id}] Sponsor: ${addr.slice(0, 10)} → ${ethers.formatEther(tx.value)} AVAX tx=${txHash.slice(0, 12)}`);
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('[Sponsor] Verify failed:', e.message);
+        res.status(500).json({ error: 'TX dogrulama hatasi: ' + e.message });
+    }
+});
+
+/** POST /api/campaign/:id/complete-task — Gorevi tamamla (public) */
+app.post('/api/campaign/:id/complete-task', rateLimit, (req, res) => {
+    const campaign = campaignsData.find(c => c.id === req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadi' });
+    if (campaign.status !== 'active') return res.status(409).json({ error: 'Kampanya aktif degil' });
+
+    const addr = validateAddress(req.body?.address);
+    if (!addr) return res.status(400).json({ error: 'Gecersiz address' });
+    const { taskId } = req.body ?? {};
+    if (!taskId) return res.status(400).json({ error: 'taskId gerekli' });
+
+    const key = addr.toLowerCase();
+    if (!campaign.participants) campaign.participants = {};
+    const participant = campaign.participants[key];
+    if (!participant) return res.status(403).json({ error: 'Once kampanyaya katilin' });
+
+    const task = (campaign.tasks || []).find(t => t.id === taskId);
+    if (!task) return res.status(404).json({ error: 'Gorev bulunamadi' });
+
+    if (participant.completedTasks[taskId]) {
+        return res.status(409).json({ error: 'Bu gorev zaten tamamlandi' });
+    }
+
+    participant.completedTasks[taskId] = Date.now();
+
+    // Kampanya leaderboard guncelle
+    if (!campaign.campaignLeaderboard) campaign.campaignLeaderboard = {};
+    if (!campaign.campaignLeaderboard[key]) {
+        const username = lbData[key]?.username || addr.slice(0, 6) + '...' + addr.slice(-4);
+        campaign.campaignLeaderboard[key] = { points: 0, tasksCompleted: 0, username };
+    }
+    campaign.campaignLeaderboard[key].points += (task.points || 10);
+    campaign.campaignLeaderboard[key].tasksCompleted++;
+
+    saveCampaignsData();
+    console.log(`[Campaign:${campaign.id}] Task done: ${addr.slice(0, 10)} task=${task.title} +${task.points}pts`);
+    res.json({ ok: true, points: campaign.campaignLeaderboard[key].points });
+});
+
+/** GET /api/campaign/:id/leaderboard — Kampanya leaderboard (public) */
+app.get('/api/campaign/:id/leaderboard', (req, res) => {
+    const campaign = campaignsData.find(c => c.id === req.params.id);
+    if (!campaign) return res.status(404).json({ error: 'Kampanya bulunamadi' });
+
+    const entries = Object.entries(campaign.campaignLeaderboard || {})
+        .map(([addr, s]) => ({
+            address: addr,
+            username: s.username || (lbData[addr]?.username) || addr.slice(0, 8) + '...',
+            points: s.points || 0,
+            tasksCompleted: s.tasksCompleted || 0,
+        }))
+        .sort((a, b) => b.points - a.points);
+    entries.forEach((e, i) => { e.rank = i + 1; });
+    res.json({ ok: true, entries });
 });
 
 /** GET /api/admin/chat — Chat logları (sadece admin) */

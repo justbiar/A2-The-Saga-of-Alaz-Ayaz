@@ -261,7 +261,21 @@ export class DefenseTower {
         );
     }
 
+    private static _fireSfx: HTMLAudioElement | null = null;
+
+    private _playFireSfx(): void {
+        if (!DefenseTower._fireSfx) {
+            DefenseTower._fireSfx = new Audio('assets/sfx/topcu.mp3');
+            DefenseTower._fireSfx.volume = 0.35;
+        }
+        const sfx = DefenseTower._fireSfx.cloneNode() as HTMLAudioElement;
+        sfx.volume = 0.35;
+        sfx.play().catch(() => {});
+    }
+
     private _fire(target: Vector3, onHit: () => void): void {
+        this._playFireSfx();
+
         const gifSrc = this.team === 'fire'
             ? 'assets/game%20asset/alaztopfx/meteor_side_medium.gif'
             : 'assets/game%20asset/ayaztopfx/fire_ball_blue_side_small.gif';

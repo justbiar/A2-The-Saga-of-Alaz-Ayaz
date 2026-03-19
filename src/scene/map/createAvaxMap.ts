@@ -26,6 +26,7 @@ import { GlowLayer } from '@babylonjs/core/Layers/glowLayer';
 import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator';
 import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
 import '@babylonjs/core/Particles/particleSystemComponent';
+import '@babylonjs/loaders/glTF';
 
 export interface MapData { walkableMeshes: Mesh[]; }
 
@@ -191,6 +192,7 @@ export function createAvaxMap(scene: Scene, _sg: ShadowGenerator): MapData {
 
     return { walkableMeshes: walkable };
 }
+
 
 /* ═══════════════════════════════════════════════════════════════════════
  * GÖKYÜZÜ

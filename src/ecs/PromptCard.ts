@@ -22,6 +22,46 @@ export function getTowerCard(team: 'fire' | 'ice'): PromptCardDef {
     };
 }
 
+/** Takıma göre çiçek kartı oluştur (oyun başından itibaren mevcut). */
+export function getFlowerCard(team: 'fire' | 'ice'): PromptCardDef {
+    return {
+        id: 'flower_place',
+        name: team === 'fire' ? 'Alaz Çiçeği' : 'Ayaz Çiçeği',
+        description: 'Düşman kulesini yok eden çiçek ek. 15s büyür, 3 vuruşta kule yıkar.',
+        manaCost: 0,
+        avxCost: 3,
+        effectType: 'flower_place',
+        magnitude: 0,
+        duration: 0,
+        cooldown: 0,
+        targetTeam: 'enemy',
+        imagePath: team === 'fire'
+            ? '/assets/game%20asset/cicekler/alazcicek.png'
+            : '/assets/game%20asset/cicekler/ayazcicek.png',
+    };
+}
+
+/** Secilen agac tipine gore agac karti olustur. */
+export function getTreeCard(treeType: 'mana' | 'avx'): PromptCardDef {
+    return {
+        id: 'tree_place',
+        name: treeType === 'mana' ? 'Mana Agaci' : 'AVX Agaci',
+        description: treeType === 'mana'
+            ? 'Mana ureten agac dik (5 AVX). 15s sonra aktif.'
+            : 'AVX ureten agac dik (5 Mana). 15s sonra aktif.',
+        manaCost: treeType === 'avx' ? 5 : 0,
+        avxCost: treeType === 'mana' ? 5 : 0,
+        effectType: 'tree_place',
+        magnitude: 0,
+        duration: 0,
+        cooldown: 0,
+        targetTeam: 'self',
+        imagePath: treeType === 'mana'
+            ? '/assets/game%20asset/cicekler/manaagaci.png'
+            : '/assets/game%20asset/cicekler/avxagaci.png',
+    };
+}
+
 export const PROMPT_DEFS: PromptCardDef[] = [
     {
         id: 'skill_mana_fill',

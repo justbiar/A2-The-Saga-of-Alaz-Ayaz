@@ -225,7 +225,7 @@ function initChatPanel(): void {
         tabRoom.classList.add('active');
         tabLobby.classList.remove('active');
         msgs.innerHTML = '';
-        appendChatSystem('P2P bağlantısı aktif');
+        appendChatSystem(t('chatP2PActive'));
     };
 
     const sendMsg = async () => {
@@ -419,8 +419,8 @@ function spawnUnitForTeam(team: 'fire' | 'ice', cardId: UnitType, lane: 'left' |
 function applyPromptForTeam(team: 'fire' | 'ice', promptId: string): void {
     ctx._mpApplyPrompt?.(team, promptId);
 }
-export function triggerWin(winner: 'fire' | 'ice', msg: string): void {
-    ctx._mpTriggerWin?.(winner, msg);
+export function triggerWin(winner: 'fire' | 'ice', msg: string, isDisconnect = false): void {
+    ctx._mpTriggerWin?.(winner, msg, isDisconnect);
 }
 
 export function handleMPMessage(msg: import('../multiplayer/MultiplayerService').MPMessage): void {
@@ -504,7 +504,7 @@ export function handleMPMessage(msg: import('../multiplayer/MultiplayerService')
         if (mpService.role === 'host') {
             const amountInput = document.getElementById('bet-amount-input') as HTMLInputElement;
             if (amountInput) amountInput.value = String(msg.amountAvax);
-            showToast(`Rakip ${msg.amountAvax} AVAX öneriyor`);
+            showToast(`${t('betCounterReceived')}: ${msg.amountAvax} AVAX`);
             showBetPanel('host-idle');
         }
         return;
@@ -543,8 +543,8 @@ export function handleMPMessage(msg: import('../multiplayer/MultiplayerService')
     } else if (msg.type === 'base_sync') {
         // Guest: host'tan gelen otoritif base HP degerlerini uygula
         if (mpService.role === 'guest') {
-            if (ctx._fireBase) ctx._fireBase.hp = msg.fireHp;
-            if (ctx._iceBase) ctx._iceBase.hp = msg.iceHp;
+            if (ctx._fireBase) ctx._fireBase.forceSetHp(msg.fireHp);
+            if (ctx._iceBase) ctx._iceBase.forceSetHp(msg.iceHp);
         }
     }
 }
@@ -589,8 +589,18 @@ export function handleMPStatus(status: string): void {
         }, 500);
     } else if (status === 'disconnected' || status === 'error') {
         if (ctx.gameMode === 'multiplayer') {
-            triggerWin(ctx.lobbyTeam === 'fire' ? 'fire' : 'ice', t('mpDisconnWin'));
+            triggerWin(ctx.lobbyTeam === 'fire' ? 'fire' : 'ice', t('mpDisconnWin'), true);
         } else {
+            // Lobide iken rakip ayrıldı — locked bet varsa oyun başlamadı, iki tarafa iade
+            if (betService.isActive() && betService.state.status === 'locked' && ctx.walletAddress) {
+                showToast(t('betRefundedBoth'));
+                fetch(`/api/match/${betService.state.matchId}/refund-both`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address: ctx.walletAddress }),
+                }).catch(() => {});
+                betService.reset();
+            }
             setLobbyState('actions');
             showLobbyError(t('lobbyErrDisconn'));
         }
@@ -849,14 +859,24 @@ export function initLobbyScreen(): void {
         }
         mpService.send({ type: 'bet_counter', amountAvax: amount });
         showBetPanel('guest-wait');
-        showToast(`${amount} AVAX teklif gönderildi`);
+        showToast(`${amount} ${t('betCounterOffer')}`);
     };
 }
 
 // ─── LOBBY BACK + BEFOREUNLOAD ─────────────────────────────────────
 export function initLobbyBackHandlers(): void {
     document.getElementById('lobby-back')?.addEventListener('click', async () => {
-        if (betService.isActive() && ['pending_host', 'host_deposited'].includes(betService.state.status ?? '')) {
+        if (betService.isActive() && betService.state.status === 'locked') {
+            // Locked bet — kullanıcı çıkarsa kaybeder
+            const confirmed = confirm(t('betForfeitConfirm'));
+            if (!confirmed) return;
+            const btn = document.getElementById('lobby-back') as HTMLButtonElement;
+            btn.disabled = true;
+            btn.textContent = t('betRefunding');
+            await betService.cancelBet(); // reports loss via forfeit
+            btn.disabled = false;
+            btn.textContent = t('back');
+        } else if (betService.isActive() && ['pending_host', 'host_deposited'].includes(betService.state.status ?? '')) {
             const btn = document.getElementById('lobby-back') as HTMLButtonElement;
             btn.disabled = true;
             btn.textContent = t('betRefunding');
@@ -875,15 +895,22 @@ export function initLobbyBackHandlers(): void {
     });
 
     window.addEventListener('beforeunload', () => {
-        if (betService.isActive() && ['pending_host', 'host_deposited'].includes(betService.state.status ?? '')) {
-            const matchId = betService.state.matchId;
-            const address = (window as any).__walletAddress;
-            if (matchId && address) {
-                navigator.sendBeacon('/api/cancel-bet', new Blob(
-                    [JSON.stringify({ matchId, address })],
-                    { type: 'application/json' }
-                ));
-            }
+        if (!betService.isActive()) return;
+        const matchId = betService.state.matchId;
+        const address = (window as any).__walletAddress;
+        if (!matchId || !address) return;
+
+        if (betService.state.status === 'locked') {
+            // Locked bet — report loss so server can settle
+            navigator.sendBeacon('/api/report-result', new Blob(
+                [JSON.stringify({ matchId, address, result: 'loss' })],
+                { type: 'application/json' }
+            ));
+        } else if (['pending_host', 'host_deposited'].includes(betService.state.status ?? '')) {
+            navigator.sendBeacon('/api/cancel-bet', new Blob(
+                [JSON.stringify({ matchId, address })],
+                { type: 'application/json' }
+            ));
         }
     });
 }

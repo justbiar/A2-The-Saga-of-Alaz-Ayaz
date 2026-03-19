@@ -21,6 +21,35 @@ const ethers = (globalThis as any).ethers;
 
 const HOUSE_WALLET = import.meta.env?.VITE_HOUSE_WALLET ?? '';
 const API_BASE = import.meta.env?.VITE_API_BASE ?? '/api';
+const FUJI_CHAIN_ID = '0xa869';
+
+async function ensureFujiChain(provider: any): Promise<boolean> {
+    try {
+        const chainId = await provider.request({ method: 'eth_chainId' });
+        if (chainId === FUJI_CHAIN_ID) return true;
+        try {
+            await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: FUJI_CHAIN_ID }] });
+            return true;
+        } catch (switchErr: any) {
+            if (switchErr.code === 4902) {
+                await provider.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                        chainId: FUJI_CHAIN_ID,
+                        chainName: 'Avalanche Fuji Testnet',
+                        rpcUrls: ['https://api.avax-test.network/ext/bc/C/rpc'],
+                        nativeCurrency: { name: 'AVAX', symbol: 'AVAX', decimals: 18 },
+                        blockExplorerUrls: ['https://testnet.snowtrace.io'],
+                    }],
+                });
+                return true;
+            }
+            throw switchErr;
+        }
+    } catch {
+        return false;
+    }
+}
 
 export const BET_FEE_PERCENT = 2;
 export const MIN_BET = 0.01;  // AVAX
@@ -51,6 +80,29 @@ class BetService {
     /** Last error message for UI display */
     public lastError: string = '';
 
+    constructor() {
+        this._restoreState();
+    }
+
+    /** Restore state from localStorage — only for active states that need server resolution */
+    private _restoreState() {
+        try {
+            const raw = localStorage.getItem('a2_bet_state');
+            if (!raw) return;
+            const saved = JSON.parse(raw);
+            // Only restore 'locked' or 'settling' — these need server-side resolution
+            if (['locked', 'settling'].includes(saved.status) && saved.matchId && saved.amount > 0) {
+                this.state = saved;
+                console.log('[Bet] Restored active bet from localStorage:', saved.status, saved.matchId);
+            } else {
+                // Clear stale/completed states
+                localStorage.removeItem('a2_bet_state');
+            }
+        } catch {
+            localStorage.removeItem('a2_bet_state');
+        }
+    }
+
     /** Host: deposit bet amount to house wallet + register on backend. Returns tx hash on success. */
     async depositBet(amountAvax: number, matchId: string): Promise<string | null> {
         if (!ethers || !HOUSE_WALLET) {
@@ -63,13 +115,21 @@ class BetService {
             return null;
         }
 
-        const provider = (window as any).__activeProvider || (window as any).ethereum;
+        const provider = (window as any).__activeProvider;
         if (!provider) {
-            this.lastError = 'Cüzdan bulunamadı';
+            this.lastError = 'Cüzdan bağlı değil — önce MetaMask ile bağlan';
             return null;
         }
 
         try {
+            // Chain kontrolu — yanlış ağdaysa Fuji'ye geçir
+            const onFuji = await ensureFujiChain(provider);
+            if (!onFuji) {
+                this.lastError = 'Avalanche Fuji ağına geçilemedi. MetaMask\'tan ağı kontrol et.';
+                console.warn('[Bet] Not on Fuji chain');
+                return null;
+            }
+
             const ethProvider = new ethers.BrowserProvider(provider);
             const signer = await ethProvider.getSigner();
             const signerAddress = await signer.getAddress();
@@ -82,6 +142,16 @@ class BetService {
             }
 
             const amountWei = ethers.parseEther(amountAvax.toFixed(6));
+
+            // Bakiye kontrolu
+            const balance = await ethProvider.getBalance(signerAddress);
+            const gasEstimate = BigInt(21000) * BigInt(30_000_000_000); // 21k gas * 30 gwei
+            if (balance < amountWei + gasEstimate) {
+                const balAvax = parseFloat(ethers.formatEther(balance)).toFixed(4);
+                this.lastError = `Yetersiz bakiye! ${balAvax} AVAX var, ${amountAvax} AVAX + gas gerekli. Faucet: faucet.avax.network`;
+                console.warn(`[Bet] Insufficient balance: ${balAvax} AVAX < ${amountAvax} + gas`);
+                return null;
+            }
 
             console.log(`[Bet] Depositing ${amountAvax} AVAX from ${signerAddress} to ${HOUSE_WALLET}`);
 
@@ -125,6 +195,8 @@ class BetService {
                 this.lastError = 'Yetersiz bakiye! Test AVAX almak için: faucet.avax.network';
             } else if (err?.code === 4001 || err?.code === 'ACTION_REJECTED') {
                 this.lastError = 'İşlem iptal edildi';
+            } else if (err?.code === 'CALL_EXCEPTION') {
+                this.lastError = 'İşlem başarısız — bakiye veya ağ hatası. Fuji testnet\'te yeterli AVAX olduğundan emin ol.';
             } else {
                 this.lastError = err?.shortMessage || err?.message || 'Deposit başarısız';
             }
@@ -141,6 +213,17 @@ class BetService {
             this.reset();
             return { ok: true };
         }
+
+        // Locked durumda cancel edilemez — forfeit (loss report) yapılmalı
+        if (this.state.status === 'locked') {
+            console.log('[Bet] cancelBet: locked status — forfeiting via report-result');
+            try {
+                await this.reportResult(address, false); // report loss = forfeit
+            } catch { /* server auto-resolve will handle */ }
+            this.reset();
+            return { ok: true };
+        }
+
         // Sadece host_deposited veya pending_host durumunda iptal edilebilir
         if (!['pending_host', 'host_deposited'].includes(this.state.status ?? '')) {
             console.log('[Bet] cancelBet: status uygun değil:', this.state.status);
@@ -174,11 +257,21 @@ class BetService {
     /** Guest: deposit matching bet amount to house wallet + register on backend. */
     async acceptBet(amountAvax: number, matchId: string): Promise<string | null> {
         if (!ethers || !HOUSE_WALLET) return null;
-        const provider = (window as any).__activeProvider || (window as any).ethereum;
-        if (!provider) return null;
+        const provider = (window as any).__activeProvider;
+        if (!provider) {
+            this.lastError = 'Cüzdan bağlı değil — önce MetaMask ile bağlan';
+            return null;
+        }
         this.lastError = '';
 
         try {
+            // Chain kontrolu
+            const onFuji = await ensureFujiChain(provider);
+            if (!onFuji) {
+                this.lastError = 'Avalanche Fuji ağına geçilemedi. MetaMask\'tan ağı kontrol et.';
+                return null;
+            }
+
             const ethProvider = new ethers.BrowserProvider(provider);
             await provider.request({ method: 'eth_requestAccounts' });
             const signer = await ethProvider.getSigner();
@@ -191,6 +284,15 @@ class BetService {
             }
 
             const amountWei = ethers.parseEther(amountAvax.toFixed(6));
+
+            // Bakiye kontrolu
+            const balance = await ethProvider.getBalance(signerAddress);
+            const gasEstimate = BigInt(21000) * BigInt(30_000_000_000);
+            if (balance < amountWei + gasEstimate) {
+                const balAvax = parseFloat(ethers.formatEther(balance)).toFixed(4);
+                this.lastError = `Yetersiz bakiye! ${balAvax} AVAX var, ${amountAvax} AVAX + gas gerekli. Faucet: faucet.avax.network`;
+                return null;
+            }
 
             console.log(`[Bet] Guest depositing ${amountAvax} AVAX from ${signerAddress} to ${HOUSE_WALLET}`);
 

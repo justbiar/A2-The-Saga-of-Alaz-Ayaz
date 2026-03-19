@@ -167,6 +167,7 @@ document.getElementById('nav-play')!.addEventListener('click', () => {
 document.getElementById('nav-characters-header')?.addEventListener('click', () => showScreen('characters'));
 document.getElementById('nav-story-header')?.addEventListener('click', () => showScreen('story'));
 document.getElementById('nav-map-header')?.addEventListener('click', () => showScreen('map'));
+document.getElementById('nav-campaign-header')?.addEventListener('click', () => showScreen('campaign'));
 document.getElementById('nav-leaderboard-header')?.addEventListener('click', () => showScreen('leaderboard'));
 document.getElementById('nav-profile-header')?.addEventListener('click', () => showScreen('profile'));
 document.getElementById('nav-settings-header')?.addEventListener('click', () => showScreen('settings'));

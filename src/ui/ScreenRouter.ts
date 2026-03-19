@@ -17,10 +17,11 @@ import { initLobbyScreen } from './LobbyUI';
 import { setErrorReporterScreen } from './ErrorReporter';
 import { renderLeaderboardScreen } from './ProfileLeaderboard';
 import { renderProfileScreen } from './ProfileLeaderboard';
+import { renderCampaignScreen } from './CampaignUI';
 import { initSettingsScreen } from './SettingsUI';
 import { showLightningAt } from './CardUI';
 
-export type Screen = 'home' | 'characters' | 'story' | 'map' | 'team-select' | 'mode-select' | 'lobby' | 'game' | 'leaderboard' | 'profile' | 'settings';
+export type Screen = 'home' | 'characters' | 'story' | 'map' | 'team-select' | 'mode-select' | 'lobby' | 'game' | 'leaderboard' | 'profile' | 'settings' | 'campaign';
 
 // ─── DOM REFS ──────────────────────────────────────────────────────
 const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
@@ -36,8 +37,9 @@ const lobbyScreen = document.getElementById('lobby-screen') as HTMLElement;
 const leaderboardScreen = document.getElementById('leaderboard-screen') as HTMLElement;
 const profileScreen = document.getElementById('profile-screen') as HTMLElement;
 const settingsScreen = document.getElementById('settings-screen') as HTMLElement;
+const campaignScreen = document.getElementById('campaign-screen') as HTMLElement;
 
-const MENU_SCREENS = [homeScreen, charactersScreen, storyScreen, mapScreen, teamSelectScreen, modeSelectEl, difficultyScreen, lobbyScreen, leaderboardScreen, profileScreen, settingsScreen].filter(Boolean) as HTMLElement[];
+const MENU_SCREENS = [homeScreen, charactersScreen, storyScreen, mapScreen, teamSelectScreen, modeSelectEl, difficultyScreen, lobbyScreen, leaderboardScreen, profileScreen, settingsScreen, campaignScreen].filter(Boolean) as HTMLElement[];
 const GAME_HUD = ['top-hud', 'board-control-meter', 'debug-ui', 'card-tray', 'surge-indicator', 'kite-panel'];
 
 // ─── MAP PREVIEW ENGINE ────────────────────────────────────────────
@@ -125,7 +127,7 @@ export function setModeSelectBadgeCallback(fn: () => void): void {
 // ─── HISTORY (back button) ─────────────────────────────────────────
 let _currentScreen: Screen = 'home';
 
-const VALID_SCREENS: Screen[] = ['home', 'characters', 'story', 'map', 'team-select', 'mode-select', 'lobby', 'leaderboard', 'profile', 'settings'];
+const VALID_SCREENS: Screen[] = ['home', 'characters', 'story', 'map', 'team-select', 'mode-select', 'lobby', 'leaderboard', 'profile', 'settings', 'campaign'];
 
 // Restore screen from hash on refresh
 const _hashScreen = window.location.hash.replace('#', '') as Screen;
@@ -168,8 +170,8 @@ function _showScreenInternal(screen: Screen): void {
         characters: 'nav-characters-header',
         story: 'nav-story-header',
         map: 'nav-map-header',
+        campaign: 'nav-campaign-header',
         leaderboard: 'nav-leaderboard-header',
-        profile: 'nav-profile-header',
         settings: 'nav-settings-header',
     };
     if (navMap[screen]) document.getElementById(navMap[screen]!)?.classList.add('active');
@@ -207,6 +209,11 @@ function _showScreenInternal(screen: Screen): void {
         case 'lobby':
             lobbyScreen.style.display = 'flex';
             initLobbyScreen();
+            break;
+        case 'campaign':
+            campaignScreen.style.display = 'flex';
+            playDefaultMusic();
+            void renderCampaignScreen();
             break;
         case 'leaderboard':
             leaderboardScreen.style.display = 'flex';

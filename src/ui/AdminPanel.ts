@@ -395,37 +395,65 @@ async function loadCampaigns() {
             list.innerHTML = '<div class="adm-empty">Kampanya yok. Yeni bir kampanya oluştur.</div>';
             return;
         }
-        list.innerHTML = camps.map(c => `
+        list.innerHTML = camps.map(c => {
+            const participantCount = Object.keys(c.participants || {}).length;
+            const taskCount = (c.tasks || []).length;
+            const dist = c.distribution || {};
+            // Kampanya leaderboard top 5
+            const lbEntries = Object.entries(c.campaignLeaderboard || {})
+                .map(([addr, s]: [string, any]) => ({ address: addr, username: s.username || addrShort(addr), points: s.points || 0, tasksCompleted: s.tasksCompleted || 0 }))
+                .sort((a, b) => b.points - a.points)
+                .slice(0, 5);
+
+            return `
             <div class="adm-campaign-card">
                 <div class="adm-campaign-header">
                     <div>
                         <span class="adm-campaign-name">${esc(c.name)}</span>
                         <span class="adm-chip ${c.status === 'active' ? 'adm-chip-ok' : c.status === 'ended' ? 'adm-chip-gray' : 'adm-chip-warn'}">${c.status}</span>
                         <span class="adm-chip adm-chip-info">${c.network}</span>
+                        ${c.autoDistribute ? '<span class="adm-chip adm-chip-ok">Oto-Dagitim</span>' : ''}
                     </div>
-                    <div class="adm-campaign-meta">Pool: <strong>${c.poolAvax} AVAX</strong> · Oluşturuldu: ${new Date(c.createdAt).toLocaleDateString('tr-TR')}</div>
+                    <div class="adm-campaign-meta">
+                        Pool: <strong>${c.poolAvax} AVAX</strong> ·
+                        Katilimci: <strong>${participantCount}</strong> ·
+                        Gorev: <strong>${taskCount}</strong> ·
+                        ${new Date(c.createdAt).toLocaleDateString('tr-TR')}
+                    </div>
                 </div>
                 ${c.description ? `<div class="adm-campaign-desc">${esc(c.description)}</div>` : ''}
-                <div class="adm-campaign-rules">
-                    Min oyun: ${c.rules?.minGames || 0} · Min online: ${c.rules?.minOnlineGames || 0} · Min galibiyet: ${c.rules?.minWins || 0}
-                </div>
-                ${c.snapshots?.length > 0 ? `
+                ${taskCount > 0 ? `
+                    <div class="adm-campaign-tasks-info">
+                        <strong>Gorevler:</strong> ${(c.tasks || []).map((t: any) =>
+                            `<span class="adm-chip adm-chip-info">${t.type === 'twitter_follow' ? 'Takip' : t.type === 'twitter_rt' ? 'RT' : t.type === 'twitter_like' ? 'Like' : 'Ozel'}: ${esc(t.title)} (${t.points}p)</span>`
+                        ).join(' ')}
+                    </div>` : ''}
+                ${dist.dailyAvax ? `
+                    <div class="adm-campaign-dist-info">
+                        <strong>Dagitim:</strong> ${dist.dailyAvax} AVAX / ${dist.intervalHours}s · Top ${dist.topN} · Ag: ${dist.network || c.network}
+                        ${dist.lastDistributionAt ? ` · Son: ${new Date(dist.lastDistributionAt).toLocaleString('tr-TR')}` : ' · Henuz dagitilmadi'}
+                    </div>` : ''}
+                ${lbEntries.length > 0 ? `
                     <div class="adm-campaign-snap">
-                        Son snapshot: ${new Date(c.snapshots.at(-1).takenAt).toLocaleString('tr-TR')} — ${c.snapshots.at(-1).players?.length || 0} oyuncu
-                        <div class="adm-snap-top">${(c.snapshots.at(-1).players || []).slice(0, 5).map((p: any, i: number) =>
-                            `${i+1}. ${esc(p.username || addrShort(p.address))} — ${p.onlineWins}W / ${p.totalBetWon?.toFixed(4) || 0} AVAX`
+                        <strong>Kampanya Leaderboard (Top 5):</strong>
+                        <div class="adm-snap-top">${lbEntries.map((e, i) =>
+                            `${i+1}. ${esc(e.username)} — ${e.points}p · ${e.tasksCompleted} gorev`
                         ).join('<br>')}</div>
                     </div>` : ''}
                 <div class="adm-campaign-actions">
+                    ${c.status === 'active' ? `<button class="adm-btn adm-btn-sm" onclick="window.__admEditCampaign('${c.id}')">Duzenle</button>` : ''}
                     <button class="adm-btn adm-btn-sm" onclick="window.__admSnapshot('${c.id}')">Snapshot Al</button>
-                    ${c.snapshots?.length > 0 ? `<button class="adm-btn adm-btn-sm adm-btn-primary" onclick="window.__admDistributeModal('${c.id}')">Dağıt</button>` : ''}
-                    ${c.status === 'active' ? `<button class="adm-btn adm-btn-sm adm-btn-ghost" onclick="window.__admEndCampaign('${c.id}')">Sonlandır</button>` : ''}
+                    ${c.snapshots?.length > 0 ? `<button class="adm-btn adm-btn-sm adm-btn-primary" onclick="window.__admDistributeModal('${c.id}')">Dagit</button>` : ''}
+                    ${c.status === 'active' ? `
+                        <button class="adm-btn adm-btn-sm ${c.autoDistribute ? 'adm-btn-danger-sm' : 'adm-btn-primary'}" onclick="window.__admToggleAutoDist('${c.id}', ${!c.autoDistribute})">${c.autoDistribute ? 'Oto-Dagitim Kapat' : 'Oto-Dagitim Ac'}</button>
+                        <button class="adm-btn adm-btn-sm adm-btn-ghost" onclick="window.__admEndCampaign('${c.id}')">Sonlandir</button>
+                    ` : ''}
                 </div>
                 ${c.distributions?.length > 0 ? `
-                    <div class="adm-campaign-dist">Son dağıtım: ${new Date(c.distributions.at(-1).at).toLocaleString('tr-TR')}</div>
+                    <div class="adm-campaign-dist">Son dagitim: ${new Date(c.distributions.at(-1).at).toLocaleString('tr-TR')} · ${c.distributions.length} toplam</div>
                 ` : ''}
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     } catch (e: any) {
         list.innerHTML = `<div class="adm-error">${e.message}</div>`;
     }
@@ -553,40 +581,127 @@ function showBanModal(address: string, username: string, resolveReportId?: strin
 }
 
 // Yeni kampanya modal
+let campTaskCounter = 0;
+
+function addTaskRow(container: HTMLElement, task?: { type?: string; title?: string; url?: string; points?: number }) {
+    const idx = campTaskCounter++;
+    const row = document.createElement('div');
+    row.className = 'adm-task-row';
+    row.dataset.idx = String(idx);
+    row.innerHTML = `
+        <select class="adm-input adm-input-sm" data-field="type">
+            <option value="twitter_follow" ${task?.type === 'twitter_follow' ? 'selected' : ''}>Twitter Takip</option>
+            <option value="twitter_rt" ${task?.type === 'twitter_rt' ? 'selected' : ''}>Twitter RT</option>
+            <option value="twitter_like" ${task?.type === 'twitter_like' ? 'selected' : ''}>Twitter Like</option>
+            <option value="custom" ${task?.type === 'custom' ? 'selected' : ''}>Ozel Gorev</option>
+        </select>
+        <input class="adm-input adm-input-sm" data-field="title" placeholder="Gorev basligi" value="${esc(task?.title || '')}" />
+        <input class="adm-input adm-input-sm" data-field="url" placeholder="URL (tweet/profil)" value="${esc(task?.url || '')}" />
+        <input class="adm-input adm-input-sm" data-field="points" type="number" placeholder="Puan" value="${task?.points || 10}" style="width:60px" />
+        <button class="adm-btn adm-btn-danger-sm adm-task-remove" type="button">x</button>
+    `;
+    row.querySelector('.adm-task-remove')!.addEventListener('click', () => row.remove());
+    container.appendChild(row);
+}
+
+function collectTasks(): any[] {
+    const rows = document.querySelectorAll('.adm-task-row');
+    const tasks: any[] = [];
+    rows.forEach(row => {
+        const type = (row.querySelector('[data-field="type"]') as HTMLSelectElement)?.value;
+        const title = (row.querySelector('[data-field="title"]') as HTMLInputElement)?.value.trim();
+        const url = (row.querySelector('[data-field="url"]') as HTMLInputElement)?.value.trim();
+        const points = parseInt((row.querySelector('[data-field="points"]') as HTMLInputElement)?.value) || 10;
+        if (title) tasks.push({ type, title, url, points });
+    });
+    return tasks;
+}
+
 function showNewCampaignModal() {
+    campTaskCounter = 0;
     showModal(`
         <h3>Yeni Kampanya</h3>
         <div class="adm-form-group">
-            <label>Kampanya Adı:</label>
-            <input id="adm-camp-name" class="adm-input" type="text" placeholder="Örn: Mart 2026 Sezonu" />
+            <label>Kampanya Adi:</label>
+            <input id="adm-camp-name" class="adm-input" type="text" placeholder="Orn: AVAX Dagitim Kampanyasi" />
         </div>
         <div class="adm-form-group">
-            <label>Açıklama:</label>
-            <textarea id="adm-camp-desc" class="adm-input adm-textarea" placeholder="Opsiyonel…"></textarea>
+            <label>Aciklama:</label>
+            <textarea id="adm-camp-desc" class="adm-input adm-textarea" placeholder="Kampanya detaylari..."></textarea>
         </div>
-        <div class="adm-form-group">
-            <label>Ağ:</label>
-            <select id="adm-camp-network" class="adm-input">
-                <option value="testnet">Testnet (Fuji)</option>
-                <option value="mainnet">Mainnet (Avalanche C)</option>
-                <option value="both">Her ikisi</option>
-            </select>
+        <div class="adm-form-row">
+            <div class="adm-form-group" style="flex:1">
+                <label>Ag:</label>
+                <select id="adm-camp-network" class="adm-input">
+                    <option value="mainnet">Mainnet (Avalanche C)</option>
+                    <option value="testnet">Testnet (Fuji)</option>
+                    <option value="both">Her ikisi</option>
+                </select>
+            </div>
+            <div class="adm-form-group" style="flex:1">
+                <label>Pool (AVAX):</label>
+                <input id="adm-camp-pool" class="adm-input" type="number" step="0.01" placeholder="1.0" />
+            </div>
         </div>
-        <div class="adm-form-group">
-            <label>Pool (AVAX):</label>
-            <input id="adm-camp-pool" class="adm-input" type="number" step="0.01" placeholder="0.5" />
+
+        <h4 style="margin:16px 0 8px;color:#f59e0b">Gorevler</h4>
+        <div id="adm-camp-tasks"></div>
+        <button class="adm-btn adm-btn-sm" id="adm-camp-add-task" type="button">+ Gorev Ekle</button>
+
+        <h4 style="margin:16px 0 8px;color:#f59e0b">Dagitim Ayarlari</h4>
+        <div class="adm-form-row">
+            <div class="adm-form-group" style="flex:1">
+                <label>Gunluk AVAX:</label>
+                <input id="adm-camp-daily" class="adm-input" type="number" step="0.01" placeholder="0.5" />
+            </div>
+            <div class="adm-form-group" style="flex:1">
+                <label>Kac saatte bir:</label>
+                <input id="adm-camp-interval" class="adm-input" type="number" value="24" min="1" />
+            </div>
         </div>
-        <div class="adm-form-group"><label>Min. Oyun Sayısı:</label><input id="adm-camp-mingames" class="adm-input" type="number" value="0" /></div>
-        <div class="adm-form-group"><label>Min. Online Oyun:</label><input id="adm-camp-minonline" class="adm-input" type="number" value="0" /></div>
-        <div class="adm-form-group"><label>Min. Galibiyet:</label><input id="adm-camp-minwins" class="adm-input" type="number" value="0" /></div>
+        <div class="adm-form-row">
+            <div class="adm-form-group" style="flex:1">
+                <label>Top N (kac kisi):</label>
+                <input id="adm-camp-topn" class="adm-input" type="number" value="3" min="1" max="10" />
+            </div>
+            <div class="adm-form-group" style="flex:1">
+                <label>Oranlar (virgul):</label>
+                <input id="adm-camp-ratios" class="adm-input" type="text" placeholder="50,30,20" value="50,30,20" />
+            </div>
+        </div>
+        <div class="adm-form-row">
+            <div class="adm-form-group" style="flex:1">
+                <label>Dagitim Agi:</label>
+                <select id="adm-camp-dist-network" class="adm-input">
+                    <option value="mainnet">Mainnet</option>
+                    <option value="testnet">Testnet</option>
+                </select>
+            </div>
+            <div class="adm-form-group" style="flex:1;display:flex;align-items:center;gap:8px;padding-top:20px">
+                <input id="adm-camp-autodist" type="checkbox" checked />
+                <label for="adm-camp-autodist">Otomatik Dagitim</label>
+            </div>
+        </div>
+
         <div class="adm-modal-actions">
-            <button class="adm-btn adm-btn-primary" id="adm-camp-create-btn">Oluştur</button>
-            <button class="adm-btn adm-btn-ghost" onclick="window.__admHideModal()">İptal</button>
+            <button class="adm-btn adm-btn-primary" id="adm-camp-create-btn">Olustur</button>
+            <button class="adm-btn adm-btn-ghost" onclick="window.__admHideModal()">Iptal</button>
         </div>
     `);
+
+    // Gorev ekleme butonu
+    const tasksContainer = document.getElementById('adm-camp-tasks')!;
+    document.getElementById('adm-camp-add-task')!.addEventListener('click', () => addTaskRow(tasksContainer));
+    // Varsayilan 1 gorev satiri ekle
+    addTaskRow(tasksContainer, { type: 'twitter_follow', title: '', url: '', points: 10 });
+
     document.getElementById('adm-camp-create-btn')!.onclick = async () => {
         const name = (document.getElementById('adm-camp-name') as HTMLInputElement).value.trim();
-        if (!name) { alert('Kampanya adı gerekli'); return; }
+        if (!name) { alert('Kampanya adi gerekli'); return; }
+
+        const ratiosStr = (document.getElementById('adm-camp-ratios') as HTMLInputElement).value;
+        const ratios = ratiosStr.split(',').map((r: string) => parseFloat(r.trim())).filter((r: number) => !isNaN(r) && r > 0);
+
         try {
             const d = await admFetch('/admin/campaign', {
                 method: 'POST',
@@ -595,14 +710,136 @@ function showNewCampaignModal() {
                     description: (document.getElementById('adm-camp-desc') as HTMLTextAreaElement).value,
                     network: (document.getElementById('adm-camp-network') as HTMLSelectElement).value,
                     poolAvax: parseFloat((document.getElementById('adm-camp-pool') as HTMLInputElement).value) || 0,
-                    rules: {
-                        minGames: parseInt((document.getElementById('adm-camp-mingames') as HTMLInputElement).value) || 0,
-                        minOnlineGames: parseInt((document.getElementById('adm-camp-minonline') as HTMLInputElement).value) || 0,
-                        minWins: parseInt((document.getElementById('adm-camp-minwins') as HTMLInputElement).value) || 0,
+                    rules: { minGames: 0, minOnlineGames: 0, minWins: 0 },
+                    tasks: collectTasks(),
+                    distribution: {
+                        dailyAvax: parseFloat((document.getElementById('adm-camp-daily') as HTMLInputElement).value) || 0,
+                        intervalHours: parseInt((document.getElementById('adm-camp-interval') as HTMLInputElement).value) || 24,
+                        topN: parseInt((document.getElementById('adm-camp-topn') as HTMLInputElement).value) || 3,
+                        ratios: ratios.length > 0 ? ratios : [50, 30, 20],
+                        network: (document.getElementById('adm-camp-dist-network') as HTMLSelectElement).value,
                     },
+                    autoDistribute: (document.getElementById('adm-camp-autodist') as HTMLInputElement).checked,
                 }),
             });
             if (!d.ok) throw new Error(d.error);
+            hideModal();
+            loadCampaigns();
+        } catch (e: any) {
+            alert('Hata: ' + e.message);
+        }
+    };
+}
+
+// Kampanya düzenle modal
+async function showEditCampaignModal(campaignId: string) {
+    const d = await admFetch('/admin/campaigns');
+    const camp = d.campaigns?.find((c: any) => c.id === campaignId);
+    if (!camp) { alert('Kampanya bulunamadi'); return; }
+
+    campTaskCounter = 0;
+    const dist = camp.distribution || {};
+
+    showModal(`
+        <h3>Kampanyayi Duzenle</h3>
+        <div class="adm-form-group">
+            <label>Kampanya Adi:</label>
+            <input id="adm-camp-name" class="adm-input" type="text" value="${esc(camp.name)}" />
+        </div>
+        <div class="adm-form-group">
+            <label>Aciklama:</label>
+            <textarea id="adm-camp-desc" class="adm-input adm-textarea">${esc(camp.description || '')}</textarea>
+        </div>
+        <div class="adm-form-row">
+            <div class="adm-form-group" style="flex:1">
+                <label>Ag:</label>
+                <select id="adm-camp-network" class="adm-input">
+                    <option value="mainnet" ${camp.network === 'mainnet' ? 'selected' : ''}>Mainnet (Avalanche C)</option>
+                    <option value="testnet" ${camp.network === 'testnet' ? 'selected' : ''}>Testnet (Fuji)</option>
+                    <option value="both" ${camp.network === 'both' ? 'selected' : ''}>Her ikisi</option>
+                </select>
+            </div>
+            <div class="adm-form-group" style="flex:1">
+                <label>Pool (AVAX):</label>
+                <input id="adm-camp-pool" class="adm-input" type="number" step="0.01" value="${camp.poolAvax || 0}" />
+            </div>
+        </div>
+
+        <h4 style="margin:16px 0 8px;color:#ffc94d">Gorevler</h4>
+        <div id="adm-camp-tasks"></div>
+        <button class="adm-btn adm-btn-sm" id="adm-camp-add-task" type="button">+ Gorev Ekle</button>
+
+        <h4 style="margin:16px 0 8px;color:#ffc94d">Dagitim Ayarlari</h4>
+        <div class="adm-form-row">
+            <div class="adm-form-group" style="flex:1">
+                <label>Gunluk AVAX:</label>
+                <input id="adm-camp-daily" class="adm-input" type="number" step="0.01" value="${dist.dailyAvax || 0}" />
+            </div>
+            <div class="adm-form-group" style="flex:1">
+                <label>Kac saatte bir:</label>
+                <input id="adm-camp-interval" class="adm-input" type="number" value="${dist.intervalHours || 24}" min="1" />
+            </div>
+        </div>
+        <div class="adm-form-row">
+            <div class="adm-form-group" style="flex:1">
+                <label>Top N (kac kisi):</label>
+                <input id="adm-camp-topn" class="adm-input" type="number" value="${dist.topN || 3}" min="1" max="10" />
+            </div>
+            <div class="adm-form-group" style="flex:1">
+                <label>Oranlar (virgul):</label>
+                <input id="adm-camp-ratios" class="adm-input" type="text" value="${(dist.ratios || [50, 30, 20]).join(',')}" />
+            </div>
+        </div>
+        <div class="adm-form-row">
+            <div class="adm-form-group" style="flex:1">
+                <label>Dagitim Agi:</label>
+                <select id="adm-camp-dist-network" class="adm-input">
+                    <option value="mainnet" ${(dist.network || camp.network) === 'mainnet' ? 'selected' : ''}>Mainnet</option>
+                    <option value="testnet" ${(dist.network || camp.network) === 'testnet' ? 'selected' : ''}>Testnet</option>
+                </select>
+            </div>
+            <div class="adm-form-group" style="flex:1;display:flex;align-items:center;gap:8px;padding-top:20px">
+                <input id="adm-camp-autodist" type="checkbox" ${camp.autoDistribute ? 'checked' : ''} />
+                <label for="adm-camp-autodist">Otomatik Dagitim</label>
+            </div>
+        </div>
+
+        <div class="adm-modal-actions">
+            <button class="adm-btn adm-btn-primary" id="adm-camp-save-btn">Kaydet</button>
+            <button class="adm-btn adm-btn-ghost" onclick="window.__admHideModal()">Iptal</button>
+        </div>
+    `);
+
+    // Mevcut gorevleri yukle
+    const tasksContainer = document.getElementById('adm-camp-tasks')!;
+    (camp.tasks || []).forEach((task: any) => addTaskRow(tasksContainer, task));
+
+    document.getElementById('adm-camp-add-task')!.addEventListener('click', () => addTaskRow(tasksContainer));
+
+    document.getElementById('adm-camp-save-btn')!.onclick = async () => {
+        const ratiosStr = (document.getElementById('adm-camp-ratios') as HTMLInputElement).value;
+        const ratios = ratiosStr.split(',').map((r: string) => parseFloat(r.trim())).filter((r: number) => !isNaN(r) && r > 0);
+
+        try {
+            const res = await admFetch(`/admin/campaign/${campaignId}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    name: (document.getElementById('adm-camp-name') as HTMLInputElement).value.trim(),
+                    description: (document.getElementById('adm-camp-desc') as HTMLTextAreaElement).value,
+                    network: (document.getElementById('adm-camp-network') as HTMLSelectElement).value,
+                    poolAvax: parseFloat((document.getElementById('adm-camp-pool') as HTMLInputElement).value) || 0,
+                    tasks: collectTasks(),
+                    distribution: {
+                        dailyAvax: parseFloat((document.getElementById('adm-camp-daily') as HTMLInputElement).value) || 0,
+                        intervalHours: parseInt((document.getElementById('adm-camp-interval') as HTMLInputElement).value) || 24,
+                        topN: parseInt((document.getElementById('adm-camp-topn') as HTMLInputElement).value) || 3,
+                        ratios: ratios.length > 0 ? ratios : [50, 30, 20],
+                        network: (document.getElementById('adm-camp-dist-network') as HTMLSelectElement).value,
+                    },
+                    autoDistribute: (document.getElementById('adm-camp-autodist') as HTMLInputElement).checked,
+                }),
+            });
+            if (!res.ok) throw new Error(res.error);
             hideModal();
             loadCampaigns();
         } catch (e: any) {
@@ -696,11 +933,18 @@ function registerGlobals() {
             loadCampaigns();
         } catch (e: any) { alert('Hata: ' + e.message); }
     };
+    (window as any).__admEditCampaign = (id: string) => showEditCampaignModal(id);
     (window as any).__admDistributeModal = (id: string) => showDistributeModal(id);
     (window as any).__admEndCampaign = async (id: string) => {
-        if (!confirm('Kampanyayı sonlandır?')) return;
+        if (!confirm('Kampanyayi sonlandir?')) return;
         try {
             await admFetch(`/admin/campaign/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'ended' }) });
+            loadCampaigns();
+        } catch (e: any) { alert('Hata: ' + e.message); }
+    };
+    (window as any).__admToggleAutoDist = async (id: string, enable: boolean) => {
+        try {
+            await admFetch(`/admin/campaign/${id}`, { method: 'PUT', body: JSON.stringify({ autoDistribute: enable }) });
             loadCampaigns();
         } catch (e: any) { alert('Hata: ' + e.message); }
     };

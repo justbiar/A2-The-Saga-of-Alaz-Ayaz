@@ -45,7 +45,7 @@ export const ctx = {
     mpGameStarted: false,
     _mpSpawnUnit: null as ((team: 'fire' | 'ice', cardId: UnitType, lane: 'left' | 'mid' | 'right') => void) | null,
     _mpApplyPrompt: null as ((team: 'fire' | 'ice', promptId: string) => void) | null,
-    _mpTriggerWin: null as ((winner: 'fire' | 'ice', msg: string) => void) | null,
+    _mpTriggerWin: null as ((winner: 'fire' | 'ice', msg: string, isDisconnect?: boolean) => void) | null,
     _mpStartGame: null as (() => void) | null,
     _mpGameEnded: false,
 
@@ -75,6 +75,16 @@ export const ctx = {
     // ── Tower system ──
     spawnTower: null as (() => boolean) | null,
     disposeTowers: null as (() => void) | null,
+
+    // ── Flower system ──
+    spawnFlower: null as (() => boolean) | null,
+    disposeFlowers: null as (() => void) | null,
+
+    // ── Tree system ──
+    selectedTreeType: null as 'mana' | 'avx' | null,
+    spawnTree: null as (() => boolean) | null,
+    upgradeTree: null as ((index: number) => boolean) | null,
+    disposeTrees: null as (() => void) | null,
 
     // ── Cooldown ──
     skillCooldowns: {} as Record<string, number>,
@@ -122,4 +132,12 @@ export function resetGameState(): void {
     ctx.disposeTowers?.();
     ctx.spawnTower = null;
     ctx.disposeTowers = null;
+    ctx.disposeFlowers?.();
+    ctx.spawnFlower = null;
+    ctx.disposeFlowers = null;
+    ctx.disposeTrees?.();
+    ctx.spawnTree = null;
+    ctx.upgradeTree = null;
+    ctx.disposeTrees = null;
+    ctx.selectedTreeType = null;
 }

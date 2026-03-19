@@ -33,6 +33,7 @@ export default defineConfig({
                 { src: 'assets/character animation',  dest: 'assets' },
                 // { src: 'assets/*.glb',               dest: 'assets' },
                 { src: 'assets/base',                dest: 'assets' },
+                { src: 'assets/game asset',          dest: 'assets' },
                 { src: 'assets/video',               dest: 'assets' },
                 { src: 'assets/Effect and FX Pixel Part 12 Free', dest: 'assets' },
             ],

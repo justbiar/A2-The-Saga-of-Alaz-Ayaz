@@ -99,7 +99,9 @@ export type PromptEffectType =
     | 'healthome'         // heal base over time
     | 'recall'            // teleport all friendly units back to base + lane pick
     | 'unlucky'           // random lightning strikes on enemies
-    | 'tower_place';      // savunma kulesi kur (AVX maliyetli)
+    | 'tower_place'       // savunma kulesi kur (AVX maliyetli)
+    | 'flower_place'      // düşman kulesini yok eden çiçek ek
+    | 'tree_place';       // kaynak üreten ağaç dik
 
 export interface PromptCardDef {
     id: string;

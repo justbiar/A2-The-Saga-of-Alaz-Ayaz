@@ -6,7 +6,7 @@ import { ctx } from '../game/GameContext';
 import { t, TransKey } from '../i18n';
 import { profileService } from '../chain/ProfileService';
 import { leaderboardService } from '../chain/LeaderboardService';
-import { showWalletModal, lockGameUntilProfile } from './WalletUI';
+import { showWalletModal, lockGameUntilProfile, updateWalletAvatar } from './WalletUI';
 import { showToast } from './LobbyUI';
 
 // ─── DOM REFS ──────────────────────────────────────────────────────
@@ -175,8 +175,151 @@ export async function renderLocalLeaderboard(sortBy: 'wins' | 'weeklyWins' | 'be
     }
 }
 
+// ─── CAMPAIGN LEADERBOARD TOGGLE ──────────────────────────────────
+let _showCampaignLb = false;
+let _activeCampaignId: string | null = null;
+
+async function checkCampaignParticipation(): Promise<{ active: boolean; campaignId: string | null; joined: boolean }> {
+    try {
+        const res = await fetch('/api/campaigns/active');
+        const data = await res.json();
+        const campaigns = data.campaigns || [];
+        if (campaigns.length === 0) return { active: false, campaignId: null, joined: false };
+
+        const camp = campaigns[0];
+        if (!ctx.walletAddress) return { active: true, campaignId: camp.id, joined: false };
+
+        const infoRes = await fetch(`/api/campaign/${camp.id}/info?address=${ctx.walletAddress}`);
+        const info = await infoRes.json();
+        return { active: true, campaignId: camp.id, joined: info.joined || false };
+    } catch {
+        return { active: false, campaignId: null, joined: false };
+    }
+}
+
+async function renderCampaignLeaderboard(campaignId: string): Promise<void> {
+    const container = document.getElementById('lb-campaign-content')!;
+    container.style.display = 'block';
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:rgba(255,255,255,0.4)">Yukleniyor...</div>';
+
+    // Normal leaderboard elementlerini gizle
+    const podium = document.getElementById('lb-podium');
+    const prizePool = document.querySelector('.lb-prize-pool') as HTMLElement;
+    const sortTabs = document.querySelector('.lb-sort-tabs') as HTMLElement;
+    const tableWrap = document.querySelector('.lb-table-wrap') as HTMLElement;
+    if (podium) podium.style.display = 'none';
+    if (prizePool) prizePool.style.display = 'none';
+    if (sortTabs) sortTabs.style.display = 'none';
+    if (tableWrap) tableWrap.style.display = 'none';
+
+    try {
+        const res = await fetch(`/api/campaign/${campaignId}/leaderboard`);
+        const data = await res.json();
+        const entries = data.entries || [];
+
+        if (entries.length === 0) {
+            container.innerHTML = '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3)">Henuz katilimci yok</div>';
+            return;
+        }
+
+        const medals = ['🥇', '🥈', '🥉'];
+        container.innerHTML = `
+            <div class="camp-podium" style="margin:20px 0">
+                ${entries.slice(0, 3).map((e: any, i: number) => {
+                    const isMe = e.address.toLowerCase() === (ctx.walletAddress ?? '').toLowerCase();
+                    return `
+                    <div class="camp-podium-card camp-podium-${i + 1} ${isMe ? 'camp-is-me' : ''}">
+                        <div class="camp-podium-medal">${medals[i]}</div>
+                        <div class="camp-podium-name">${e.username}</div>
+                        <div class="camp-podium-points">${e.points}p</div>
+                        <div class="camp-podium-tasks">${e.tasksCompleted} gorev</div>
+                    </div>`;
+                }).join('')}
+            </div>
+            <div class="camp-lb-table-wrap">
+                <table class="camp-lb-table">
+                    <thead><tr><th>#</th><th>Oyuncu</th><th>Puan</th><th>Gorev</th></tr></thead>
+                    <tbody>
+                        ${entries.map((e: any) => {
+                            const isMe = e.address.toLowerCase() === (ctx.walletAddress ?? '').toLowerCase();
+                            return `
+                            <tr class="${isMe ? 'camp-is-me' : ''}">
+                                <td class="camp-lb-rank ${e.rank <= 3 ? 'camp-lb-rank-' + e.rank : ''}">${e.rank}</td>
+                                <td>${e.username}</td>
+                                <td class="camp-lb-points">${e.points}</td>
+                                <td>${e.tasksCompleted}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch {
+        container.innerHTML = '<div style="text-align:center;padding:20px;color:#ff6b6b">Leaderboard yuklenemedi</div>';
+    }
+}
+
+function showNormalLeaderboard(): void {
+    const container = document.getElementById('lb-campaign-content')!;
+    container.style.display = 'none';
+    container.innerHTML = '';
+    const podium = document.getElementById('lb-podium');
+    const prizePool = document.querySelector('.lb-prize-pool') as HTMLElement;
+    const sortTabs = document.querySelector('.lb-sort-tabs') as HTMLElement;
+    const tableWrap = document.querySelector('.lb-table-wrap') as HTMLElement;
+    if (podium) podium.style.display = '';
+    if (prizePool) prizePool.style.display = '';
+    if (sortTabs) sortTabs.style.display = '';
+    if (tableWrap) tableWrap.style.display = '';
+}
+
+function initLeaderboardToggle(): void {
+    const toggleNormal = document.getElementById('lb-toggle-normal');
+    const toggleCampaign = document.getElementById('lb-toggle-campaign');
+    if (!toggleNormal || !toggleCampaign) return;
+
+    toggleNormal.addEventListener('click', () => {
+        _showCampaignLb = false;
+        toggleNormal.classList.add('active');
+        toggleCampaign.classList.remove('active');
+        showNormalLeaderboard();
+    });
+
+    toggleCampaign.addEventListener('click', () => {
+        _showCampaignLb = true;
+        toggleCampaign.classList.add('active');
+        toggleNormal.classList.remove('active');
+        if (_activeCampaignId) renderCampaignLeaderboard(_activeCampaignId);
+    });
+}
+
+let _toggleInitialized = false;
+
 // ─── LEADERBOARD SCREEN ────────────────────────────────────────────
 export async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'betWon' = 'wins'): Promise<void> {
+    // Kampanya toggle kontrolu
+    const toggleEl = document.getElementById('lb-campaign-toggle');
+    const campStatus = await checkCampaignParticipation();
+
+    if (toggleEl) {
+        if (campStatus.active && campStatus.joined) {
+            toggleEl.style.display = 'flex';
+            _activeCampaignId = campStatus.campaignId;
+            if (!_toggleInitialized) {
+                initLeaderboardToggle();
+                _toggleInitialized = true;
+            }
+            // Ilk acilista kampanya leaderboard goster
+            if (_showCampaignLb && _activeCampaignId) {
+                renderCampaignLeaderboard(_activeCampaignId);
+                return; // normal leaderboard render'i atla
+            }
+        } else {
+            toggleEl.style.display = 'none';
+            _showCampaignLb = false;
+            showNormalLeaderboard();
+        }
+    }
     const serverPool = await leaderboardService.getServerPrizePool();
     const info = serverPool
         ? { totalFee: serverPool.totalFee, week: serverPool.week, enabled: true, prizes: serverPool.prizes, minPool: 0.1, enoughForDistribution: serverPool.totalFee >= 0.1 }
@@ -516,6 +659,7 @@ export function renderProfileScreen(): void {
             if (ok) {
                 leaderboardService.upsertPlayer(ctx.walletAddress!, username, avatarVal);
                 lockGameUntilProfile(false);
+                updateWalletAvatar();
                 renderProfileScreen();
             } else {
                 alert(t('pfsRegisterFailed' as TransKey));
@@ -632,6 +776,7 @@ export function renderProfileScreen(): void {
                 } catch {
                     localStorage.setItem(`a2_avatar_${ctx.walletAddress!.toLowerCase()}`, dataUrl);
                 }
+                updateWalletAvatar();
                 showToast('Görsel güncellendi', 2000);
             };
             reader.readAsDataURL(file);
@@ -653,6 +798,7 @@ export function renderProfileScreen(): void {
             await profileService.registerProfile(profile!.username, url);
             leaderboardService.upsertPlayer(ctx.walletAddress!, profile!.username, url);
             avatarUrlInput.value = '';
+            updateWalletAvatar();
             showToast('Görsel güncellendi', 2000);
         };
     }

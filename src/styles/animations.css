@@ -1,3 +1,9 @@
+@keyframes treePopup {
+  0% { opacity:1; transform:translate(-50%,0) scale(0.8); }
+  30% { opacity:1; transform:translate(-50%,-16px) scale(1.1); }
+  100% { opacity:0; transform:translate(-50%,-40px) scale(0.9); }
+}
+
 @keyframes shimmerSlide {
   0% {
     transform: translateX(-120%) skewX(-15deg);
@@ -230,4 +236,10 @@
     transform: scale(1);
     opacity: 1;
   }
+}
+
+@keyframes flowerFxFloat {
+  0% { opacity: 0.9; transform: translate(-50%, -80%) scale(0.6); }
+  40% { opacity: 1; transform: translate(-50%, -120%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -160%) scale(1.1); }
 }

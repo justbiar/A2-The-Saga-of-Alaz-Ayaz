@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="/src/styles/screens/characters.css">
   <link rel="stylesheet" href="/src/styles/screens/story.css">
   <link rel="stylesheet" href="/src/styles/screens/leaderboard.css">
+  <link rel="stylesheet" href="/src/styles/screens/campaign.css">
   <link rel="stylesheet" href="/src/styles/screens/profile.css">
   <link rel="stylesheet" href="/src/styles/screens/lobby.css">
   <link rel="stylesheet" href="/src/styles/screens/game.css">
@@ -35,8 +36,8 @@
       <button class="header-nav-item" id="nav-characters-header" data-i18n="characters">KARAKTERLER</button>
       <button class="header-nav-item" id="nav-story-header" data-i18n="story">HİKAYE</button>
       <button class="header-nav-item" id="nav-map-header" data-i18n="mapNav">HARİTA</button>
+      <button class="header-nav-item" id="nav-campaign-header" data-i18n="navCampaign" style="color:#f59e0b;">KAMPANYA</button>
       <button class="header-nav-item" id="nav-leaderboard-header" data-i18n="navLeaderboard">LİDER TABLOSU</button>
-      <button class="header-nav-item" id="nav-profile-header" data-i18n="navProfile">PROFİL</button>
       <button class="header-nav-item" id="nav-settings-header" data-i18n="navSettings">AYARLAR</button>
       <button class="header-nav-item" id="nav-faucet-header" data-i18n="navFaucet">FAUCET</button>
       <button class="header-nav-item" id="nav-report-header" data-i18n="navReport" style="color:#ff6b6b;">REPORT</button>
@@ -52,7 +53,8 @@
       </div>
       <div id="wallet-wrapper" style="position:relative;">
         <button id="wallet-btn">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0">
+          <img id="wallet-avatar" src="" alt="" style="display:none;width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid rgba(80,200,120,0.6);flex-shrink:0;margin:-4px 0;">
+          <svg id="wallet-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0">
             <rect x="1" y="4" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none" />
             <path d="M4 4V3a2 2 0 012-2h4a2 2 0 012 2v1" stroke="currentColor" stroke-width="1.5" fill="none" />
             <circle cx="11" cy="9" r="1.5" fill="currentColor" />
@@ -277,6 +279,17 @@
 
   </div>
 
+  <!-- ═══ CAMPAIGN SCREEN ═══ -->
+  <div id="campaign-screen">
+    <div class="camp-header">
+      <div class="camp-eyebrow" data-i18n="campaignEyebrow">KAMPANYA ODULLERI</div>
+      <div class="camp-title" data-i18n-html="campaignTitle">KAMPANYA <span>ODULLERI</span></div>
+    </div>
+    <div id="camp-content" class="camp-content">
+      <div class="camp-loading" data-i18n="campaignLoading">Yukleniyor...</div>
+    </div>
+  </div>
+
   <!-- ═══ LEADERBOARD SCREEN ═══ -->
   <div id="leaderboard-screen">
 
@@ -284,6 +297,13 @@
       <div class="lb-screen-eyebrow" data-i18n="lbEyebrow">Avaland · Haftalık Ödül Sistemi</div>
       <div class="lb-screen-title" data-i18n="lbTitle">LİDER <span>TABLOSU</span></div>
     </div>
+
+    <!-- Campaign/Normal toggle -->
+    <div id="lb-campaign-toggle" class="lb-campaign-toggle" style="display:none">
+      <button class="lb-toggle-btn" id="lb-toggle-normal" data-i18n="normalLb">Genel</button>
+      <button class="lb-toggle-btn active" id="lb-toggle-campaign" data-i18n="campaignLb">Kampanya</button>
+    </div>
+    <div id="lb-campaign-content" style="display:none"></div>
 
     <!-- Top 3 Podium Cards -->
     <div class="lb-podium" id="lb-podium"></div>
@@ -1105,46 +1125,46 @@
 
           <!-- BET PANEL -->
           <div class="bet-panel" id="bet-panel">
-            <div class="bet-panel-label">AVAX BAHSİ <span class="bet-optional">(opsiyonel)</span></div>
+            <div class="bet-panel-label"><span data-i18n="betPanelTitle">AVAX BAHSİ</span> <span class="bet-optional" data-i18n="betOptional">(opsiyonel)</span></div>
             <div class="bet-no-wallet" id="bet-no-wallet" style="display:none">
-              <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px">Bahis için önce cüzdanını bağla</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px" data-i18n="betNoWalletNote">Bahis için önce cüzdanını bağla</div>
             </div>
             <div class="bet-guest-wait" id="bet-guest-wait" style="display:none">
-              <div style="font-size:12px;color:rgba(255,255,255,0.5)">Host bahis teklif ederse burada görünecek</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.5)" data-i18n="betGuestWaitNote">Host bahis teklif ederse burada görünecek</div>
             </div>
             <div class="bet-host-section" id="bet-host-section">
               <div class="bet-input-row">
                 <input id="bet-amount-input" class="bet-amount-input" type="number" min="0.01" max="100" step="0.01" placeholder="0.00" />
                 <span class="bet-avax-label">AVAX</span>
               </div>
-              <div class="bet-fee-note">%2 platform ücreti kesilir · Kazanan %98 alır</div>
-              <button class="bet-send-btn" id="bet-send-btn">Bahis Teklif Et</button>
+              <div class="bet-fee-note" data-i18n="betFeeNote">%2 platform ücreti kesilir · Kazanan %98 alır</div>
+              <button class="bet-send-btn" id="bet-send-btn" data-i18n="betSendBtn">Bahis Teklif Et</button>
             </div>
             <div class="bet-offer-sent" id="bet-offer-sent" style="display:none">
-              <div class="bet-status-row"><span id="bet-offer-sent-text">Rakipin bahsi kabul etmesi bekleniyor…</span></div>
-              <button class="bet-cancel-btn" id="bet-cancel-btn">İptal</button>
+              <div class="bet-status-row"><span id="bet-offer-sent-text" data-i18n="betOfferSentText">Rakipin bahsi kabul etmesi bekleniyor…</span></div>
+              <button class="bet-cancel-btn" id="bet-cancel-btn" data-i18n="cancel">İptal</button>
             </div>
             <div class="bet-incoming" id="bet-incoming" style="display:none">
-              <div class="bet-incoming-label">Rakip bahis teklif etti</div>
+              <div class="bet-incoming-label" data-i18n="betIncomingLabel">Rakip bahis teklif etti</div>
               <div class="bet-incoming-amount" id="bet-incoming-amount">— AVAX</div>
-              <div class="bet-fee-note">Kabul edersen sen de aynı miktarı yatırırsın. Kazanan %98 alır.</div>
+              <div class="bet-fee-note" data-i18n="betIncomingFeeNote">Kabul edersen sen de aynı miktarı yatırırsın. Kazanan %98 alır.</div>
               <div class="bet-incoming-btns">
-                <button class="bet-accept-btn" id="bet-accept-btn">✓ Kabul Et</button>
-                <button class="bet-decline-btn" id="bet-decline-btn">✕ Reddet</button>
+                <button class="bet-accept-btn" id="bet-accept-btn" data-i18n="betAcceptBtn">✓ Kabul Et</button>
+                <button class="bet-decline-btn" id="bet-decline-btn" data-i18n="betDeclineBtn">✕ Reddet</button>
               </div>
             </div>
             <div class="bet-locked" id="bet-locked" style="display:none">
-              <div class="bet-locked-row"><span id="bet-locked-text">Bahis kilitlendi</span></div>
+              <div class="bet-locked-row"><span id="bet-locked-text" data-i18n="betLockedText">Bahis kilitlendi</span></div>
               <div class="bet-locked-amount" id="bet-locked-amount"></div>
             </div>
-            <div class="bet-skip-note" id="bet-skip-note" style="display:none">Bahissiz oynuyorsunuz.</div>
+            <div class="bet-skip-note" id="bet-skip-note" style="display:none" data-i18n="betSkipNote">Bahissiz oynuyorsunuz.</div>
             <div class="bet-counter" id="bet-counter" style="display:none">
-              <div style="font-size:11px;color:rgba(255,185,50,0.7);margin-bottom:6px">Farklı bir miktar öner:</div>
+              <div style="font-size:11px;color:rgba(255,185,50,0.7);margin-bottom:6px" data-i18n="betCounterLabel">Farklı bir miktar öner:</div>
               <div class="bet-input-row">
                 <input id="bet-counter-input" class="bet-amount-input" type="number" min="0.01" max="100" step="0.01" placeholder="0.01" />
                 <span class="bet-avax-label">AVAX</span>
               </div>
-              <button class="bet-send-btn" id="bet-counter-btn">Teklif Gönder</button>
+              <button class="bet-send-btn" id="bet-counter-btn" data-i18n="betCounterSendBtn">Teklif Gönder</button>
             </div>
           </div>
 

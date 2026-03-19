@@ -105,7 +105,13 @@ export class BaseBuilding {
     takeDamage(amount: number): void {
         if (this.destroyed) return;
         this.hp = Math.max(0, this.hp - amount);
-        if (this.hp === 0) this.onDestroyed();
+        if (this.hp <= 0) this.onDestroyed();
+    }
+
+    /** Force set HP from sync — used by guest to match host state */
+    forceSetHp(newHp: number): void {
+        this.hp = Math.max(0, newHp);
+        if (this.hp <= 0 && !this.destroyed) this.onDestroyed();
     }
 
     isDestroyed(): boolean {

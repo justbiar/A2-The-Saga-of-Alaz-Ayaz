@@ -71,17 +71,26 @@ export class CameraSystem {
         // Full mouse controls: left=orbit, right=pan, scroll=zoom
         this.camera.attachControl(canvas, true);
 
-        // ── Keyboard ──
+        // ── Keyboard (scene observable) ──
         scene.onKeyboardObservable.add(info => {
             const key = info.event.code;
             if (info.type === KeyboardEventTypes.KEYDOWN) {
                 this.keys[key] = true;
                 if (key === 'Space' && !this._ghostMode) { this.panX = 0; this.panZ = 0; }
-                if (key === 'KeyG') this._toggleGhostMode();
             }
             if (info.type === KeyboardEventTypes.KEYUP) {
                 this.keys[key] = false;
             }
+        });
+
+        // G tuşu: window-level (ghost modda scene input'ları kapalı olabilir)
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyG') this._toggleGhostMode();
+            // Ghost moddayken key state'i de güncelle
+            if (this._ghostMode) this.keys[e.code] = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            if (this._ghostMode) this.keys[e.code] = false;
         });
     }
 
@@ -202,10 +211,10 @@ export class CameraSystem {
         const el = document.createElement('div');
         el.id = 'ghost-cam-label';
         el.style.cssText = `
-            position:fixed; top:12px; left:50%; transform:translateX(-50%);
-            background:rgba(0,0,0,0.75); color:#0f0; padding:6px 18px;
-            border-radius:6px; font:bold 14px monospace; z-index:9999;
-            pointer-events:none; letter-spacing:1px;
+            position:fixed; bottom:8px; left:8px;
+            background:rgba(0,0,0,0.6); color:rgba(255,255,255,0.7); padding:4px 10px;
+            border-radius:4px; font:11px monospace; z-index:9999;
+            pointer-events:none;
         `;
         this._updateGhostLabelText(el);
         document.body.appendChild(el);
@@ -217,7 +226,7 @@ export class CameraSystem {
     }
 
     private _updateGhostLabelText(el: HTMLElement): void {
-        el.textContent = `GHOST CAM [G çık] | Hız: ${this._ghostSpeed.toFixed(1)}x | Mouse: bakış | Yön tuşları: hareket | Q/E: yukarı/aşağı | Scroll: hız`;
+        el.textContent = `Ghost [G] | ${this._ghostSpeed.toFixed(1)}x | Yön:hareket Q/E:yukarı/aşağı`;
     }
 
     // ── Ghost camera tick ────────────────────────────────────────────

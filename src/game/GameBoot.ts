@@ -15,8 +15,10 @@ import { AvaShardManager } from '../scene/map/AvaShard';
 import { BaseBuilding } from '../scene/map/BaseBuilding';
 import { WinConditionSystem } from '../scene/systems/winConditionSystem';
 import { WinCondition, calcManaGain, calcBoardControl, checkEquilibriumSurge } from '../game/GameState';
-import { PROMPT_DEFS } from '../ecs/PromptCard';
+import { PROMPT_DEFS, getTreeCard } from '../ecs/PromptCard';
 import { DefenseTower, UPGRADE_COST } from '../scene/units/DefenseTower';
+import { DefenseFlower, FLOWER_SLOTS, FLOWER_AVX_COST } from '../scene/units/DefenseFlower';
+import { ResourceTree, TREE_SLOTS, TREE_PLANT_COST, TREE_UPGRADE_COST } from '../scene/units/ResourceTree';
 import { switchBGM, lowerBGMForGame, getCurrentTrack, preloadSFX } from '../audio/SoundManager';
 import { mpService } from '../multiplayer/MultiplayerService';
 import { betService, BET_FEE_PERCENT } from '../chain/BetService';
@@ -28,7 +30,7 @@ import { ctx, resetGameState, MAX_MANA, MANA_REGEN_INTERVAL, type GameMode } fro
 import { showScreen, canvas } from '../ui/ScreenRouter';
 import { showToast, triggerWin } from '../ui/LobbyUI';
 import { showBetResultOnWin, showWinScreen, winOverlay, winTitle, winMessage } from '../ui/WinScreenUI';
-import { buildCardUI, updateManaUI, updateAvxUI, setupLaneOverlay, setupPlayerKeyboard, initDraft, tickDraft, cleanupDraft, resetAllCooldowns, startCooldownTicker, applyPromptEffect, aiPool, enemyTeam, showBoruCard } from '../ui/CardUI';
+import { buildCardUI, buildPromptUI, updateManaUI, updateAvxUI, setupLaneOverlay, setupPlayerKeyboard, initDraft, tickDraft, cleanupDraft, resetAllCooldowns, startCooldownTicker, applyPromptEffect, aiPool, enemyTeam, showBoruCard } from '../ui/CardUI';
 import { setup2Player, updateIceManaUI } from './TwoPlayerSetup';
 import { spawnAvxCoin } from './AvxCoinSystem';
 import { showMiniPlayer, hideMiniPlayer } from '../ui/SettingsUI';
@@ -313,6 +315,7 @@ export function cleanupGame(): void {
     }
 
     mpService.disconnect();
+    betService.reset(); // Oyun bitti, bet state temizle (yeni oyun için)
     winOverlay.classList.remove('show');
     canvas.style.display = 'none';
 
@@ -412,6 +415,9 @@ export async function boot(mode: GameMode): Promise<void> {
     ctx.spawnTower = (): boolean => {
         const team = ctx.selectedTeam as 'fire' | 'ice';
         const slots = towers[team];
+        // Yok edilen kuleleri null'a çevir
+        if (slots[0] && slots[0].isDestroyed) slots[0] = null;
+        if (slots[1] && slots[1].isDestroyed) slots[1] = null;
         const slot = slots[0] === null ? 0 : slots[1] === null ? 1 : -1;
         if (slot === -1) { showToast('Maksimum 2 kule', 1500); return false; }
         const tower = new DefenseTower(scene, team, slot as 0 | 1);
@@ -436,6 +442,190 @@ export async function boot(mode: GameMode): Promise<void> {
             }
         }
     };
+
+    // ── Çiçek sistemi ──────────────────────────────────────────────
+    const flowers: DefenseFlower[] = [];
+
+    ctx.spawnFlower = (): boolean => {
+        const team = ctx.selectedTeam as 'fire' | 'ice';
+        const slots = FLOWER_SLOTS[team];
+        // Dolu olmayan slot bul
+        const usedPositions = flowers.filter(f => f.team === team && !f.isDestroyed).map(f => f.position);
+        const freeSlot = slots.find(s => !usedPositions.some(u => Vector3.Distance(u, s) < 1));
+        if (!freeSlot) { showToast('Tüm çiçek slotları dolu', 1500); return false; }
+        const flower = new DefenseFlower(scene, team, freeSlot);
+        flowers.push(flower);
+        return true;
+    };
+
+    ctx.disposeFlowers = (): void => {
+        for (const f of flowers) f.dispose();
+        flowers.length = 0;
+    };
+
+    // ── Tree (Agac) sistemi ──────────────────────────────────────────
+    const trees: ResourceTree[] = [];
+
+    function showTreeChoicePopup(tree: ResourceTree): void {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position:fixed; inset:0; z-index:9000; display:flex; align-items:center; justify-content:center;
+            background:rgba(0,0,0,0.6);
+        `;
+        const box = document.createElement('div');
+        box.style.cssText = `
+            background:rgba(20,15,30,0.95); border:1px solid rgba(255,255,255,0.15);
+            border-radius:12px; padding:24px 32px; text-align:center; min-width:280px;
+            color:#eee; font-family:monospace;
+        `;
+        const treeName = tree.treeType === 'mana' ? t('treeManaName' as any) : t('treeAvxName' as any);
+        box.innerHTML = `
+            <div style="font-size:14px;font-weight:bold;margin-bottom:12px;">
+                ${treeName} L${tree.level}
+            </div>
+            <div style="font-size:12px;margin-bottom:16px;color:#aaa;">
+                ${t('treeUpgradeCurrent' as any)}: ${tree.interval.toFixed(1)}s ${t('treeUpgradeInterval' as any)} ${tree.amount}x ${t('treeUpgradeProduction' as any)}
+            </div>
+            <div style="display:flex;gap:12px;justify-content:center;">
+                <button id="tree-choice-speed" style="
+                    padding:10px 20px; border:none; border-radius:8px; cursor:pointer;
+                    background:linear-gradient(135deg,#0066ff,#00aaff); color:#fff; font-weight:bold;
+                    font-size:13px;
+                ">${t('treeChoiceSpeed' as any)}<br><span style='font-size:10px;opacity:0.8;'>${t('treeChoiceSpeedDesc' as any)}</span></button>
+                <button id="tree-choice-amount" style="
+                    padding:10px 20px; border:none; border-radius:8px; cursor:pointer;
+                    background:linear-gradient(135deg,#ff6600,#ffaa00); color:#fff; font-weight:bold;
+                    font-size:13px;
+                ">${t('treeChoiceAmount' as any)}<br><span style='font-size:10px;opacity:0.8;'>${t('treeChoiceAmountDesc' as any)}</span></button>
+            </div>
+        `;
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        box.querySelector('#tree-choice-speed')!.addEventListener('click', () => {
+            tree.applyChoice('speed');
+            overlay.remove();
+        });
+        box.querySelector('#tree-choice-amount')!.addEventListener('click', () => {
+            tree.applyChoice('amount');
+            overlay.remove();
+        });
+    }
+
+    ctx.spawnTree = (): boolean => {
+        if (!ctx.selectedTreeType) return false;
+        const team = ctx.selectedTeam as 'fire' | 'ice';
+        const slots = TREE_SLOTS[team];
+        const usedPositions = trees.filter(t => t.team === team && !t.isDestroyed).map(t => t.position);
+        if (usedPositions.length >= 2) { showToast('Maksimum 2 agac', 1500); return false; }
+        const freeSlot = slots.find(s => !usedPositions.some(u => Vector3.Distance(u, s) < 1));
+        if (!freeSlot) { showToast('Bos slot yok', 1500); return false; }
+        const tree = new ResourceTree(scene, team, ctx.selectedTreeType, freeSlot);
+        tree.onUpgradeChoice = (t) => showTreeChoicePopup(t);
+        tree.onUpgradeRequest = () => upgradeTreeDirect(tree);
+        trees.push(tree);
+        return true;
+    };
+
+    function upgradeTreeDirect(tree: ResourceTree): boolean {
+        if (tree.isDestroyed || tree.level >= 5) { showToast('Maksimum seviye', 1500); return false; }
+        const cost = TREE_UPGRADE_COST[tree.level] ?? 99;
+        // Mana ağacı AVX ile, AVX ağacı mana ile upgrade
+        if (tree.treeType === 'mana') {
+            if (ctx.playerAvx < cost) { showToast(`Yeterli AVX yok (${cost} AVX lazim)`, 1500); return false; }
+            if (tree.startUpgrade()) { ctx.playerAvx -= cost; updateAvxUI(); return true; }
+        } else {
+            if (ctx.playerMana < cost) { showToast(`Yeterli Mana yok (${cost} Mana lazim)`, 1500); return false; }
+            if (tree.startUpgrade()) { ctx.playerMana -= cost; updateManaUI(); return true; }
+        }
+        return false;
+    }
+
+    ctx.upgradeTree = (index: number): boolean => {
+        const myTrees = trees.filter(t => t.team === (ctx.selectedTeam as 'fire' | 'ice') && !t.isDestroyed);
+        const tree = myTrees[index];
+        if (!tree) return false;
+        return upgradeTreeDirect(tree);
+    };
+
+    ctx.disposeTrees = (): void => {
+        for (const t of trees) t.dispose();
+        trees.length = 0;
+    };
+
+    // ── AI tower/flower spawn (bot için) ──────────────────────────
+    function aiSpawnTower(team: 'fire' | 'ice'): boolean {
+        const slots = towers[team];
+        if (slots[0] && slots[0].isDestroyed) slots[0] = null;
+        if (slots[1] && slots[1].isDestroyed) slots[1] = null;
+        const slot = slots[0] === null ? 0 : slots[1] === null ? 1 : -1;
+        if (slot === -1) return false;
+        const tower = new DefenseTower(scene, team, slot as 0 | 1);
+        tower.onUpgradeRequest = () => {}; // AI upgrade ayrı handle edilir
+        slots[slot] = tower;
+        return true;
+    }
+
+    function aiUpgradeTower(team: 'fire' | 'ice'): boolean {
+        for (const t of towers[team]) {
+            if (t && !t.isDestroyed && t.level < 5) {
+                t.levelUp();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function aiSpawnFlower(team: 'fire' | 'ice'): boolean {
+        const slots = FLOWER_SLOTS[team];
+        const usedPositions = flowers.filter(f => f.team === team && !f.isDestroyed).map(f => f.position);
+        const freeSlot = slots.find(s => !usedPositions.some(u => Vector3.Distance(u, s) < 1));
+        if (!freeSlot) return false;
+        flowers.push(new DefenseFlower(scene, team, freeSlot));
+        return true;
+    }
+
+    // ── AI strateji: tower + flower + upgrade zamanlama ──────────
+    let aiTowerAccum = 0;
+    let aiFlowerAccum = 0;
+    let aiUpgradeAccum = 0;
+    const AI_TOWER_DELAY  = 50;  // 50s sonra ilk tower (draft sonrası)
+    const AI_FLOWER_DELAY = 75;  // 75s sonra ilk çiçek
+    const AI_UPGRADE_INTERVAL = 30; // her 30s upgrade dene
+
+    function tickAiStructures(dt: number): void {
+        if (ctx.gameMode !== 'realtime') return;
+        const eTeam = enemyTeam();
+
+        aiTowerAccum += dt;
+        aiFlowerAccum += dt;
+        aiUpgradeAccum += dt;
+
+        // Tower kur (max 2)
+        if (aiTowerAccum >= AI_TOWER_DELAY) {
+            const towerCount = towers[eTeam].filter(t => t !== null && !t.isDestroyed).length;
+            if (towerCount < 2) {
+                aiSpawnTower(eTeam);
+                aiTowerAccum = AI_TOWER_DELAY - 15; // sonraki 15s sonra
+            }
+        }
+
+        // Tower upgrade
+        if (aiUpgradeAccum >= AI_UPGRADE_INTERVAL) {
+            aiUpgradeAccum = 0;
+            aiUpgradeTower(eTeam);
+        }
+
+        // Çiçek ek (oyuncu tower'ı varsa)
+        if (aiFlowerAccum >= AI_FLOWER_DELAY) {
+            const playerTeam = ctx.selectedTeam as 'fire' | 'ice';
+            const playerHasTower = towers[playerTeam].some(t => t !== null && !t.isDestroyed);
+            if (playerHasTower) {
+                aiSpawnFlower(eTeam);
+                aiFlowerAccum = AI_FLOWER_DELAY - 20; // sonraki 20s sonra
+            }
+        }
+    }
     // Multiplayer guest: base hasari host'tan gelir, lokal hesaplama yapma
     if (mode === 'multiplayer' && mpService.role === 'guest') {
         um.skipBaseDamage = true;
@@ -520,11 +710,8 @@ export async function boot(mode: GameMode): Promise<void> {
             const def = PROMPT_DEFS.find(p => p.id === promptId);
             if (def) applyPromptEffect(def, team);
         };
-        ctx._mpTriggerWin = (winner, msg) => {
+        ctx._mpTriggerWin = (winner, msg, isDisconnect) => {
             // Guard: use overlay visibility, NOT _mpGameEnded flag
-            // (_mpGameEnded is set earlier in render loop to prevent re-entry,
-            //  but triggerWin is called async from fetch callback — so the old
-            //  guard blocked the win overlay from ever showing)
             if (winOverlay.classList.contains('show')) return;
             ctx._mpGameEnded = true;
 
@@ -542,7 +729,89 @@ export async function boot(mode: GameMode): Promise<void> {
                 const didWin = myTeam === winner;
                 const myAddr = ctx.walletAddress;
 
+                if (myAddr && isDisconnect) {
+                    // ── Disconnect: oyuncuya sor ──
+                    const totalPrize = betService.state.amount * 2 * 0.98;
+                    const dialog = document.createElement('div');
+                    dialog.id = 'disconnect-bet-dialog';
+                    dialog.style.cssText = 'margin:20px auto 0;padding:22px 24px;background:rgba(20,18,30,0.95);border:1px solid rgba(255,185,50,0.3);border-radius:14px;text-align:center;max-width:420px;';
+                    dialog.innerHTML = `
+                        <div style="color:rgba(255,255,255,0.65);font-family:'Inter',sans-serif;font-size:12px;line-height:1.7;margin-bottom:14px">${t('disconnBetExplain')}</div>
+                        <div style="color:#ffc94d;font-family:'Cinzel',serif;font-size:18px;font-weight:700;margin-bottom:18px">${betService.state.amount} AVAX</div>
+                        <div style="display:flex;gap:10px;justify-content:center">
+                            <button id="dbd-split-btn" style="flex:1;padding:11px 16px;border:1px solid rgba(85,255,153,0.3);background:rgba(85,255,153,0.08);border-radius:8px;color:#55ff99;font-family:'Inter',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;cursor:pointer;transition:all 0.2s">${t('disconnBetSplit')}</button>
+                            <button id="dbd-claim-btn" style="flex:1;padding:11px 16px;border:1px solid rgba(255,185,50,0.3);background:rgba(255,185,50,0.08);border-radius:8px;color:#ffc94d;font-family:'Inter',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;cursor:pointer;transition:all 0.2s">${t('disconnBetClaim')}</button>
+                        </div>
+                        <div id="dbd-status" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.4);display:none"></div>
+                    `;
+                    winOverlay.appendChild(dialog);
+
+                    const disableBtns = () => {
+                        (document.getElementById('dbd-split-btn') as HTMLButtonElement).disabled = true;
+                        (document.getElementById('dbd-claim-btn') as HTMLButtonElement).disabled = true;
+                        document.getElementById('dbd-status')!.style.display = 'block';
+                    };
+
+                    // Paralar esit dagilsin
+                    document.getElementById('dbd-split-btn')!.onclick = async () => {
+                        disableBtns();
+                        document.getElementById('dbd-status')!.textContent = t('disconnBetSplitDone');
+                        try {
+                            await fetch(`/api/match/${betService.state.matchId}/refund-both`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ address: myAddr }),
+                            });
+                        } catch {
+                            await betService.reportResult(myAddr, false);
+                        }
+                        betService.state.status = 'cancelled';
+                        showBetResultOnWin(false, 0, null);
+                        dialog.remove();
+                    };
+
+                    // Galibiyetimi ilan et
+                    document.getElementById('dbd-claim-btn')!.onclick = async () => {
+                        disableBtns();
+                        document.getElementById('dbd-status')!.textContent = t('disconnBetWaiting');
+                        const res = await betService.reportResult(myAddr, true);
+                        if (res?.status === 'settled') {
+                            showToast(`${t('disconnBetClaimDone')} TX: ${res.txHash?.slice(0, 10)}…`);
+                            showBetResultOnWin(true, res.prizeAVAX ?? totalPrize, res.txHash ?? null);
+                            leaderboardService.recordResult(myAddr, 'win', res.prizeAVAX ?? totalPrize, 0, 'online');
+                            dialog.remove();
+                        } else if (res?.status === 'disputed') {
+                            showBetResultOnWin(false, 0, null);
+                            dialog.remove();
+                        } else if (res?.status === 'waiting') {
+                            let polls = 0;
+                            const pollTimer = setInterval(async () => {
+                                polls++;
+                                const match = await betService.pollMatchStatus();
+                                if (match && match.status === 'settled') {
+                                    clearInterval(pollTimer);
+                                    betService.state.status = 'settled';
+                                    showToast(`${t('disconnBetClaimDone')} TX: ${(match as any).txHash?.slice(0, 10) ?? ''}…`);
+                                    showBetResultOnWin(true, totalPrize, (match as any).txHash ?? null);
+                                    leaderboardService.recordResult(myAddr, 'win', totalPrize, 0, 'online');
+                                    dialog.remove();
+                                } else if (match && ['disputed', 'refunded'].includes(match.status)) {
+                                    clearInterval(pollTimer);
+                                    betService.state.status = 'cancelled';
+                                    showBetResultOnWin(false, 0, null);
+                                    dialog.remove();
+                                } else if (polls >= 50) {
+                                    clearInterval(pollTimer);
+                                    document.getElementById('dbd-status')!.textContent = t('disconnBetWaiting');
+                                }
+                            }, 3000);
+                        }
+                    };
+                    return; // Dialog acildi, auto-report yapma
+                }
+
                 if (myAddr) {
+                    // ── Normal oyun sonu (disconnect degil) — otomatik rapor ──
                     const totalPrize = betService.state.amount * 2 * 0.98;
                     betService.reportResult(myAddr, didWin).then(async (res) => {
                         if (!res) {
@@ -584,9 +853,9 @@ export async function boot(mode: GameMode): Promise<void> {
                                     betService.state.status = 'cancelled';
                                     showToast('Anlasmazlik — iade yapiliyor');
                                     showBetResultOnWin(false, 0, null);
-                                } else if (polls >= 10) {
+                                } else if (polls >= 50) {
                                     clearInterval(pollTimer);
-                                    showToast('Rakip sonuc bildirmedi — otomatik cozum bekleniyor');
+                                    showToast('Sunucu otomatik cozecek — birkaç dakika bekleyin');
                                 }
                             }, 3000);
                         }
@@ -638,6 +907,39 @@ export async function boot(mode: GameMode): Promise<void> {
             }
         }
 
+        // Flower tick
+        for (const f of flowers) {
+            if (f.isDestroyed) continue;
+            const enemyT = f.team === 'fire' ? 'ice' : 'fire';
+            const enemyTowers = [towers[enemyT][0], towers[enemyT][1]];
+            f.tick(dt, enemyTowers);
+        }
+
+        // Tree tick
+        for (const tree of trees) {
+            if (tree.isDestroyed) continue;
+            const result = tree.tick(dt);
+            if (result) {
+                const isPlayer = tree.team === (ctx.selectedTeam as 'fire' | 'ice');
+                if (result.type === 'mana') {
+                    if (isPlayer) {
+                        ctx.playerMana = Math.min(MAX_MANA, ctx.playerMana + result.amount);
+                        updateManaUI();
+                    } else {
+                        ctx.iceMana = Math.min(MAX_MANA, ctx.iceMana + result.amount);
+                    }
+                } else {
+                    if (isPlayer) {
+                        ctx.playerAvx += result.amount;
+                        updateAvxUI();
+                    } else {
+                        ctx.iceAvx += result.amount;
+                    }
+                }
+                tree.showProducePopup(result.amount);
+            }
+        }
+
         // Multiplayer: sadece HOST win condition kontrol eder (desync onleme)
         // Guest sadece game_over P2P mesajini veya server poll'u dinler
         const isHost = mode === 'multiplayer' && mpService.role === 'host';
@@ -651,6 +953,8 @@ export async function boot(mode: GameMode): Promise<void> {
                     if (localWinner) {
                         console.log(`[MP-WIN] Host win detected: ${localWinner}, wc=${wc}`);
                         ctx._mpGameEnded = true;
+                        // Win aninda son base HP'leri gonder — guest desync olmasin
+                        mpService.sendBaseSync(fireBase.hp, iceBase.hp);
                         fetch('/api/win-report', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -686,6 +990,7 @@ export async function boot(mode: GameMode): Promise<void> {
         if (mode === 'realtime') tickRealtime(dt, um);
         if (mode === 'twoplayer') tick2P(dt);
         if (mode === 'multiplayer') tickMultiplayer(dt);
+        tickAiStructures(dt);
         tickDraft(dt);
 
         uiAccum += dt;
@@ -741,6 +1046,50 @@ export async function boot(mode: GameMode): Promise<void> {
     await new Promise(r => setTimeout(r, 300));
     clearInterval(tipInterval);
     loadingScreen.style.display = 'none';
+
+    // Agac secimi — loading bittikten sonra goster
+    await new Promise<void>((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.id = 'tree-select-overlay';
+        overlay.style.cssText = `
+            position:fixed; inset:0; z-index:9500; display:flex; align-items:center; justify-content:center;
+            background:rgba(0,0,0,0.75);
+        `;
+        const box = document.createElement('div');
+        box.style.cssText = `
+            background:rgba(20,15,30,0.95); border:1px solid rgba(255,255,255,0.15);
+            border-radius:14px; padding:28px 36px; text-align:center; min-width:320px;
+            color:#eee; font-family:monospace;
+        `;
+        box.innerHTML = `
+            <div style="font-size:16px;font-weight:bold;margin-bottom:6px;">${t('treeSelectTitle' as any)}</div>
+            <div style="font-size:11px;color:#999;margin-bottom:20px;">${t('treeSelectDesc' as any)}</div>
+            <div style="display:flex;gap:16px;justify-content:center;">
+                <div id="tree-pick-mana" style="cursor:pointer;border:2px solid rgba(170,68,255,0.4);border-radius:12px;padding:12px;width:130px;transition:border-color 0.2s;">
+                    <img src="/assets/game%20asset/cicekler/manaagaci.png" style="width:80px;height:80px;object-fit:contain;">
+                    <div style="font-weight:bold;color:#cc88ff;margin-top:8px;">${t('treeManaName' as any)}</div>
+                    <div style="font-size:10px;color:#aaa;margin-top:4px;">${t('treeManaDesc' as any)}</div>
+                </div>
+                <div id="tree-pick-avx" style="cursor:pointer;border:2px solid rgba(255,136,0,0.4);border-radius:12px;padding:12px;width:130px;transition:border-color 0.2s;">
+                    <img src="/assets/game%20asset/cicekler/avxagaci.png" style="width:80px;height:80px;object-fit:contain;">
+                    <div style="font-weight:bold;color:#ffaa44;margin-top:8px;">${t('treeAvxName' as any)}</div>
+                    <div style="font-size:10px;color:#aaa;margin-top:4px;">${t('treeAvxDesc' as any)}</div>
+                </div>
+            </div>
+        `;
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        const pick = (type: 'mana' | 'avx') => {
+            ctx.selectedTreeType = type;
+            overlay.remove();
+            ctx.playerDeck.push(getTreeCard(type));
+            buildPromptUI();
+            resolve();
+        };
+        box.querySelector('#tree-pick-mana')!.addEventListener('click', () => pick('mana'));
+        box.querySelector('#tree-pick-avx')!.addEventListener('click', () => pick('avx'));
+    });
 
     if (mode === 'multiplayer') {
         const waitOverlay = document.createElement('div');
@@ -804,14 +1153,5 @@ export async function boot(mode: GameMode): Promise<void> {
     window.addEventListener('resize', _resizeHandler);
     (window as any).__a2ResizeHandler = _resizeHandler;
 
-    // ── DEBUG: Shift+T → anında kule kur (test için) ──────────────
-    const _debugKeyHandler = (e: KeyboardEvent) => {
-        if (e.shiftKey && e.key === 'T' && isGameReady && ctx.spawnTower) {
-            ctx.playerAvx += 5; // geçici AVX ver
-            const ok = ctx.spawnTower();
-            if (!ok) showToast('2 kule limiti doldu', 1200);
-        }
-    };
-    window.addEventListener('keydown', _debugKeyHandler);
-    (window as any).__a2DebugKeyHandler = _debugKeyHandler;
+    // Shift+T debug handler kaldırıldı — tower artık kart ile kurulur
 }

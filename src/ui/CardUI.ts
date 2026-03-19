@@ -5,7 +5,8 @@
 import { ctx, MAX_MANA } from '../game/GameContext';
 import { t, TransKey } from '../i18n';
 import { CARD_DEFS, AI_CARDS, CardDef, UnitType } from '../ecs/Unit';
-import { PROMPT_DEFS, getTowerCard } from '../ecs/PromptCard';
+import { PROMPT_DEFS, getTowerCard, getFlowerCard, getTreeCard } from '../ecs/PromptCard';
+import { TREE_PLANT_COST } from '../scene/units/ResourceTree';
 import type { PromptCardDef } from '../ecs/types';
 import type { UnitManager } from '../ecs/UnitManager';
 import { mpService } from '../multiplayer/MultiplayerService';
@@ -31,10 +32,15 @@ const draftPopupTitle = document.getElementById('draft-popup-title');
 
 let _laneUm: UnitManager | null = null;
 let _draftSelectedCard: PromptCardDef | null = null;
+let _pendingCardAnim: Animation | null = null;
 
 // ─── TEAM HELPERS ──────────────────────────────────────────────────
 export function playerCardDefs(): CardDef[] {
-    return ctx.selectedTeam === 'ice' ? AI_CARDS : CARD_DEFS;
+    const cards = ctx.selectedTeam === 'ice' ? AI_CARDS : CARD_DEFS;
+    // Sıra: savaşçılar (orta) → paralı askerler (sağ)
+    const fighters = cards.filter(c => c.avxCost === 0);
+    const mercs = cards.filter(c => c.avxCost > 0);
+    return [...fighters, ...mercs];
 }
 
 export function enemyTeam(): 'fire' | 'ice' {
@@ -50,10 +56,13 @@ export function aiPool(): UnitType[] {
 
 // ─── CARD ANIMATIONS ───────────────────────────────────────────────
 export function playCardAnim(el: HTMLElement): void {
+    const a = el.dataset.fanAngle ?? '0';
+    const y = el.dataset.fanY ?? '0';
+    const base = `rotate(${a}deg) translateY(${y}px)`;
     el.animate([
-        { transform: 'translateY(0) scale(1)' },
-        { transform: 'translateY(-35px) scale(1.1)' },
-        { transform: 'translateY(0) scale(1)' },
+        { transform: base },
+        { transform: `rotate(${a}deg) translateY(${parseFloat(y) - 35}px) scale(1.1)` },
+        { transform: base },
     ], { duration: 300, easing: 'ease-out' });
 }
 
@@ -106,6 +115,7 @@ export function buildCardUI(um: UnitManager): void {
     playerCardDefs().forEach((card, idx) => {
         cardContainer.appendChild(createCardEl(card, um, idx));
     });
+    applyFanLayout();
 }
 
 function createCardEl(card: CardDef, um: UnitManager, idx = 0): HTMLElement {
@@ -146,10 +156,21 @@ function createCardEl(card: CardDef, um: UnitManager, idx = 0): HTMLElement {
     });
 
     el.addEventListener('mouseenter', () => {
-        if (!el.classList.contains('card-disabled'))
+        if (!el.classList.contains('card-disabled')) {
             el.style.boxShadow = `0 0 28px ${card.glowColor}, 0 4px 18px rgba(0,0,0,0.6)`;
+            el.style.transform = 'translateY(-30px) scale(1.08) rotate(0deg)';
+            el.style.zIndex = '100';
+        }
     });
-    el.addEventListener('mouseleave', () => { el.style.boxShadow = ''; });
+    el.addEventListener('mouseleave', () => {
+        el.style.boxShadow = '';
+        if (ctx.pendingCard?.id === card.id) return;
+        const a = el.dataset.fanAngle ?? '0';
+        const y = el.dataset.fanY ?? '0';
+        const z = el.dataset.fanZ ?? '1';
+        el.style.transform = `rotate(${a}deg) translateY(${y}px)`;
+        el.style.zIndex = z;
+    });
 
     return el;
 }
@@ -171,19 +192,47 @@ export function setupLaneOverlay(um: UnitManager): void {
         });
     });
     document.getElementById('lane-cancel')!.addEventListener('click', () => {
+        const prev = ctx.pendingCard;
         ctx.pendingCard = null;
         laneOverlay.style.display = 'none';
+        cancelPendingCardAnim();
+        if (prev) restorePendingCardFan(prev.id);
         highlightCard(null);
     });
 }
 
 export function showLaneOverlay(cardEl: HTMLElement): void {
+    cancelPendingCardAnim();
     laneOverlay.style.display = 'flex';
-    cardEl.animate([
-        { transform: 'translateY(-22px) scale(1.05)' },
-        { transform: 'translateY(-28px) scale(1.07)' },
-        { transform: 'translateY(-22px) scale(1.05)' },
+    const a = cardEl.dataset.fanAngle ?? '0';
+    const y = parseFloat(cardEl.dataset.fanY ?? '0');
+    _pendingCardAnim = cardEl.animate([
+        { transform: `rotate(${a}deg) translateY(${y - 22}px) scale(1.05)` },
+        { transform: `rotate(${a}deg) translateY(${y - 28}px) scale(1.07)` },
+        { transform: `rotate(${a}deg) translateY(${y - 22}px) scale(1.05)` },
     ], { duration: 600, iterations: Infinity });
+}
+
+function cancelPendingCardAnim(): void {
+    if (_pendingCardAnim) {
+        _pendingCardAnim.cancel();
+        _pendingCardAnim = null;
+    }
+}
+
+/** Seçili/pending kartı fan pozisyonuna geri döndür */
+function restorePendingCardFan(cardId: string): void {
+    cancelPendingCardAnim();
+    const el = document.getElementById(`card-${cardId}`);
+    if (el) {
+        const a = el.dataset.fanAngle ?? '0';
+        const y = el.dataset.fanY ?? '0';
+        const z = el.dataset.fanZ ?? '1';
+        el.style.transform = `rotate(${a}deg) translateY(${y}px)`;
+        el.style.zIndex = z;
+        el.style.boxShadow = '';
+        el.style.outline = '';
+    }
 }
 
 export function deployPendingCard(lane: number): void {
@@ -192,6 +241,7 @@ export function deployPendingCard(lane: number): void {
     const card = ctx.pendingCard;
     ctx.pendingCard = null;
     laneOverlay.style.display = 'none';
+    restorePendingCardFan(card.id);
 
     if (card.avxCost > 0) {
         ctx.playerAvx -= card.avxCost;
@@ -221,11 +271,16 @@ export function highlightCard(cardId: string | null): void {
         if (!el) return;
         if (c.id === cardId) {
             el.style.outline = '2px solid rgba(255,220,50,0.9)';
-            el.style.transform = 'translateY(-14px) scale(1.07)';
+            el.style.transform = 'translateY(-20px) scale(1.07) rotate(0deg)';
+            el.style.zIndex = '50';
             el.style.boxShadow = `0 0 28px rgba(255,200,0,0.7), 0 4px 18px rgba(0,0,0,0.6)`;
         } else {
             el.style.outline = '';
-            el.style.transform = '';
+            const a = el.dataset.fanAngle ?? '0';
+            const y = el.dataset.fanY ?? '0';
+            const z = el.dataset.fanZ ?? '1';
+            el.style.transform = `rotate(${a}deg) translateY(${y}px)`;
+            el.style.zIndex = z;
             el.style.boxShadow = '';
         }
     });
@@ -255,6 +310,8 @@ export function setupPlayerKeyboard(): void {
             if (ctx.pendingCard?.id === card.id) {
                 ctx.pendingCard = null;
                 laneOverlay.style.display = 'none';
+                cancelPendingCardAnim();
+                restorePendingCardFan(card.id);
                 highlightCard(null);
                 return;
             }
@@ -280,8 +337,11 @@ export function setupPlayerKeyboard(): void {
         }
 
         if (key === fb.cancel && ctx.pendingCard) {
+            const prev = ctx.pendingCard;
             ctx.pendingCard = null;
             laneOverlay.style.display = 'none';
+            cancelPendingCardAnim();
+            restorePendingCardFan(prev.id);
             highlightCard(null);
         }
     });
@@ -369,6 +429,52 @@ export function buildPromptUI(): void {
     ctx.playerDeck.forEach(def => {
         promptContainer.appendChild(createPromptCardEl(def));
     });
+    applyFanLayout();
+}
+
+// ─── FAN / YELPAZE LAYOUT ───────────────────────────────────────────
+export function applyFanLayout(): void {
+    const row = document.getElementById('card-row');
+    if (!row) return;
+
+    const divider = row.querySelector('.card-divider') as HTMLElement;
+    if (divider) divider.style.display = 'none';
+
+    const pCards = Array.from(promptContainer.querySelectorAll('.prompt-card')) as HTMLElement[];
+    const cCards = Array.from(cardContainer.querySelectorAll('.game-card')) as HTMLElement[];
+    const allCards = [...pCards, ...cCards];
+    const n = allCards.length;
+    if (n === 0) return;
+
+    const maxAngle = 15;
+    const maxYOffset = 45;
+    const overlap = Math.min(50, 20 + n * 2);
+
+    allCards.forEach((card, i) => {
+        const center = (n - 1) / 2;
+        const norm = n > 1 ? (i - center) / center : 0;
+        const angle = norm * maxAngle;
+        const yOff = norm * norm * maxYOffset;
+        const zIdx = n + 1 - Math.round(Math.abs(norm) * n);
+
+        card.dataset.fanAngle = String(angle);
+        card.dataset.fanY = String(yOff);
+        card.dataset.fanZ = String(zIdx);
+
+        card.style.transformOrigin = 'bottom center';
+        card.style.transform = `rotate(${angle}deg) translateY(${yOff}px)`;
+        card.style.zIndex = String(zIdx);
+
+        const isFirst = (pCards.indexOf(card) === 0) || (cCards.indexOf(card) === 0);
+        card.style.marginLeft = isFirst ? '0' : `-${overlap}px`;
+    });
+
+    // Karakter kartları prompt kartlarıyla bitişik olsun
+    if (cCards.length > 0 && pCards.length > 0) {
+        cardContainer.style.marginLeft = `-${overlap}px`;
+    } else {
+        cardContainer.style.marginLeft = '0';
+    }
 }
 
 function createPromptCardEl(def: PromptCardDef): HTMLElement {
@@ -404,6 +510,43 @@ function createPromptCardEl(def: PromptCardDef): HTMLElement {
             return;
         }
 
+        // Flower kart özel akışı
+        if (def.effectType === 'flower_place') {
+            if (ctx.playerAvx < (def.avxCost ?? 3)) { pulseRed(el); return; }
+            if (!ctx.spawnFlower?.()) { pulseRed(el); return; }
+            ctx.playerAvx -= (def.avxCost ?? 3);
+            updateAvxUI();
+            updatePromptStates();
+            playCardAnim(el);
+            return;
+        }
+
+        // Tree kart özel akışı: dikili agac < 2 ise dik, yoksa upgrade dene
+        if (def.effectType === 'tree_place') {
+            if (!ctx.spawnTree) { pulseRed(el); return; }
+            // Mana ağacı AVX ile, AVX ağacı mana ile dikilir
+            const isManaTree = ctx.selectedTreeType === 'mana';
+            const canAfford = isManaTree
+                ? ctx.playerAvx >= TREE_PLANT_COST
+                : ctx.playerMana >= TREE_PLANT_COST;
+            if (canAfford && ctx.spawnTree()) {
+                if (isManaTree) {
+                    ctx.playerAvx -= TREE_PLANT_COST;
+                } else {
+                    ctx.playerMana -= TREE_PLANT_COST;
+                }
+            } else if (ctx.upgradeTree?.(0) || ctx.upgradeTree?.(1)) {
+                // Slot doluysa upgrade dene
+            } else {
+                pulseRed(el); return;
+            }
+            updateAvxUI();
+            updateManaUI();
+            updatePromptStates();
+            playCardAnim(el);
+            return;
+        }
+
         if (ctx.playerMana < def.manaCost) { pulseRed(el); return; }
         if ((ctx.skillCooldowns[def.id] ?? 0) > 0) { pulseRed(el); return; }
 
@@ -417,6 +560,22 @@ function createPromptCardEl(def: PromptCardDef): HTMLElement {
         updateManaUI();
         updatePromptStates();
         playCardAnim(el);
+    });
+
+    el.addEventListener('mouseenter', () => {
+        if (!el.classList.contains('card-disabled')) {
+            el.style.transform = 'translateY(-30px) scale(1.08) rotate(0deg)';
+            el.style.zIndex = '100';
+            el.style.boxShadow = '0 0 28px rgba(160, 80, 255, 0.65), 0 12px 28px rgba(0, 0, 0, 0.7)';
+        }
+    });
+    el.addEventListener('mouseleave', () => {
+        const a = el.dataset.fanAngle ?? '0';
+        const y = el.dataset.fanY ?? '0';
+        const z = el.dataset.fanZ ?? '1';
+        el.style.transform = `rotate(${a}deg) translateY(${y}px)`;
+        el.style.zIndex = z;
+        el.style.boxShadow = '';
     });
 
     return el;
@@ -435,8 +594,19 @@ export function updatePromptStates(): void {
         if (def.effectType === 'tower_place') {
             // tower kart: AVX yeterli mi + slot boş mu
             const hasAvx = ctx.playerAvx >= (def.avxCost ?? 5);
-            const hasSlot = !!ctx.spawnTower; // spawnTower null ise oyun başlamamış
+            const hasSlot = !!ctx.spawnTower;
             canPlay = canPlay && hasAvx && hasSlot;
+        } else if (def.effectType === 'flower_place') {
+            const hasAvx = ctx.playerAvx >= (def.avxCost ?? 3);
+            const hasSlot = !!ctx.spawnFlower;
+            canPlay = canPlay && hasAvx && hasSlot;
+        } else if (def.effectType === 'tree_place') {
+            const isManaTree = ctx.selectedTreeType === 'mana';
+            const hasResource = isManaTree
+                ? ctx.playerAvx >= TREE_PLANT_COST
+                : ctx.playerMana >= TREE_PLANT_COST;
+            const hasSlot = !!ctx.spawnTree;
+            canPlay = canPlay && hasResource && hasSlot;
         } else {
             const onCooldown = (ctx.skillCooldowns[def.id] ?? 0) > 0;
             const isRecallUsed = def.effectType === 'recall' && ctx.recallUsed;
@@ -590,36 +760,81 @@ export function applyPromptEffect(def: PromptCardDef, forTeam?: 'fire' | 'ice'):
 }
 
 function showEnemyPicker(enemies: import('../ecs/Unit').Unit[], um: UnitManager, playerTeam: 'fire' | 'ice'): void {
-    let overlay = document.getElementById('ouroboros-overlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'ouroboros-overlay';
-        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;';
-        document.body.appendChild(overlay);
-    }
-    overlay.innerHTML = `<div style="color:#cc55ff;font-size:22px;font-weight:bold;margin-bottom:8px;">${t('ouroborosTitle')}</div>`;
+    // Harita üzerinden düşman seçme modu
+    const banner = document.createElement('div');
+    banner.id = 'ouroboros-banner';
+    banner.style.cssText = `
+        position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:9999;
+        background:rgba(10,5,20,0.95);border:2px solid rgba(204,85,255,0.6);
+        border-radius:12px;padding:12px 28px;
+        display:flex;align-items:center;gap:14px;
+        box-shadow:0 0 40px rgba(204,85,255,0.2);
+        animation:fadeUp 0.3s ease;
+    `;
+    banner.innerHTML = `
+        <span style="font-size:20px;">&#9866;</span>
+        <span style="font-family:'Cinzel',serif;font-size:13px;color:#cc55ff;letter-spacing:1.5px;font-weight:700;">${t('ouroborosTitle' as any)}</span>
+        <button id="ouroboros-cancel" style="padding:6px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:rgba(255,255,255,0.5);font-size:10px;cursor:pointer;letter-spacing:1px;">${t('cancel' as any)}</button>
+    `;
+    document.body.appendChild(banner);
 
+    // Düşman birimlerini highlight et (mor glow)
+    const highlights = new Map<import('../ecs/Unit').Unit, any[]>();
     for (const enemy of enemies) {
-        const btn = document.createElement('button');
-        btn.style.cssText = 'padding:10px 24px;font-size:16px;background:#1a1a2e;color:#fff;border:2px solid #cc55ff;border-radius:8px;cursor:pointer;';
-        btn.textContent = `${enemy.type.toUpperCase()} (HP: ${Math.round(enemy.hp)}, ATK: ${enemy.stats.attack})`;
-        btn.addEventListener('click', () => {
-            um.convertUnit(enemy, playerTeam);
-            ctx.ouroborosMode = false;
-            overlay!.remove();
+        const origColors: any[] = [];
+        enemy.mesh.getChildMeshes().forEach(c => {
+            if (c.material && 'emissiveColor' in c.material) {
+                origColors.push({ mesh: c, color: (c.material as any).emissiveColor?.clone?.() || null });
+                (c.material as any).emissiveColor = { r: 0.5, g: 0.1, b: 0.7 };
+            }
         });
-        overlay.appendChild(btn);
+        highlights.set(enemy, origColors);
     }
 
-    const cancelBtn = document.createElement('button');
-    cancelBtn.style.cssText = 'padding:8px 20px;font-size:14px;background:#333;color:#aaa;border:1px solid #555;border-radius:6px;cursor:pointer;margin-top:10px;';
-    cancelBtn.textContent = t('cancel');
-    cancelBtn.addEventListener('click', () => {
-        ctx.ouroborosMode = false;
-        ctx.playerMana += 5;
-        overlay!.remove();
-    });
-    overlay.appendChild(cancelBtn);
+    const canvas = ctx._engine?.getRenderingCanvas();
+    if (!canvas) { cleanup(false); return; }
+
+    function cleanup(used: boolean) {
+        canvas?.removeEventListener('pointerdown', onPick);
+        banner.remove();
+        // Glow'ları geri al
+        for (const [enemy, origColors] of highlights) {
+            if (enemy.state === 'dead') continue;
+            for (const oc of origColors) {
+                if (oc.color && oc.mesh.material && 'emissiveColor' in oc.mesh.material) {
+                    (oc.mesh.material as any).emissiveColor = oc.color;
+                }
+            }
+        }
+        if (!used) {
+            ctx.ouroborosMode = false;
+            ctx.playerMana += 5; // iptal edince manayı geri ver
+        }
+    }
+
+    function onPick(evt: PointerEvent) {
+        const scene = ctx._scene;
+        if (!scene) return;
+        const pickResult = scene.pick(evt.offsetX, evt.offsetY);
+        if (!pickResult?.hit || !pickResult.pickedMesh) return;
+
+        // Tıklanan mesh'in hangi düşman birime ait olduğunu bul
+        for (const enemy of enemies) {
+            if (enemy.state === 'dead') continue;
+            const isMatch = enemy.mesh === pickResult.pickedMesh
+                || enemy.mesh.getChildMeshes().includes(pickResult.pickedMesh as any);
+            if (isMatch) {
+                um.convertUnit(enemy, playerTeam);
+                ctx.ouroborosMode = false;
+                cleanup(true);
+                return;
+            }
+        }
+    }
+
+    canvas.addEventListener('pointerdown', onPick);
+
+    document.getElementById('ouroboros-cancel')!.onclick = () => cleanup(false);
 }
 
 function showRecallLanePicker(allies: import('../ecs/Unit').Unit[], um: UnitManager, team: 'fire' | 'ice'): void {
@@ -734,6 +949,14 @@ export function initDraft(): void {
     ctx.draftPopupOpen = false;
     ctx.recallUsed = false;
 
+    // Çiçek kartı oyunun başından itibaren mevcut
+    ctx.playerDeck.push(getFlowerCard(ctx.selectedTeam));
+
+    // Agac kartı (secilen tipe göre)
+    if (ctx.selectedTreeType) {
+        ctx.playerDeck.push(getTreeCard(ctx.selectedTreeType));
+    }
+
     const pool = [...PROMPT_DEFS];
     for (let i = 0; i < 2; i++) {
         const idx = Math.floor(Math.random() * pool.length);
@@ -748,7 +971,8 @@ export function initDraft(): void {
 
 export function tickDraft(dt: number): void {
     if (ctx.draftPopupOpen) return;
-    if (ctx.playerDeck.length >= 8) {
+    const skillCount = ctx.playerDeck.filter(d => d.effectType !== 'tower_place' && d.effectType !== 'flower_place' && d.effectType !== 'tree_place').length;
+    if (skillCount >= 6 && getAvailableDraftCards().length === 0) {
         if (draftTimerEl) draftTimerEl.style.display = 'none';
         return;
     }
@@ -780,7 +1004,8 @@ function openDraftPopup(): void {
     const shuffled = [...available].sort(() => Math.random() - 0.5);
     let offered = shuffled.slice(0, Math.min(2, shuffled.length));
 
-    const isSwapMode = ctx.playerDeck.length >= 5;
+    const skillCardCount = ctx.playerDeck.filter(d => d.effectType !== 'tower_place' && d.effectType !== 'flower_place' && d.effectType !== 'tree_place').length;
+    const isSwapMode = skillCardCount >= 6;
     if (draftPopupTitle) draftPopupTitle.textContent = isSwapMode ? t('draftSwapTitle' as any) : t('draftTitle' as any);
 
     renderDraftCards(offered, isSwapMode);
@@ -840,7 +1065,9 @@ function showDeckForSwap(newCard: PromptCardDef): void {
     if (!draftDeckRow) return;
     draftDeckRow.innerHTML = '';
     draftDeckRow.style.display = 'flex';
-    for (const deckCard of ctx.playerDeck) {
+    // Tower ve flower kartları değiştirilemez (sabit)
+    const swappable = ctx.playerDeck.filter(d => d.effectType !== 'tower_place' && d.effectType !== 'flower_place' && d.effectType !== 'tree_place');
+    for (const deckCard of swappable) {
         const cardName = deckCard.nameKey ? t(deckCard.nameKey as any) : deckCard.name;
         const el = document.createElement('div');
         el.className = 'draft-deck-card';

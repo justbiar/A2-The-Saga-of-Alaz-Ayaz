@@ -21,6 +21,8 @@ const FUJI_CHAIN = {
 // ─── DOM REFS ──────────────────────────────────────────────────────
 const walletBtn = document.getElementById('wallet-btn') as HTMLButtonElement;
 const walletLabel = document.getElementById('wallet-label') as HTMLElement;
+const walletAvatar = document.getElementById('wallet-avatar') as HTMLImageElement;
+const walletIcon = document.getElementById('wallet-icon') as HTMLElement;
 const walletModal = document.getElementById('wallet-modal')!;
 const walletModalClose = document.getElementById('wallet-modal-close')!;
 const walletOptionsDiv = walletModal.querySelector('.wallet-options')!;
@@ -127,6 +129,7 @@ export async function connectWithProvider(provider: any, silent = false, rdns = 
             leaderboardService.upsertPlayer(ctx.walletAddress!, profileService.currentProfile.username);
             lockGameUntilProfile(false);
         }
+        updateWalletAvatar();
 
         syncOnChainLeaderboard().catch(() => { });
 
@@ -285,6 +288,8 @@ export function initWalletUI(): void {
         walletBtn.classList.remove('connected');
         walletBtn.style.borderColor = '';
         walletBtn.style.color = '';
+        walletAvatar.style.display = 'none';
+        walletIcon.style.display = '';
         lockGameUntilProfile(true);
         showScreen('home');
     });
@@ -324,4 +329,17 @@ export function initWalletUI(): void {
     }, 500);
 
     lockGameUntilProfile(true);
+}
+
+/** Wallet butonundaki avatari profil bilgisine gore guncelle */
+export function updateWalletAvatar(): void {
+    const profile = profileService.currentProfile;
+    if (profile && profile.avatarURI) {
+        walletAvatar.src = profile.avatarURI;
+        walletAvatar.style.display = '';
+        walletIcon.style.display = 'none';
+    } else {
+        walletAvatar.style.display = 'none';
+        walletIcon.style.display = '';
+    }
 }
