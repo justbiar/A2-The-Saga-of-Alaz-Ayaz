@@ -28,7 +28,9 @@ registerAbility({
     name: 'Dark Flame',
     trigger: 'on_attack',
     onAttack(attacker: Unit, target: Unit): void {
-        if (Math.random() < 0.30) {
+        const state = attacker.abilityState as any;
+        state._flameCount = (state._flameCount ?? 0) + 1;
+        if (state._flameCount % 3 === 0) {
             applyStatusEffect(target, {
                 type: 'burning',
                 duration: 3,
@@ -131,7 +133,9 @@ registerAbility({
     name: 'Yalın Ateş',
     trigger: 'on_attack',
     onAttack(attacker: Unit, target: Unit): void {
-        if (Math.random() < 0.30) {
+        const state = attacker.abilityState as any;
+        state._yalinCount = (state._yalinCount ?? 0) + 1;
+        if (state._yalinCount % 3 === 0) {
             applyStatusEffect(target, {
                 type: 'burning',
                 duration: 3,

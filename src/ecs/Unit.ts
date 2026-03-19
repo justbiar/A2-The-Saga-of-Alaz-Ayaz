@@ -199,7 +199,7 @@ export interface TowerData {
 }
 
 export interface Unit {
-    id: number;
+    id: string | number;
     team: Team;
     type: UnitType;
     mesh: Mesh;

@@ -18,7 +18,7 @@ export interface StatusEffect {
     type: StatusEffectType;
     duration: number;        // remaining seconds
     magnitude: number;       // strength (e.g. slow factor, DoT amount)
-    sourceUnitId: number;    // who applied this
+    sourceUnitId: string | number;    // who applied this
 }
 
 // ─── AI PROFILES ─────────────────────────────────────────────────────

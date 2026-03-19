@@ -43,7 +43,7 @@ export const ctx = {
 
     // ── Multiplayer ──
     mpGameStarted: false,
-    _mpSpawnUnit: null as ((team: 'fire' | 'ice', cardId: UnitType, lane: 'left' | 'mid' | 'right') => void) | null,
+    _mpSpawnUnit: null as ((team: 'fire' | 'ice', cardId: UnitType, lane: 'left' | 'mid' | 'right', unitId?: string) => void) | null,
     _mpApplyPrompt: null as ((team: 'fire' | 'ice', promptId: string) => void) | null,
     _mpTriggerWin: null as ((winner: 'fire' | 'ice', msg: string, isDisconnect?: boolean) => void) | null,
     _mpStartGame: null as (() => void) | null,

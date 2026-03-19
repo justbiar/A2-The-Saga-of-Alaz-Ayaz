@@ -21,9 +21,10 @@ export type MPMessage =
     | { type: 'ready'; team: 'fire' | 'ice' }
     | { type: 'loaded' }
     | { type: 'start' }
-    | { type: 'place'; cardId: string; lane: 'left' | 'mid' | 'right' }
+    | { type: 'place'; cardId: string; lane: 'left' | 'mid' | 'right'; unitId?: string }
     | { type: 'prompt'; promptId: string }
     | { type: 'sync'; mana: number; avx: number; turn: number }
+    | { type: 'unit_sync'; data: { id: string, hp: number, x: number, z: number, state: string, team: string }[] }
     | { type: 'ping'; ts: number }
     | { type: 'pong'; ts: number }
     | { type: 'surrender' }
@@ -312,8 +313,13 @@ export class MultiplayerService {
     }
 
     /** Birim yerleştirme gönder */
-    sendPlace(cardId: string, lane: 'left' | 'mid' | 'right') {
-        this.send({ type: 'place', cardId, lane });
+    sendPlace(cardId: string, lane: 'left' | 'mid' | 'right', unitId: string) {
+        this.send({ type: 'place', cardId, lane, unitId });
+    }
+
+    /** Tam senkron paketi (Host -> Guest) */
+    sendUnitSync(data: { id: string, hp: number, x: number, z: number, state: string, team: string }[]) {
+        this.send({ type: 'unit_sync', data });
     }
 
     /** Skill kart gönder */

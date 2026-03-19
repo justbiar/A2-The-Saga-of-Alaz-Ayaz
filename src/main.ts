@@ -172,6 +172,14 @@ document.getElementById('nav-leaderboard-header')?.addEventListener('click', () 
 document.getElementById('nav-profile-header')?.addEventListener('click', () => showScreen('profile'));
 document.getElementById('nav-settings-header')?.addEventListener('click', () => showScreen('settings'));
 document.getElementById('nav-faucet-header')?.addEventListener('click', () => openFaucetModal('donate'));
+document.getElementById('nav-play-header')?.addEventListener('click', () => {
+    if (!ctx.walletAddress || !profileService.currentProfile) {
+        showWalletModal();
+        showToast(t('walletConnectFirst' as any));
+        return;
+    }
+    showScreen('lobby');
+});
 document.getElementById('header-logo')?.addEventListener('click', () => showScreen('home'));
 document.getElementById('mode-back')!.addEventListener('click', () => showScreen('home'));
 document.getElementById('team-back')?.addEventListener('click', () => showScreen('mode-select'));
@@ -230,3 +238,73 @@ lockGameUntilProfile(true);
 
 // ─── START ──────────────────────────────────────────────────────────
 showScreen(_initScreen);
+
+// ─── TUTORIAL ───────────────────────────────────────────────────────
+(function initTutorial() {
+    const overlay    = document.getElementById('tutorial-overlay')!;
+    const slides     = Array.from(document.querySelectorAll<HTMLElement>('.tut-slide'));
+    const dots       = Array.from(document.querySelectorAll<HTMLElement>('.tut-dot'));
+    const prevBtn    = document.getElementById('tutorial-prev') as HTMLButtonElement;
+    const nextBtn    = document.getElementById('tutorial-next') as HTMLButtonElement;
+    const closeBtn   = document.getElementById('tutorial-close')!;
+    const skipCheck  = document.getElementById('tutorial-skip-check') as HTMLInputElement;
+    const navTutBtn  = document.getElementById('nav-tutorial-header')!;
+    const TOTAL      = slides.length;
+    let current      = 0;
+
+    function goTo(idx: number): void {
+        slides[current].style.display = 'none';
+        dots[current].classList.remove('active');
+        current = Math.max(0, Math.min(TOTAL - 1, idx));
+        slides[current].style.display = '';
+        dots[current].classList.add('active');
+        prevBtn.style.opacity = current === 0 ? '0.3' : '1';
+        
+        if (current === TOTAL - 1) {
+            nextBtn.removeAttribute('data-i18n');
+            nextBtn.textContent = '✕';
+        } else {
+            nextBtn.setAttribute('data-i18n', 'tutNext');
+            nextBtn.textContent = typeof t === 'function' ? t('tutNext') : 'NEXT →';
+        }
+
+        const eNum = document.getElementById('tut-eyebrow-num');
+        if (eNum) eNum.textContent = `0${current + 1} / 0${TOTAL}`;
+    }
+
+    function openTutorial(): void {
+        goTo(0);
+        overlay.classList.add('tut-open');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeTutorial(): void {
+        overlay.classList.remove('tut-open');
+        document.body.style.overflow = '';
+        if (skipCheck.checked) localStorage.setItem('a2_tutorial_seen', '1');
+    }
+
+    prevBtn.addEventListener('click', () => goTo(current - 1));
+    nextBtn.addEventListener('click', () => {
+        if (current === TOTAL - 1) { closeTutorial(); return; }
+        goTo(current + 1);
+    });
+    closeBtn.addEventListener('click', closeTutorial);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeTutorial(); });
+    dots.forEach(d => d.addEventListener('click', () => goTo(parseInt(d.dataset.dot!))));
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+        if (!overlay.classList.contains('tut-open')) return;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(current + 1);
+        if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(current - 1);
+        if (e.key === 'Escape') closeTutorial();
+    });
+
+    navTutBtn.addEventListener('click', openTutorial);
+
+    // First-time auto-open (after 1.5s, only if not dismissed before)
+    if (!localStorage.getItem('a2_tutorial_seen')) {
+        setTimeout(openTutorial, 1500);
+    }
+})();

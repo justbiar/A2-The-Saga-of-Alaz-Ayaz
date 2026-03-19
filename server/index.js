@@ -2172,8 +2172,12 @@ app.post('/api/campaign/:id/complete-task', rateLimit, (req, res) => {
 
     const addr = validateAddress(req.body?.address);
     if (!addr) return res.status(400).json({ error: 'Gecersiz address' });
-    const { taskId } = req.body ?? {};
+    const { taskId, proof } = req.body ?? {};
     if (!taskId) return res.status(400).json({ error: 'taskId gerekli' });
+
+    if (!proof || typeof proof !== 'string' || proof.trim().length < 3) {
+        return res.status(400).json({ error: 'Geçersiz kanıt (Link veya @kullaniciadi girmelisiniz)' });
+    }
 
     const key = addr.toLowerCase();
     if (!campaign.participants) campaign.participants = {};
@@ -2187,7 +2191,7 @@ app.post('/api/campaign/:id/complete-task', rateLimit, (req, res) => {
         return res.status(409).json({ error: 'Bu gorev zaten tamamlandi' });
     }
 
-    participant.completedTasks[taskId] = Date.now();
+    participant.completedTasks[taskId] = { ts: Date.now(), proof: proof.trim() };
 
     // Kampanya leaderboard guncelle
     if (!campaign.campaignLeaderboard) campaign.campaignLeaderboard = {};

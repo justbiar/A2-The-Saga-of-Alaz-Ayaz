@@ -19,7 +19,6 @@ import { renderLeaderboardScreen } from './ProfileLeaderboard';
 import { renderProfileScreen } from './ProfileLeaderboard';
 import { renderCampaignScreen } from './CampaignUI';
 import { initSettingsScreen } from './SettingsUI';
-import { showLightningAt } from './CardUI';
 
 export type Screen = 'home' | 'characters' | 'story' | 'map' | 'team-select' | 'mode-select' | 'lobby' | 'game' | 'leaderboard' | 'profile' | 'settings' | 'campaign';
 
@@ -44,7 +43,6 @@ const GAME_HUD = ['top-hud', 'board-control-meter', 'debug-ui', 'card-tray', 'su
 
 // ─── MAP PREVIEW ENGINE ────────────────────────────────────────────
 let _mapEngine: Engine | null = null;
-let _lightningDemoTimer: ReturnType<typeof setTimeout> | null = null;
 
 function startMapPreview(): void {
     const previewCanvas = document.getElementById('map-preview-canvas') as HTMLCanvasElement;
@@ -85,36 +83,9 @@ function startMapPreview(): void {
         if (mapScene.activeCamera) mapScene.render();
     });
     window.addEventListener('resize', () => engine.resize());
-
-    // Yıldırım efekt demo — map sekmesinde lane pozisyonlarında periyodik çakma
-    const DEMO_WORLD_POS = [
-        new Vector3(-8, 0, -12), new Vector3(0, 0, -8), new Vector3(8, 0, -12),
-        new Vector3(-8, 0, 12),  new Vector3(0, 0,  8), new Vector3(8, 0, 12),
-    ];
-    function mapWorldToScreen(wp: Vector3): { x: number; y: number } | null {
-        const rect = previewCanvas.getBoundingClientRect();
-        try {
-            const vm = cam.getViewMatrix();
-            const pm = cam.getProjectionMatrix();
-            const vp = Vector3.TransformCoordinates(wp, vm);
-            const cp = Vector3.TransformCoordinates(vp, pm);
-            return { x: rect.left + ((cp.x + 1) / 2) * rect.width, y: rect.top + ((1 - cp.y) / 2) * rect.height };
-        } catch { return null; }
-    }
-    function scheduleDemo(): void {
-        _lightningDemoTimer = setTimeout(() => {
-            if (!_mapEngine) return;
-            const wp = DEMO_WORLD_POS[Math.floor(Math.random() * DEMO_WORLD_POS.length)];
-            const s = mapWorldToScreen(wp);
-            if (s) showLightningAt(s.x, s.y);
-            scheduleDemo();
-        }, 1200 + Math.random() * 800);
-    }
-    scheduleDemo();
 }
 
 function stopMapPreview(): void {
-    if (_lightningDemoTimer !== null) { clearTimeout(_lightningDemoTimer); _lightningDemoTimer = null; }
     if (_mapEngine) { _mapEngine.dispose(); _mapEngine = null; }
 }
 

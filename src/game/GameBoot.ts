@@ -702,9 +702,9 @@ export async function boot(mode: GameMode): Promise<void> {
             }
         }
 
-        ctx._mpSpawnUnit = (team, cardId, lane) => {
+        ctx._mpSpawnUnit = (team, cardId, lane, unitId) => {
             const MP_LANE_MAP: Record<string, number> = { left: 0, mid: 1, right: 2 };
-            um.spawnUnit(cardId, team, MP_LANE_MAP[lane]);
+            um.spawnUnit(cardId, team, MP_LANE_MAP[lane], unitId);
         };
         ctx._mpApplyPrompt = (team, promptId) => {
             const def = PROMPT_DEFS.find(p => p.id === promptId);
@@ -984,6 +984,23 @@ export async function boot(mode: GameMode): Promise<void> {
             if (ctx._baseSyncAccum >= 0.25) {
                 ctx._baseSyncAccum = 0;
                 mpService.sendBaseSync(fireBase.hp, iceBase.hp);
+            }
+
+            const cc = ctx as any;
+            cc._unitSyncAccum = (cc._unitSyncAccum ?? 0) + dt;
+            if (cc._unitSyncAccum >= 1.0) {
+                cc._unitSyncAccum = 0;
+                const syncData = um.units
+                    .filter(u => u.state !== 'dead')
+                    .map(u => ({
+                        id: String(u.id),
+                        hp: Math.round(u.hp),
+                        x: Number(u.mesh.position.x.toFixed(2)),
+                        z: Number(u.mesh.position.z.toFixed(2)),
+                        state: u.state,
+                        team: u.team
+                    }));
+                mpService.sendUnitSync(syncData);
             }
         }
 

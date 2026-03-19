@@ -211,7 +211,7 @@ function renderCampaignContent(camp: any, container: HTMLElement): void {
                             ${done
                                 ? '<span class="camp-task-check">✓</span>'
                                 : userJoined
-                                    ? `<button class="camp-task-btn" data-task-id="${task.id}" data-task-url="${escHtml(task.url || '')}">${t('campaignTaskComplete' as TransKey)}</button>`
+                                    ? `<button class="camp-task-btn" data-task-id="${task.id}" data-task-type="${escHtml(task.type || '')}" data-task-url="${escHtml(task.url || '')}">${t('campaignTaskComplete' as TransKey)}</button>`
                                     : ''
                             }
                         </div>
@@ -327,8 +327,9 @@ function renderCampaignContent(camp: any, container: HTMLElement): void {
     container.querySelectorAll<HTMLButtonElement>('.camp-task-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const taskId = btn.dataset.taskId!;
+            const taskType = btn.dataset.taskType || 'custom';
             const taskUrl = btn.dataset.taskUrl;
-            completeTask(camp.id, taskId, taskUrl);
+            completeTask(camp.id, taskId, taskType, taskUrl);
         });
     });
 
@@ -385,30 +386,89 @@ async function joinCampaign(campaignId: string): Promise<void> {
     }
 }
 
+function showProofModal(taskType: string, onConfirm: (proof: string) => void) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    
+    const box = document.createElement('div');
+    box.style.cssText = 'background:rgba(20,12,4,0.98);border:1px solid rgba(255,185,50,0.3);border-radius:12px;padding:24px;width:90%;max-width:400px;text-align:center;box-shadow:0 0 40px rgba(0,0,0,0.8);';
+    
+    let titleStr = '';
+    let descStr = '';
+    let placeholderStr = '';
+
+    if (taskType === 'twitter_rt') {
+        titleStr = 'RETWEET LİNKİ GEREKLİ';
+        descStr = 'Lütfen yaptığınız <b>Retweet\'in bağlantısını (Link)</b> girin.<br><span style="color:#ff6b6b;font-size:11px;">(Yanlış linkler iptal edilir)</span>';
+        placeholderStr = 'https://x.com/kullanici/status/...';
+    } else if (taskType === 'twitter_follow' || taskType === 'twitter_like') {
+        titleStr = 'KULLANICI ADI GEREKLİ';
+        descStr = 'Lütfen bu görevi tamamladığınız <b>X (Twitter) kullanıcı adınızı</b> girin.<br><span style="color:#ff6b6b;font-size:11px;">(Yanlış isimler iptal edilir)</span>';
+        placeholderStr = '@kullaniciadi';
+    } else {
+        titleStr = 'GÖREV DOĞRULAMA';
+        descStr = 'Lütfen bu görevi tamamladığınıza dair kanıt (Link vb.) girin.';
+        placeholderStr = 'Kanıt...';
+    }
+
+    box.innerHTML = `
+        <div style="font-family:'Cinzel',serif;color:#ffc94d;font-size:16px;margin-bottom:12px;letter-spacing:1px;">${titleStr}</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.7);margin-bottom:20px;line-height:1.5;">${descStr}</div>
+        <input type="text" id="proof-input" placeholder="${placeholderStr}" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:12px;border-radius:6px;margin-bottom:20px;font-size:13px;outline:none;" />
+        <div style="display:flex;gap:10px;">
+            <button id="proof-cancel" style="flex:1;padding:10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#ccc;border-radius:6px;cursor:pointer;">İptal</button>
+            <button id="proof-submit" style="flex:1;padding:10px;background:rgba(255,185,50,0.15);border:1px solid rgba(255,185,50,0.4);color:#ffc94d;border-radius:6px;cursor:pointer;font-weight:bold;">Doğrula</button>
+        </div>
+    `;
+    
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    
+    const input = document.getElementById('proof-input') as HTMLInputElement;
+    input.focus();
+    
+    const submit = () => {
+        const val = input.value.trim();
+        if (val.length < 3) {
+            input.style.borderColor = '#ff6b6b';
+            return;
+        }
+        overlay.remove();
+        onConfirm(val);
+    };
+    
+    document.getElementById('proof-submit')!.onclick = submit;
+    document.getElementById('proof-cancel')!.onclick = () => overlay.remove();
+    input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+}
+
 // ── Gorev tamamla ────────────────────────────────────────────────────
-async function completeTask(campaignId: string, taskId: string, url?: string): Promise<void> {
+async function completeTask(campaignId: string, taskId: string, taskType: string, url?: string): Promise<void> {
     if (!ctx.walletAddress) return;
 
     if (url) {
         window.open(url, '_blank');
     }
 
-    try {
-        const data = await fetchJSON(`${API}/campaign/${campaignId}/complete-task`, {
-            method: 'POST',
-            body: JSON.stringify({ address: ctx.walletAddress, taskId }),
-        });
-        if (!data.ok) throw new Error(data.error);
-        userCompletedTasks[taskId] = Date.now();
-        renderCampaignScreen();
-    } catch (e: any) {
-        if (e.message.includes('zaten tamamlandi')) {
+    showProofModal(taskType, async (proof) => {
+        try {
+            const data = await fetchJSON(`${API}/campaign/${campaignId}/complete-task`, {
+                method: 'POST',
+                body: JSON.stringify({ address: ctx.walletAddress, taskId, proof }),
+            });
+            if (!data.ok) throw new Error(data.error);
+
             userCompletedTasks[taskId] = Date.now();
             renderCampaignScreen();
-        } else {
-            alert(t('campaignError' as TransKey) + ': ' + e.message);
+        } catch (e: any) {
+            if (e.message && e.message.includes('zaten tamamlandi')) {
+                userCompletedTasks[taskId] = Date.now();
+                renderCampaignScreen();
+            } else {
+                alert(t('campaignError' as TransKey) + ': ' + (e.message || String(e)));
+            }
         }
-    }
+    });
 }
 
 // ── Sponsor Modal ───────────────────────────────────────────────────

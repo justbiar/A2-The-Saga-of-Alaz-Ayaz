@@ -249,12 +249,21 @@ export function deployPendingCard(lane: number): void {
     } else if (!ctx.manaFrozen) {
         ctx.playerMana -= card.manaCost;
     }
-    _laneUm.spawnUnit(card.id as UnitType, ctx.selectedTeam, lane);
+
+    let structuralLane = lane;
+    if (ctx.selectedTeam === 'ice') {
+        if (lane === 0) structuralLane = 2;
+        else if (lane === 2) structuralLane = 0;
+    }
+
+    const unitId = `unit_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+
+    _laneUm.spawnUnit(card.id as UnitType, ctx.selectedTeam, structuralLane, unitId);
 
     if (ctx.gameMode === 'multiplayer') {
-        const laneKey = (['left', 'mid', 'right'] as const)[lane] ?? 'mid';
-        console.log(`[MP-SYNC] Sending place: ${card.id} lane=${laneKey} myTeam=${ctx.selectedTeam}`);
-        mpService.sendPlace(card.id, laneKey);
+        const laneKey = (['left', 'mid', 'right'] as const)[structuralLane] ?? 'mid';
+        console.log(`[MP-SYNC] Sending place: ${card.id} lane=${laneKey} myTeam=${ctx.selectedTeam} unitId=${unitId}`);
+        mpService.sendPlace(card.id, laneKey, unitId);
     }
 
     ctx.unitCooldowns[card.id] = UNIT_DEPLOY_COOLDOWN;

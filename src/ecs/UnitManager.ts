@@ -102,21 +102,21 @@ export class UnitManager {
     private ayazWalkContainer:   AssetContainer | null = null;
     private ayazAttackContainer: AssetContainer | null = null;
     private ayazDieContainer:    AssetContainer | null = null;
-    private ayazAnimMap = new Map<number, GLBAnimData>();
+    private ayazAnimMap = new Map<string | number, GLBAnimData>();
 
     private tulparWalkContainer: AssetContainer | null = null;
-    private tulparAnimMap = new Map<number, GLBAnimData>();
+    private tulparAnimMap = new Map<string | number, GLBAnimData>();
     // Şahmeran animation containers (walk + attack + die)
     private sahmeranWalkContainer:   AssetContainer | null = null;
     private sahmeranAttackContainer: AssetContainer | null = null;
     private sahmeranDieContainer:    AssetContainer | null = null;
-    private sahmeranAnimMap = new Map<number, GLBAnimData>();
+    private sahmeranAnimMap = new Map<string | number, GLBAnimData>();
     // Börü animation containers (walk + attack1 + attack2 + die)
     private boruWalkContainer:    AssetContainer | null = null;
     private boruAttackContainer:  AssetContainer | null = null;
     private boruAttackContainer2: AssetContainer | null = null;
     private boruDieContainer:     AssetContainer | null = null;
-    private boruAnimMap = new Map<number, GLBAnimData>();
+    private boruAnimMap = new Map<string | number, GLBAnimData>();
     /** Shard bonuses — set from main.ts each frame */
     public fireShard: ShardBonus = { manaRegen: 0, attackBonus: 0, speedBonus: 0 };
     public iceShard: ShardBonus = { manaRegen: 0, attackBonus: 0, speedBonus: 0 };
@@ -404,7 +404,7 @@ export class UnitManager {
         } catch { console.warn('⚠️ Spell effect texture not found'); }
     }
 
-    spawnUnit(type: UnitType, team: Team, lane?: number): Unit {
+    spawnUnit(type: UnitType, team: Team, lane?: number, assignedId?: string): Unit {
         // New map: fire base Z=-38, ice base Z=+38
         const spawnPos = team === 'fire'
             ? new Vector3(0, 0, -38)
@@ -424,7 +424,7 @@ export class UnitManager {
 
         const aiProfile = AI_PROFILES_MAP[type];
         const unit: Unit = {
-            id: nextId++,
+            id: assignedId || nextId++,
             team, type, mesh,
             hp: stats.maxHp, stats,
             state: 'walking',
@@ -516,6 +516,27 @@ export class UnitManager {
 
         return unit;
     }
+
+    syncUnits(data: { id: string | number, hp: number, x: number, z: number, state: string, team: string }[]) {
+        for (const pd of data) {
+            const unit = this.units.find(u => u.id === pd.id);
+            if (unit && unit.state !== 'dead') {
+                unit.hp = pd.hp;
+                
+                // Lerp ya da dogrudan atama — teleport engellemek icin cok ufaksa lerp
+                const distSq = (unit.mesh.position.x - pd.x) ** 2 + (unit.mesh.position.z - pd.z) ** 2;
+                if (distSq > 0.05) {
+                    unit.mesh.position.x = (unit.mesh.position.x + pd.x) / 2; // Smooth snapping
+                    unit.mesh.position.z = (unit.mesh.position.z + pd.z) / 2;
+                }
+
+                if (unit.state !== pd.state) {
+                    unit.state = pd.state as any;
+                }
+            }
+        }
+    }
+
 
     public buildLanePath(_from: number, _to: number, lane: number, team: Team): Vector3[] {
         // lane 0 = SOL  (X: -4→-14→-4, diamond konturunu takip eder)
@@ -1300,9 +1321,6 @@ export class UnitManager {
                             if (!this.skipBaseDamage) {
                                 targetBase.takeDamage(dmg);
                             }
-                            if (unit.type === 'od' || unit.type === 'tulpar') {
-                                this.flashAttackPos(unit, targetBase.position);
-                            }
                             this.showDamageNumberAt(targetBase.position, dmg);
                         }
                     }
@@ -1484,10 +1502,11 @@ export class UnitManager {
         let dmg = Math.max(1, (attacker.stats.attack + shardAtk + empowerBonus) - target.stats.armor)
             * factionMod * confMod * chargeMult;
 
-        // Critical hit: %5 chance — instant kill
-        const critChance = 0.05;
+        // Critical hit: 5% chance replaced with deterministic every 20th attack
         let isCrit = false;
-        if (Math.random() < critChance) {
+        const sb = attacker.abilityState as any;
+        sb._globalAttackCount = (sb._globalAttackCount ?? 0) + 1;
+        if (sb._globalAttackCount % 20 === 0) {
             dmg = target.hp;
             isCrit = true;
         }
@@ -1705,7 +1724,7 @@ export class UnitManager {
     }
 
     // ─── GENERIC GLB ANIMATION STATE MACHINE ───────────────────────
-    private updateGLBAnim(unit: Unit, animMap: Map<number, GLBAnimData>): void {
+    private updateGLBAnim(unit: Unit, animMap: Map<string | number, GLBAnimData>): void {
         const data = animMap.get(unit.id);
         if (!data || data.dieStarted) return;
 
@@ -1763,8 +1782,9 @@ export class UnitManager {
                 if (data.dieRoot) data.dieRoot.setEnabled(false);
                 data.walkAnims.forEach(ag => { ag.stop(); ag.reset(); });
                 data.dieAnims.forEach(ag => { ag.stop(); ag.reset(); });
-                // Random baslangic
-                const pick = hasAlt ? (Math.random() < 0.5 ? 1 : 2) : 1;
+                // Deterministic switch
+                data.activeAttack = data.activeAttack === 1 ? 2 : 1;
+                const pick = hasAlt ? data.activeAttack : 1;
                 this.activateBoruAttack(data, pick as 1 | 2);
             }
             return;
@@ -2002,7 +2022,7 @@ export class UnitManager {
         }, 16);
     }
 
-    private killGLBUnit(unit: Unit, data: GLBAnimData, animMap: Map<number, GLBAnimData>): void {
+    private killGLBUnit(unit: Unit, data: GLBAnimData, animMap: Map<string | number, GLBAnimData>): void {
         data.dieStarted = true;
         data.walkRoot.setEnabled(false);
         data.attackRoot.setEnabled(false);
@@ -2038,7 +2058,7 @@ export class UnitManager {
         }
     }
 
-    private disposeGLBUnit(unit: Unit, data: GLBAnimData, animMap: Map<number, GLBAnimData>): void {
+    private disposeGLBUnit(unit: Unit, data: GLBAnimData, animMap: Map<string | number, GLBAnimData>): void {
         animMap.delete(unit.id);
         try {
             unit.healthBarBg?.dispose();

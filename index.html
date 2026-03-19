@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
@@ -33,21 +33,21 @@
   <div id="app-header">
     <img class="header-logo-img" id="header-logo" src="/assets/images/logo.webp" alt="A2" />
     <nav class="header-nav">
+      <button class="header-nav-item header-play-btn" id="nav-play-header" data-i18n="play" style="color:#50c878;font-weight:900;text-shadow:0 0 8px rgba(80,200,120,0.4);">▶ PLAY</button>
       <button class="header-nav-item" id="nav-characters-header" data-i18n="characters">KARAKTERLER</button>
       <button class="header-nav-item" id="nav-story-header" data-i18n="story">HİKAYE</button>
       <button class="header-nav-item" id="nav-map-header" data-i18n="mapNav">HARİTA</button>
       <button class="header-nav-item" id="nav-campaign-header" data-i18n="navCampaign" style="color:#f59e0b;">KAMPANYA</button>
       <button class="header-nav-item" id="nav-leaderboard-header" data-i18n="navLeaderboard">LİDER TABLOSU</button>
-      <button class="header-nav-item" id="nav-settings-header" data-i18n="navSettings">AYARLAR</button>
+      <button class="header-nav-item" id="nav-tutorial-header" style="color:#a78bfa;font-weight:700;">✦ TUTORIAL</button>
       <button class="header-nav-item" id="nav-faucet-header" data-i18n="navFaucet">FAUCET</button>
-      <button class="header-nav-item" id="nav-report-header" data-i18n="navReport" style="color:#ff6b6b;">REPORT</button>
     </nav>
     <div class="header-right">
       <div id="lang-selector" style="display:flex;gap:4px;align-items:center;">
         <button class="lang-btn" data-lang="tr"
-          style="padding:2px 8px;font-size:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:#fff;cursor:pointer;font-weight:700;">TR</button>
+          style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid rgba(255,255,255,0.08);border-radius:3px;color:rgba(255,255,255,0.4);cursor:pointer;">TR</button>
         <button class="lang-btn" data-lang="en"
-          style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid rgba(255,255,255,0.08);border-radius:3px;color:rgba(255,255,255,0.4);cursor:pointer;">EN</button>
+          style="padding:2px 8px;font-size:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:3px;color:#fff;cursor:pointer;font-weight:700;">EN</button>
         <button class="lang-btn" data-lang="es"
           style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid rgba(255,255,255,0.08);border-radius:3px;color:rgba(255,255,255,0.4);cursor:pointer;">ES</button>
       </div>
@@ -68,6 +68,19 @@
               <path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.4" fill="none" />
             </svg>
             <span data-i18n="viewProfile">Profil</span>
+          </button>
+          <button class="wallet-dd-item" id="nav-settings-header">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M7 2a1 1 0 012 0v1a1 1 0 001.2.8l.8-.5a1 1 0 011.4 1.4l-.5.8a1 1 0 00.8 1.2h1a1 1 0 010 2h-1a1 1 0 00-.8 1.2l.5.8a1 1 0 01-1.4 1.4l-.8-.5a1 1 0 00-1.2.8v1a1 1 0 01-2 0v-1a1 1 0 00-1.2-.8l-.8.5a1 1 0 01-1.4-1.4l.5-.8a1 1 0 00-.8-1.2h-1a1 1 0 010-2h1a1 1 0 00.8-1.2l-.5-.8a1 1 0 011.4-1.4l.8.5A1 1 0 007 3V2z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+              <circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none" />
+            </svg>
+            <span data-i18n="navSettings">AYARLAR</span>
+          </button>
+          <button class="wallet-dd-item" id="nav-report-header" style="color:#ff6b6b">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M3 2v13M3 3h7l1 2h3v6h-4l-1-2H3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span data-i18n="navReport">REPORT</span>
           </button>
           <button class="wallet-dd-item dd-disconnect" id="dd-disconnect">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
@@ -309,7 +322,7 @@
     <div class="lb-podium" id="lb-podium"></div>
 
     <!-- Prize Pool Banner -->
-    <div class="lb-prize-pool">
+    <div class="lb-prize-pool" id="lb-normal-prize-pool">
       <div class="lb-pp-left">
         <div class="lb-pp-meta">
           <span class="lb-pp-season" id="lb-pp-season">SEZON 1 · HAFTA 1</span>
@@ -344,7 +357,7 @@
     </div>
 
     <!-- Sort Tabs -->
-    <div class="lb-sort-tabs">
+    <div class="lb-sort-tabs" id="lb-normal-sort-tabs">
       <button class="lb-sort-tab active" data-sort="wins" id="lb-screen-tab-wins"
         data-i18n="lbTabWins">Galibiyet</button>
       <button class="lb-sort-tab" data-sort="weeklyWins" id="lb-screen-tab-weekly" data-i18n="lbTabWeekly">Bu
@@ -353,7 +366,7 @@
     </div>
 
     <!-- Table (4th place and beyond) -->
-    <div class="lb-table-wrap">
+    <div class="lb-table-wrap" id="lb-normal-table-wrap">
       <table class="lb-full-table">
         <thead>
           <tr>
@@ -1546,6 +1559,529 @@
       </div>
     </div>
   </div>
+
+  <!-- ═══ TUTORIAL OVERLAY ═══ -->
+  <div id="tutorial-overlay" style="display:none;position:fixed;inset:0;z-index:19000;background:rgba(3,2,16,0.92);backdrop-filter:blur(20px);align-items:center;justify-content:center;">
+    <!-- Panel -->
+    <div class="tut-panel">
+      <!-- Gold top line (matches wallet-panel::before) -->
+      <div class="tut-top-line"></div>
+
+      <!-- Close -->
+      <button id="tutorial-close" class="tut-close-btn">✕</button>
+
+      <!-- Step eyebrow -->
+      <div class="tut-eyebrow"><span data-i18n="tutEyebrow">BÖLÜM</span> <span id="tut-eyebrow-num">01 / 06</span></div>
+
+      <!-- Slide content -->
+      <div id="tutorial-slide-wrap">
+
+        <!-- Slide 1: Overview -->
+        <div class="tut-slide" data-slide="0">
+          <div class="tut-title" data-i18n="tut1Title">A2: Alaz &amp; Ayaz'a Hoş Geldin</div>
+          <div class="tut-divider"></div>
+          <div class="tut-body" data-i18n-html="tut1Body">
+            A2, Türk mitolojisi evreninde geçen bir <strong>gerçek zamanlı strateji MOBA</strong>'sıdır. İki ekip — <span class="tut-fire">Ateş (Alaz)</span> ve <span class="tut-ice">Buz (Ayaz)</span> — üç koridor boyunca savaşır. Efsanevi savaşçılar çağır, AVX coin topla ve düşman üssünü yık.
+          </div>
+          <div class="tut-info-row">
+            <div class="tut-info-box">
+              <div class="tut-info-label" data-i18n="tut1Box1">VS AI</div>
+            </div>
+            <div class="tut-info-box">
+              <div class="tut-info-label" data-i18n="tut1Box2">2 Oyunculu</div>
+            </div>
+            <div class="tut-info-box">
+              <div class="tut-info-label" data-i18n="tut1Box3">Online PvP</div>
+            </div>
+          </div>
+          <div class="tut-tip" data-i18n-html="tut1Tip">◈ Ana hedefin düşman üssünü yıkmaktır.</div>
+        </div>
+
+        <!-- Slide 2: Cards & Mana -->
+        <div class="tut-slide" data-slide="1" style="display:none">
+          <div class="tut-title" data-i18n="tut2Title">Kartlar &amp; Mana</div>
+          <div class="tut-divider"></div>
+          <div class="tut-body" data-i18n-html="tut2Body">
+            Her turda elinden <strong>Mana</strong> harcayarak kart oynarsın. Mana otomatik dolar — biriktirilmez.<br><br>Yetenek (Skill) kartları direkt sahaya inmez, haritada bir alana sürüklenerek anlık güçlü etkiler (hasar, iyileştirme vb.) uygular.
+          </div>
+          <div class="tut-cards-row">
+            <div class="tut-card-demo fire-card">
+              <div class="tut-card-name" data-i18n="tut2CardUnit">Birim</div>
+              <div class="tut-card-sub" data-i18n="tut2CardSpend">Mana harcar</div>
+            </div>
+            <div class="tut-card-demo ice-card">
+              <div class="tut-card-name" data-i18n="tut2CardUnit">Birim</div>
+              <div class="tut-card-sub" data-i18n="tut2CardSpend">Mana harcar</div>
+            </div>
+            <div class="tut-card-demo skill-card">
+              <div class="tut-card-name" data-i18n="tut2CardSkill">Yetenek</div>
+              <div class="tut-card-sub" data-i18n="tut2CardEffect">Özel efekt</div>
+            </div>
+          </div>
+          <div class="tut-tip" data-i18n-html="tut2Tip">⌨ Kısayollar: <span class="tut-key">1–4</span> kart seç · <span class="tut-key">Q</span><span class="tut-key">W</span><span class="tut-key">E</span> koridor</div>
+        </div>
+
+        <!-- Slide 3: Lanes -->
+        <div class="tut-slide" data-slide="2" style="display:none">
+          <div class="tut-title" data-i18n="tut3Title">Üç Koridor</div>
+          <div class="tut-divider"></div>
+          <div class="tut-body" data-i18n-html="tut3Body">
+            Haritada iki üssü birbirine bağlayan <strong>üç koridor</strong> bulunur. Kart seçtikten sonra birimi koridora gönder. Üç koridoru dengeli kullan — fazla saldırgan oynamak dengeyi bozar.
+          </div>
+          <div class="tut-lanes-row">
+            <div class="tut-lane-box">
+              <div class="tut-lane-key">Q</div>
+              <div class="tut-lane-label" data-i18n="tut3LaneL">SOL</div>
+            </div>
+            <div class="tut-lane-box mid">
+              <div class="tut-lane-key">W</div>
+              <div class="tut-lane-label" data-i18n="tut3LaneM">ORTA</div>
+            </div>
+            <div class="tut-lane-box">
+              <div class="tut-lane-key">E</div>
+              <div class="tut-lane-label" data-i18n="tut3LaneR">SAĞ</div>
+            </div>
+          </div>
+          <div class="tut-tip" style="margin-bottom: 8px;" data-i18n-html="tutCannonInfo">Koridorlardaki <strong>Topçular (Cannon)</strong> sana hasar verir. Onları yok etmek için <span class="tut-fire">Alaz Çiçeği</span> veya <span class="tut-ice">Ayaz Çiçeği</span> kartlarını kullan!</div>
+          <div class="tut-tip" data-i18n="tut3Tip">◈ Haritadaki 3 Ava Kristali ekstra Mana avantajı sağlar!</div>
+        </div>
+
+        <!-- Slide 4: Trees (NEW) -->
+        <div class="tut-slide" data-slide="3" style="display:none">
+          <div class="tut-title" data-i18n="tutTreeTitle">Ekonomi Ağaçları</div>
+          <div class="tut-divider"></div>
+          <div class="tut-body" data-i18n="tutTreeBody">
+            Oyun içinde kendi bölgende sana avantaj sağlayan iki tür ağaç dikebilirsin:
+          </div>
+          <div class="tut-cards-row" style="margin-top: 15px;">
+            <div class="tut-card-demo fire-card" style="flex: 1; padding: 12px;">
+              <div class="tut-card-name" data-i18n="tutTreeMana" style="color:#60a5fa">Mana Ağacı</div>
+              <div class="tut-card-sub" data-i18n="tutTreeManaD" style="margin-top: 5px;">Düzenli aralıklarla ekstra savaş Manası üretir.</div>
+            </div>
+            <div class="tut-card-demo ice-card" style="flex: 1; padding: 12px;">
+              <div class="tut-card-name" data-i18n="tutTreeAvx" style="color:#ffc94d">AVX Ağacı</div>
+              <div class="tut-card-sub" data-i18n="tutTreeAvxD" style="margin-top: 5px;">Düşman birimlerinden düşen AVX coinlerini otomatik toplamanı sağlar.</div>
+            </div>
+          </div>
+          <div class="tut-tip" style="margin-top: 15px;" data-i18n="tutTreeTip">◈ Ağaç tiplerini seç ve uygun alana sürükleyerek dik.</div>
+        </div>
+
+        <!-- Slide 5: Special Cards -->
+        <div class="tut-slide" data-slide="4" style="display:none; max-height:360px; padding-right:10px; overflow-y:auto;">
+          <div class="tut-title" data-i18n="tutSpecialTitle">Özel Kartlar</div>
+          <div class="tut-divider"></div>
+          <div class="tut-body" data-i18n="tutSpecialBody">
+            Sadece asker gönderme, stratejik büyü kartlarını da kullan:
+          </div>
+          <div class="tut-grid-cards">
+            <div class="tut-card-entry">
+              <img src="/assets/images/skills/ouroboros.webp" alt="Ouroboros" />
+              <div><strong data-i18n="tutSpecialOuro">Ouroboros</strong><span data-i18n="tutSpecialOuroD">Bir düşman birimini senin tarafına geçirir.</span></div>
+            </div>
+            <div class="tut-card-entry">
+              <img src="/assets/images/skills/unlucky.webp" alt="Unlucky" />
+              <div><strong data-i18n="tutSpecialUnlucky" style="color:#ffaa00">Unlucky</strong><span data-i18n="tutSpecialUnluckyD">30 sn boyunca rastgele düşmanlara yıldırımlar düşer.</span></div>
+            </div>
+            <div class="tut-card-entry">
+              <img src="/assets/images/skills/mana1.webp" alt="Mana Fill" />
+              <div><strong data-i18n="tutSkillFill" style="color:#60a5fa">Mana Fill</strong><span data-i18n="tutSkillFillD">Anında kendi mananı doldurur.</span></div>
+            </div>
+            <div class="tut-card-entry">
+              <img src="/assets/images/skills/mana2.webp" alt="Mana Freeze" />
+              <div><strong data-i18n="tutSkillFreeze" style="color:#60a5fa">Mana Freeze</strong><span data-i18n="tutSkillFreezeD">Rakibin manasını dondurur.</span></div>
+            </div>
+            <div class="tut-card-entry">
+              <img src="/assets/images/skills/autocollect.webp" alt="AutoCollect" />
+              <div><strong data-i18n="tutSkillAuto" style="color:#ffc94d">AutoCollect</strong><span data-i18n="tutSkillAutoD">AVX'leri otomatik toplar (30s).</span></div>
+            </div>
+            <div class="tut-card-entry">
+              <img src="/assets/images/skills/bancollect.webp" alt="BanCollect" />
+              <div><strong data-i18n="tutSkillBan" style="color:#ff6b6b">BanCollect</strong><span data-i18n="tutSkillBanD">Rakibin AVX toplamasını yasaklar (45s).</span></div>
+            </div>
+            <div class="tut-card-entry">
+              <img src="/assets/images/skills/healthome.webp" alt="HealHome" />
+              <div><strong data-i18n="tutSkillHeal" style="color:#50c878">Heal Home</strong><span data-i18n="tutSkillHealD">Ana üssünü belli miktar iyileştirir.</span></div>
+            </div>
+            <div class="tut-card-entry">
+              <img src="/assets/images/skills/recall.webp" alt="Recall" />
+              <div><strong data-i18n="tutSkillRecall">Recall</strong><span data-i18n="tutSkillRecallD">Askerleri anında üsse geri çağırır.</span></div>
+            </div>
+          </div>
+          <div class="tut-tip" style="margin-top: 15px;" data-i18n="tutSpecialTip">⚡ Taktik: Rakip büyük yığınla gelirken Mana Freeze atıp Ouroboros ile tankını çal!</div>
+        </div>
+
+        <!-- Slide 6: Units -->
+        <div class="tut-slide" data-slide="5" style="display:none; max-height:360px; padding-right:10px; overflow-y:auto;">
+          <div class="tut-title" data-i18n="tut4Title">Efsanevi Savaşçılar</div>
+          <div class="tut-divider"></div>
+          <div class="tut-body" data-i18n="tut4Body">
+            Her ekibin kahramanları var. Tank, hasar ve destek birimlerini birleştir.
+          </div>
+          <div class="tut-grid-cards" style="margin-bottom: 8px;">
+            <!-- FIRE -->
+            <div class="tut-card-entry fire-border">
+              <img src="/assets/images/characters/korhan.webp" alt="Korhan" />
+              <div><strong data-i18n="tutUnitKorhan" style="color:#ff8050">Korhan (Savaşçı)</strong><span data-i18n="tutUnitKorhanD">Tank · Her 3. darbe %40 hasar azaltır.</span></div>
+            </div>
+            <div class="tut-card-entry fire-border">
+              <img src="/assets/images/characters/erlik.webp" alt="Erlik" />
+              <div><strong data-i18n="tutUnitErlik" style="color:#ff8050">Erlik (Büyücü)</strong><span data-i18n="tutUnitErlikD">Hasar · Saldırıda %30 yakma şansı.</span></div>
+            </div>
+            <div class="tut-card-entry fire-border">
+              <img src="/assets/images/characters/od.webp" alt="Od" />
+              <div><strong data-i18n="tutUnitOd" style="color:#ff8050">Od (Destek)</strong><span data-i18n="tutUnitOdD">İyileştirici · Dost heal + zayıf ateş.</span></div>
+            </div>
+            <!-- ICE -->
+            <div class="tut-card-entry ice-border">
+              <img src="/assets/images/characters/ayaz.webp" alt="Ayaz" />
+              <div><strong data-i18n="tutUnitAyaz" style="color:#60ccff">Ayaz (Savaşçı)</strong><span data-i18n="tutUnitAyazD">Tank · 4. saldırıda dondurma.</span></div>
+            </div>
+            <div class="tut-card-entry ice-border">
+              <img src="/assets/images/characters/tulpar.webp" alt="Tulpar" />
+              <div><strong data-i18n="tutUnitTulpar" style="color:#60ccff">Tulpar (Destek)</strong><span data-i18n="tutUnitTulparD">İyileştirici · Dost heal + zayıf buz.</span></div>
+            </div>
+            <div class="tut-card-entry ice-border">
+              <img src="/assets/images/characters/umay.webp" alt="Umay" />
+              <div><strong data-i18n="tutUnitUmay" style="color:#60ccff">Umay (Büyücü)</strong><span data-i18n="tutUnitUmayD">Destek · En yakın dosta sürekli heal.</span></div>
+            </div>
+            <!-- MERCENARY -->
+            <div class="tut-card-entry merc-border">
+              <img src="/assets/images/characters/albasti.webp" alt="Albastı" />
+              <div><strong data-i18n="tutUnitAlbasti" style="color:#b478ff">Albastı (Neutral)</strong><span data-i18n="tutUnitAlbastiD">Hızlı kanatlı saldırı. (AVX ile)</span></div>
+            </div>
+            <div class="tut-card-entry merc-border">
+              <img src="/assets/images/characters/tepegoz.webp" alt="Tepegöz" />
+              <div><strong data-i18n="tutUnitTepegoz" style="color:#b478ff">Tepegöz (Büyücü)</strong><span data-i18n="tutUnitTepegozD">Dev tank · Alan sersemletme (Stun).</span></div>
+            </div>
+            <div class="tut-card-entry merc-border">
+              <img src="/assets/images/characters/sahmeran.webp" alt="Şahmeran" />
+              <div><strong data-i18n="tutUnitSahmeran" style="color:#b478ff">Şahmeran (Ruh)</strong><span data-i18n="tutUnitSahmeranD">Hızlı zehirci · Her saldırıda zehir.</span></div>
+            </div>
+          </div>
+          <div class="tut-tip" data-i18n-html="tut4Tip">◈ Paralı askerler (Albastı vb.) mana yerine <strong>AVX coin</strong> ile alınır.</div>
+        </div>
+
+        <!-- Slide 7: Win Conditions -->
+        <div class="tut-slide" data-slide="6" style="display:none">
+          <div class="tut-title" data-i18n="tut5Title">Nasıl Kazanırsın?</div>
+          <div class="tut-divider"></div>
+          <div class="tut-body" data-i18n="tut5Body">Tek bir kazanma koşulu vardır:</div>
+          <div class="tut-win-row">
+            <div class="tut-win-box fire-win" style="flex: 1;">
+              <div class="tut-win-title" data-i18n="tut5Win1T" style="font-size: 16px;">Üssü Yık</div>
+              <div class="tut-win-desc" data-i18n="tut5Win1D">Birimleri gönder, düşman üssüne (1000 HP) hasar ver.</div>
+            </div>
+          </div>
+          <div class="tut-tip" data-i18n-html="tut5Tip">⚡ <strong>Denge Dalgası</strong> — rakip çok baskın olursa bonus mana alırsın.</div>
+        </div>
+
+        <!-- Slide 8: Web3 & Rewards -->
+        <div class="tut-slide" data-slide="7" style="display:none">
+          <div class="tut-title" data-i18n="tut6Title">Web3 &amp; Ödüller</div>
+          <div class="tut-divider"></div>
+          <div class="tut-body" data-i18n-html="tut6Body">A2, <strong>Avalanche Fuji testnet</strong> üzerinde çalışır. Cüzdan bağla:</div>
+          <div class="tut-reward-list">
+            <div class="tut-reward-row">
+              <div data-i18n-html="tut6Rew1"><strong>Online PvP</strong> — AVAX bahsi yap, kazanan %98 alır</div>
+            </div>
+            <div class="tut-reward-row">
+              <div data-i18n-html="tut6Rew2"><strong>Haftalık Lider Tablosu</strong> — %2 ücret ödül havuzuna gider</div>
+            </div>
+            <div class="tut-reward-row">
+              <div data-i18n-html="tut6Rew3"><strong>Kampanyalar</strong> — görevleri yap, ekstra ödül kazan</div>
+            </div>
+            <div class="tut-reward-row">
+              <div data-i18n-html="tut6Rew4"><strong>Faucet</strong> — 3 yerel oyun oyna, ücretsiz AVAX çek</div>
+            </div>
+          </div>
+          <div class="tut-tip" data-i18n-html="tut6Tip">◈ Hazırsın! Navigasyondaki <strong>▶ PLAY</strong> butonuna bas ve başla.</div>
+        </div>
+
+      </div><!-- /slide-wrap -->
+
+      <!-- Bottom nav -->
+      <div class="tut-nav-row">
+        <button id="tutorial-prev" class="tut-nav-btn tut-prev-btn" data-i18n="tutPrev">← GERİ</button>
+        <div id="tutorial-dots" class="tut-dots-wrap">
+          <div class="tut-dot active" data-dot="0"></div>
+          <div class="tut-dot" data-dot="1"></div>
+          <div class="tut-dot" data-dot="2"></div>
+          <div class="tut-dot" data-dot="3"></div>
+          <div class="tut-dot" data-dot="4"></div>
+          <div class="tut-dot" data-dot="5"></div>
+          <div class="tut-dot" data-dot="6"></div>
+          <div class="tut-dot" data-dot="7"></div>
+        </div>
+        <button id="tutorial-next" class="tut-nav-btn tut-next-btn" data-i18n="tutNext">İLERİ →</button>
+      </div>
+
+      <label class="tut-skip-label">
+        <input type="checkbox" id="tutorial-skip-check"> <span data-i18n="tutSkip">Bir daha gösterme</span>
+      </label>
+    </div><!-- /tut-panel -->
+  </div>
+
+  <style>
+    /* ── Overlay ── */
+    #tutorial-overlay.tut-open { display:flex !important; }
+
+    /* ── Panel (matches wallet-panel aesthetic) ── */
+    .tut-panel {
+      position: relative;
+      width: min(680px, 94vw);
+      max-height: 90vh;
+      overflow-y: auto;
+      background: linear-gradient(170deg, rgba(10,8,20,0.99), rgba(5,3,14,0.99));
+      border: 1px solid rgba(255,201,77,0.18);
+      border-radius: 16px;
+      padding: 40px 40px 28px;
+      box-shadow: 0 32px 100px rgba(0,0,0,0.75), 0 0 40px rgba(255,201,77,0.05), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .tut-panel::-webkit-scrollbar { width: 4px; }
+    .tut-panel::-webkit-scrollbar-track { background: transparent; }
+    .tut-panel::-webkit-scrollbar-thumb { background: rgba(255,201,77,0.2); border-radius: 2px; }
+
+    /* Gold line at top (wallet-panel::before style) */
+    .tut-top-line {
+      position: absolute;
+      top: -1px; left: 20%; right: 20%; height: 1px;
+      background: linear-gradient(90deg, transparent, #ffc94d, transparent);
+      opacity: 0.7;
+    }
+
+    /* ── Close btn ── */
+    .tut-close-btn {
+      position: absolute; top: 14px; right: 16px;
+      background: none; border: none;
+      color: rgba(255,255,255,0.2); font-size: 17px; cursor: pointer;
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; transition: all 0.2s;
+    }
+    .tut-close-btn:hover { color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.06); }
+
+    /* ── Eyebrow ── */
+    .tut-eyebrow {
+      font-family: 'Cinzel', serif;
+      font-size: 10px; letter-spacing: 4px;
+      color: rgba(255,201,77,0.4);
+      text-align: center; margin-bottom: 10px;
+    }
+
+    /* ── Slides ── */
+    .tut-slide { animation: tutFadeIn 0.28s ease; }
+    @keyframes tutFadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+    .tut-title {
+      font-family: 'Cinzel', serif;
+      font-size: 20px; font-weight: 900;
+      text-align: center; letter-spacing: 1.5px;
+      color: #f0e6c0;
+      margin-bottom: 10px;
+    }
+
+    .tut-divider {
+      width: 48px; height: 1px; margin: 0 auto 18px;
+      background: linear-gradient(90deg, transparent, rgba(255,201,77,0.5), transparent);
+    }
+
+    .tut-body {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px; line-height: 1.8;
+      color: rgba(255,255,255,0.65);
+      margin-bottom: 18px;
+    }
+    .tut-body strong { color: rgba(255,255,255,0.9); }
+
+    /* ── Tip box ── */
+    .tut-tip {
+      background: rgba(255,201,77,0.05);
+      border: 1px solid rgba(255,201,77,0.18);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-family: 'Inter', sans-serif;
+      font-size: 11px; line-height: 1.65;
+      color: rgba(255,201,77,0.7);
+      margin-top: 16px;
+    }
+    .tut-tip strong { color: rgba(255,201,77,0.95); }
+
+    /* ── Fire/Ice labels ── */
+    .tut-fire { color: #ff7340; font-weight: 700; }
+    .tut-ice  { color: #60ccff; font-weight: 700; }
+
+    /* ── Info row (slide 1) ── */
+    .tut-info-row { display:flex; gap:12px; margin:18px 0 4px; }
+    .tut-info-box {
+      flex:1; display:flex; flex-direction:column; align-items:center; gap:8px;
+      padding: 14px 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+    }
+    .tut-info-icon { font-size: 22px; }
+    .tut-info-label { font-family:'Cinzel',serif; font-size:10px; letter-spacing:1.5px; color:rgba(255,255,255,0.4); }
+
+    /* ── Cards row ── */
+    .tut-cards-row { display:flex; gap:10px; justify-content:center; margin:18px 0 4px; }
+    .tut-card-demo {
+      flex:1; max-width: 140px;
+      padding: 16px 10px 14px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .tut-card-top { font-size: 26px; margin-bottom: 8px; }
+    .tut-card-name { font-family:'Cinzel',serif; font-size:11px; letter-spacing:1px; margin-bottom:3px; }
+    .tut-card-sub { font-size:10px; color:rgba(255,255,255,0.3); }
+    .fire-card { background:rgba(255,90,32,0.08); border:1px solid rgba(255,90,32,0.3); color:#ff8050; }
+    .ice-card  { background:rgba(56,170,255,0.08); border:1px solid rgba(56,170,255,0.3); color:#60ccff; }
+    .skill-card{ background:rgba(255,201,77,0.07); border:1px solid rgba(255,201,77,0.25); color:#ffc94d; }
+
+    /* ── Keyboard key ── */
+    .tut-key {
+      display:inline-block;
+      background:rgba(255,255,255,0.07);
+      border:1px solid rgba(255,255,255,0.18);
+      border-radius:3px;
+      padding: 1px 6px;
+      font-family:monospace; font-size:11px; color:#e2e8f0;
+      margin: 0 1px;
+    }
+
+    /* ── Lanes row ── */
+    .tut-lanes-row { display:flex; gap:12px; justify-content:center; margin: 18px 0 4px; }
+    .tut-lane-box {
+      flex:1; max-width:140px;
+      display:flex; flex-direction:column; align-items:center; gap:10px;
+      padding:18px 10px;
+      background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px;
+    }
+    .tut-lane-box.mid { border-color:rgba(255,220,70,0.25); background:rgba(255,220,70,0.04); }
+    .tut-lane-key {
+      font-family:monospace; font-size:16px; font-weight:700;
+      width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+      background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:5px;
+      color:rgba(255,255,255,0.6);
+    }
+    .tut-lane-box.mid .tut-lane-key { border-color:rgba(255,220,70,0.4); color:rgba(255,220,70,0.8); }
+    .tut-lane-label { font-family:'Cinzel',serif; font-size:10px; letter-spacing:2px; color:rgba(255,255,255,0.35); }
+    .tut-lane-box.mid .tut-lane-label { color:rgba(255,220,70,0.55); }
+
+    /* ── Char grid ── */
+    .tut-chars-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:16px 0 4px; }
+    .tut-char {
+      padding:10px 12px; border-radius:6px;
+      display:flex; flex-direction:column; gap:4px;
+    }
+    .fire-char { background:rgba(255,90,32,0.07); border:1px solid rgba(255,90,32,0.2); }
+    .fire-char strong { color:#ff8050; font-family:'Cinzel',serif; font-size:12px; letter-spacing:.5px; }
+    .fire-char span { color:rgba(255,255,255,0.3); font-size:10px; }
+    .ice-char  { background:rgba(56,170,255,0.07); border:1px solid rgba(56,170,255,0.2); }
+    .ice-char strong { color:#60ccff; font-family:'Cinzel',serif; font-size:12px; letter-spacing:.5px; }
+    .ice-char span { color:rgba(255,255,255,0.3); font-size:10px; }
+
+    /* ── Enhanced Card Grids for Characters & Skills ── */
+    .tut-grid-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 10px 0;
+    }
+    .tut-card-entry {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+    }
+    .tut-card-entry img {
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.15);
+      object-fit: cover;
+      flex-shrink: 0;
+      background: #000;
+    }
+    .tut-card-entry div {
+      font-size: 11px;
+      line-height: 1.4;
+      color: rgba(255,255,255,0.5);
+    }
+    .tut-card-entry strong {
+      font-family: 'Cinzel', serif;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+      display: block;
+      margin-bottom: 2px;
+    }
+    .tut-card-entry.fire-border { border-left: 3px solid #ff8050; }
+    .tut-card-entry.ice-border { border-left: 3px solid #60ccff; }
+    .tut-card-entry.merc-border { border-left: 3px solid #b478ff; }
+
+    /* ── Win row ── */
+    .tut-win-row { display:flex; gap:12px; margin:18px 0 4px; }
+    .tut-win-box {
+      flex:1; padding:18px 14px; border-radius:8px;
+      display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center;
+    }
+    .fire-win { background:rgba(255,80,32,0.07); border:1px solid rgba(255,80,32,0.22); }
+    .gold-win { background:rgba(255,201,77,0.06); border:1px solid rgba(255,201,77,0.2); }
+    .tut-win-icon { font-size:28px; }
+    .tut-win-title { font-family:'Cinzel',serif; font-size:12px; letter-spacing:1px; color:rgba(255,255,255,0.75); }
+    .tut-win-desc { font-size:11px; color:rgba(255,255,255,0.35); line-height:1.5; }
+
+    /* ── Reward list ── */
+    .tut-reward-list { display:flex; flex-direction:column; gap:10px; margin:14px 0 4px; }
+    .tut-reward-row {
+      display:flex; align-items:flex-start; gap:12px;
+      padding:10px 14px;
+      background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:7px;
+      font-size:12px; color:rgba(255,255,255,0.6); line-height:1.5;
+    }
+    .tut-reward-row strong { color:rgba(255,255,255,0.85); }
+    .tut-reward-icon { font-size:16px; flex-shrink:0; margin-top:1px; }
+
+    /* ── Nav row ── */
+    .tut-nav-row {
+      display:flex; align-items:center; justify-content:space-between;
+      margin-top:28px; padding-top:20px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .tut-nav-btn {
+      font-family:'Cinzel',serif; font-size:11px; letter-spacing:2px; font-weight:700;
+      padding:9px 20px; border-radius:4px; cursor:pointer; transition:all 0.2s;
+    }
+    .tut-prev-btn {
+      background:transparent; border:1px solid rgba(255,255,255,0.12);
+      color:rgba(255,255,255,0.35);
+    }
+    .tut-prev-btn:hover:not(:disabled) { border-color:rgba(255,255,255,0.25); color:rgba(255,255,255,0.6); }
+    .tut-prev-btn:disabled { opacity:0.25; cursor:not-allowed; }
+    .tut-next-btn {
+      background:rgba(255,201,77,0.1); border:1px solid rgba(255,201,77,0.3);
+      color:#ffc94d;
+    }
+    .tut-next-btn:hover { background:rgba(255,201,77,0.16); border-color:rgba(255,201,77,0.5); }
+
+    /* ── Dots ── */
+    .tut-dots-wrap { display:flex; gap:8px; align-items:center; }
+    .tut-dot {
+      width:6px; height:6px; border-radius:50%;
+      background:rgba(255,255,255,0.12); cursor:pointer; transition:all 0.25s;
+    }
+    .tut-dot.active { background:#ffc94d; transform:scale(1.4); }
+
+    /* ── Skip label ── */
+    .tut-skip-label {
+      display:flex; align-items:center; justify-content:center; gap:7px;
+      margin-top:14px; cursor:pointer;
+      font-size:10px; letter-spacing:.5px; color:rgba(255,255,255,0.2);
+    }
+    .tut-skip-label input { accent-color:#ffc94d; }
+  </style>
+
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
   <!-- PeerJS P2P (CDN — npm esbuild bug workaround) -->

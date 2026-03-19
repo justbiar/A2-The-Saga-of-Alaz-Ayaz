@@ -413,8 +413,8 @@ function showQmNotification(opponentCode: string, opponentTeam: string, opponent
 // ─── MP CALLBACKS ──────────────────────────────────────────────────
 const MP_LANE_MAP: Record<'left' | 'mid' | 'right', number> = { left: 0, mid: 1, right: 2 };
 
-function spawnUnitForTeam(team: 'fire' | 'ice', cardId: UnitType, lane: 'left' | 'mid' | 'right'): void {
-    ctx._mpSpawnUnit?.(team, cardId, lane);
+function spawnUnitForTeam(team: 'fire' | 'ice', cardId: UnitType, lane: 'left' | 'mid' | 'right', unitId?: string): void {
+    ctx._mpSpawnUnit?.(team, cardId, lane, unitId);
 }
 function applyPromptForTeam(team: 'fire' | 'ice', promptId: string): void {
     ctx._mpApplyPrompt?.(team, promptId);
@@ -526,10 +526,10 @@ export function handleMPMessage(msg: import('../multiplayer/MultiplayerService')
     } else if (msg.type === 'start') {
         ctx._mpStartGame?.();
     } else if (msg.type === 'place') {
-        const { cardId, lane } = msg;
+        const { cardId, lane, unitId } = msg;
         const oppTeam = mpService.opponentTeam ?? (ctx.lobbyTeam === 'fire' ? 'ice' : 'fire');
-        console.log(`[MP-SYNC] Received place: ${cardId} lane=${lane} oppTeam=${oppTeam} _mpSpawnUnit=${!!ctx._mpSpawnUnit}`);
-        spawnUnitForTeam(oppTeam as 'fire' | 'ice', cardId as UnitType, lane);
+        console.log(`[MP-SYNC] Received place: ${cardId} lane=${lane} oppTeam=${oppTeam} unitId=${unitId}`);
+        spawnUnitForTeam(oppTeam as 'fire' | 'ice', cardId as UnitType, lane, unitId);
     } else if (msg.type === 'prompt') {
         const { promptId } = msg;
         const oppTeam = mpService.opponentTeam ?? (ctx.lobbyTeam === 'fire' ? 'ice' : 'fire');

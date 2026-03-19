@@ -204,9 +204,9 @@ async function renderCampaignLeaderboard(campaignId: string): Promise<void> {
 
     // Normal leaderboard elementlerini gizle
     const podium = document.getElementById('lb-podium');
-    const prizePool = document.querySelector('.lb-prize-pool') as HTMLElement;
-    const sortTabs = document.querySelector('.lb-sort-tabs') as HTMLElement;
-    const tableWrap = document.querySelector('.lb-table-wrap') as HTMLElement;
+    const prizePool = document.getElementById('lb-normal-prize-pool');
+    const sortTabs = document.getElementById('lb-normal-sort-tabs');
+    const tableWrap = document.getElementById('lb-normal-table-wrap');
     if (podium) podium.style.display = 'none';
     if (prizePool) prizePool.style.display = 'none';
     if (sortTabs) sortTabs.style.display = 'none';
@@ -222,38 +222,74 @@ async function renderCampaignLeaderboard(campaignId: string): Promise<void> {
             return;
         }
 
-        const medals = ['🥇', '🥈', '🥉'];
-        container.innerHTML = `
-            <div class="camp-podium" style="margin:20px 0">
-                ${entries.slice(0, 3).map((e: any, i: number) => {
-                    const isMe = e.address.toLowerCase() === (ctx.walletAddress ?? '').toLowerCase();
-                    return `
-                    <div class="camp-podium-card camp-podium-${i + 1} ${isMe ? 'camp-is-me' : ''}">
-                        <div class="camp-podium-medal">${medals[i]}</div>
-                        <div class="camp-podium-name">${e.username}</div>
-                        <div class="camp-podium-points">${e.points}p</div>
-                        <div class="camp-podium-tasks">${e.tasksCompleted} gorev</div>
-                    </div>`;
-                }).join('')}
-            </div>
-            <div class="camp-lb-table-wrap">
-                <table class="camp-lb-table">
-                    <thead><tr><th>#</th><th>Oyuncu</th><th>Puan</th><th>Gorev</th></tr></thead>
-                    <tbody>
-                        ${entries.map((e: any) => {
-                            const isMe = e.address.toLowerCase() === (ctx.walletAddress ?? '').toLowerCase();
-                            return `
-                            <tr class="${isMe ? 'camp-is-me' : ''}">
-                                <td class="camp-lb-rank ${e.rank <= 3 ? 'camp-lb-rank-' + e.rank : ''}">${e.rank}</td>
-                                <td>${e.username}</td>
-                                <td class="camp-lb-points">${e.points}</td>
-                                <td>${e.tasksCompleted}</td>
-                            </tr>`;
-                        }).join('')}
-                    </tbody>
-                </table>
-            </div>
-        `;
+        const podiumHtml = entries.length === 0 ? '' : '<div class="lb-podium" style="margin:20px 0">' + 
+            entries.slice(0, 3).map((e: any, i: number) => {
+                const isMe = e.address.toLowerCase() === (ctx.walletAddress ?? '').toLowerCase();
+                const cls = ['p1', 'p2', 'p3'][i];
+                const rankLabel = i + 1;
+                const addrShort = e.address.slice(0, 6) + '...' + e.address.slice(-4);
+                // Fallback to logo if no avatar
+                const avatarSrc = e.avatarURI 
+                    || localStorage.getItem('a2_avatar_' + e.address.toLowerCase()) 
+                    || '/assets/images/logo.webp';
+
+                return '<div class="lb-podium-card ' + cls + ' ' + (isMe ? 'lb-me' : '') + '">' +
+                    '<div class="lb-podium-rank">' + rankLabel + '</div>' +
+                    '<img class="lb-podium-avatar" src="' + avatarSrc + '" alt="" onerror="this.src=\'/assets/images/logo.webp\'" />' +
+                    '<div class="lb-podium-name">' + (e.username || addrShort) + '</div>' +
+                    '<div class="lb-podium-addr">' + addrShort + '</div>' +
+                    '<div class="lb-podium-stats">' +
+                        '<div class="lb-podium-stat">' +
+                            '<div class="lb-podium-stat-val">' + e.points + '</div>' +
+                            '<div class="lb-podium-stat-lbl">' + t('campaignPoints' as TransKey) + '</div>' +
+                        '</div>' +
+                        '<div class="lb-podium-stat">' +
+                            '<div class="lb-podium-stat-val" style="color:rgba(255,255,255,0.45);">' + e.tasksCompleted + '</div>' +
+                            '<div class="lb-podium-stat-lbl">' + t('campaignTask' as TransKey) + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('') + '</div>';
+
+        const tableHtml = entries.length === 0 ? '' : '<div class="lb-table-wrap">' +
+            '<table class="lb-full-table">' +
+                '<thead>' +
+                    '<tr>' +
+                        '<th>#</th>' +
+                        '<th>' + t('campaignPlayer' as TransKey) + '</th>' +
+                        '<th>' + t('campaignPoints' as TransKey) + '</th>' +
+                        '<th>' + t('campaignTask' as TransKey) + '</th>' +
+                    '</tr>' +
+                '</thead>' +
+                '<tbody>' +
+                    entries.map((e: any, i: number) => {
+                        const isMe = e.address.toLowerCase() === (ctx.walletAddress ?? '').toLowerCase();
+                        const rankCls = i < 3 ? ['lb-rank-gold', 'lb-rank-silver', 'lb-rank-bronze'][i] : 'lb-rank-4up';
+                        const addrShort = e.address.slice(0, 6) + '...' + e.address.slice(-4);
+                        const avatarSrc = e.avatarURI 
+                            || localStorage.getItem('a2_avatar_' + e.address.toLowerCase()) 
+                            || '/assets/images/logo.webp';
+                            
+                        return '<tr class="' + (isMe ? 'lb-me' : '') + '">' +
+                            '<td><span class="lb-rank-num ' + rankCls + '">' + (i + 1) + '</span></td>' +
+                            '<td>' +
+                                '<div class="lb-player-cell">' +
+                                    '<img class="lb-player-avatar" src="' + avatarSrc + '" alt="" onerror="this.src=\'/assets/images/logo.webp\'" />' +
+                                    '<div>' +
+                                        '<div class="lb-player-name">' + (e.username || addrShort) + '</div>' +
+                                        '<div class="lb-player-addr">' + addrShort + '</div>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</td>' +
+                            '<td><span class="lb-win-count">' + e.points + '</span></td>' +
+                            '<td><span class="lb-games-count">' + e.tasksCompleted + '</span></td>' +
+                        '</tr>';
+                    }).join('') +
+                '</tbody>' +
+            '</table>' +
+        '</div>';
+
+        container.innerHTML = podiumHtml + tableHtml;
     } catch {
         container.innerHTML = '<div style="text-align:center;padding:20px;color:#ff6b6b">Leaderboard yuklenemedi</div>';
     }
@@ -264,9 +300,9 @@ function showNormalLeaderboard(): void {
     container.style.display = 'none';
     container.innerHTML = '';
     const podium = document.getElementById('lb-podium');
-    const prizePool = document.querySelector('.lb-prize-pool') as HTMLElement;
-    const sortTabs = document.querySelector('.lb-sort-tabs') as HTMLElement;
-    const tableWrap = document.querySelector('.lb-table-wrap') as HTMLElement;
+    const prizePool = document.getElementById('lb-normal-prize-pool');
+    const sortTabs = document.getElementById('lb-normal-sort-tabs');
+    const tableWrap = document.getElementById('lb-normal-table-wrap');
     if (podium) podium.style.display = '';
     if (prizePool) prizePool.style.display = '';
     if (sortTabs) sortTabs.style.display = '';
