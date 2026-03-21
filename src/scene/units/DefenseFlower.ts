@@ -13,6 +13,7 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
+import { t } from '../../i18n';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import '@babylonjs/core/Culling/ray';
@@ -254,7 +255,8 @@ export class DefenseFlower {
             background:rgba(0,0,0,0.6);
             color:${this.team === 'fire' ? '#ff9944' : '#66bbff'};
         `;
-        label.textContent = this.team === 'fire' ? '🌺 Faz 1/3' : '❄ Faz 1/3';
+        const icon = this.team === 'fire' ? '🌺' : '❄';
+        label.textContent = `${icon} ${t('flowerPhase' as any)} 1/3`;
 
         const bar = document.createElement('div');
         bar.style.cssText = `
@@ -281,9 +283,9 @@ export class DefenseFlower {
         if (!this._stageLabel) return;
         const icon = this.team === 'fire' ? '🌺' : '❄';
         if (this._mature) {
-            this._stageLabel.textContent = `${icon} Olgun`;
+            this._stageLabel.textContent = `${icon} ${t('flowerMature' as any)}`;
         } else {
-            this._stageLabel.textContent = `${icon} Faz ${this._stage}/3`;
+            this._stageLabel.textContent = `${icon} ${t('flowerPhase' as any)} ${this._stage}/3`;
         }
     }
 

@@ -75,6 +75,7 @@ function startMapPreview(): void {
 
     new BaseBuilding(mapScene, 'fire');
     new BaseBuilding(mapScene, 'ice');
+
     console.log('[MapPreview] Map loaded');
 
     (window as any).exportMapGLB = () => exportMapGLB(mapScene);

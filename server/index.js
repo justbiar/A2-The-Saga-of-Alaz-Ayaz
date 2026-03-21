@@ -79,10 +79,25 @@ function rateLimit(req, res, next) {
     next();
 }
 
+// Rate limit temizligi (2 dakikada bir)
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, arr] of recentRequests) {
+        if (arr.every(t => now - t > 60_000)) recentRequests.delete(ip);
+    }
+}, 120_000);
+
 // ── Helpers ───────────────────────────────────────────────────────────
 function validateAddress(addr) {
     try { return ethers.getAddress(addr); }
     catch { return null; }
+}
+
+/** Atomik dosya yazma — temp dosyaya yaz, sonra rename (crash-safe) */
+function atomicWriteSync(filePath, data) {
+    const tmp = filePath + '.tmp';
+    fs.writeFileSync(tmp, data);
+    fs.renameSync(tmp, filePath);
 }
 
 function validateAmount(val) {
@@ -106,7 +121,26 @@ function validateAmount(val) {
  *   createdAt, settledAt
  * }
  */
+const MATCHES_FILE = path.join(__dirname, 'data', 'matches.json');
 const matches = new Map();
+
+// Disk'ten yukle (server restart'a dayanikli)
+try {
+    if (fs.existsSync(MATCHES_FILE)) {
+        const saved = JSON.parse(fs.readFileSync(MATCHES_FILE, 'utf8'));
+        for (const [k, v] of Object.entries(saved)) matches.set(k, v);
+        console.log(`[Matches] Disk'ten ${matches.size} maç yüklendi`);
+    }
+} catch (e) { console.error('[Matches] Load failed:', e.message); }
+
+function saveMatches() {
+    try {
+        fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
+        const obj = {};
+        for (const [k, v] of matches) obj[k] = v;
+        atomicWriteSync(MATCHES_FILE, JSON.stringify(obj, null, 2));
+    } catch (e) { console.error('[Matches] Save failed:', e.message); }
+}
 
 /** Verify a deposit TX on-chain: check to, value, data */
 async function verifyDepositTx(txHash, expectedFrom, expectedAmountAvax, expectedMatchId) {
@@ -161,6 +195,7 @@ setInterval(() => {
                 value: refundWei,
             }).then(tx => {
                 match.settledAt = Date.now();
+                saveMatches();
                 console.log(`[AutoRefund] ${matchId} → ${match.hostAddress} TX: ${tx.hash}`);
             }).catch(err => {
                 console.error(`[AutoRefund] ${matchId} failed:`, err.message);
@@ -188,6 +223,7 @@ setInterval(() => {
                         match.settledAt = Date.now();
                         match.winnerAddress = winnerAddr;
                         addFeeToPool(fee, matchId);
+                        saveMatches();
                         console.log(`[AutoResolve] ✅ ${matchId} → ${winnerAddr.slice(0, 10)} ${prize} AVAX tx=${tx.hash}`);
                     }).catch(err => {
                         match.status = 'locked';
@@ -212,7 +248,15 @@ setInterval(() => {
         // Clean up old settled/refunded/disputed matches after 1 hour
         if (['settled', 'refunded', 'disputed'].includes(match.status) && (now - (match.settledAt || match.createdAt)) > 60 * 60 * 1000) {
             matches.delete(matchId);
+            saveMatches();
         }
+    }
+    // settledMatches / refundedMatches temizligi (1 saat)
+    for (const [id, ts] of settledMatches) {
+        if (now - ts > 3_600_000) settledMatches.delete(id);
+    }
+    for (const [id, ts] of refundedMatches) {
+        if (now - ts > 3_600_000) refundedMatches.delete(id);
     }
 }, 30_000);
 
@@ -241,7 +285,7 @@ app.get('/api/health', async (req, res) => {
  * ✅ NEW: This is now called internally by /api/report-result when both sides agree.
  *         Direct calls are rejected unless match is in 'settling' state.
  */
-const settledMatches = new Set();
+const settledMatches = new Map(); // matchId → timestamp
 
 app.post('/api/settle', rateLimit, async (req, res) => {
     return res.status(403).json({ error: 'Doğrudan settle çağrısı devre dışı. /api/report-result kullanın.' });
@@ -305,6 +349,7 @@ app.post('/api/register-bet', rateLimit, async (req, res) => {
             createdAt: Date.now(),
             settledAt: null,
         });
+        saveMatches();
         console.log(`[RegisterBet] Host registered: ${matchId} amount=${amt} AVAX`);
         res.json({ ok: true, status: 'host_deposited' });
 
@@ -325,6 +370,7 @@ app.post('/api/register-bet', rateLimit, async (req, res) => {
         match.guestTxHash = txHash;
         match.guestVerified = true;
         match.status = 'locked';
+        saveMatches();
         console.log(`[RegisterBet] Guest registered → match LOCKED: ${matchId}`);
         res.json({ ok: true, status: 'locked' });
     }
@@ -373,6 +419,7 @@ app.post('/api/cancel-bet', rateLimit, async (req, res) => {
 
             match.status = 'refunded';
             match.settledAt = Date.now();
+            saveMatches();
             console.log(`[CancelBet] ✅ ${matchId} → host refunded ${match.amount} AVAX tx=${tx.hash}`);
             res.json({ ok: true, status: 'refunded', txHash: tx.hash, refundAVAX: match.amount });
         } catch (e) {
@@ -423,11 +470,16 @@ app.post('/api/report-result', rateLimit, async (req, res) => {
     if (isHost) match.hostResult = result;
     if (isGuest) match.guestResult = result;
     if (!match.firstReportAt) match.firstReportAt = Date.now();
+    saveMatches();
 
     console.log(`[ReportResult] ${matchId} ${isHost ? 'host' : 'guest'}(${addr.slice(0, 8)}) → ${result}`);
 
     // Both reported?
     if (match.hostResult && match.guestResult) {
+        // Settling kilidi — concurrent istekleri engelle
+        if (match.status === 'settling') {
+            return res.status(409).json({ error: 'Maç zaten settle ediliyor, lütfen bekle' });
+        }
         // Determine winner
         let winnerAddr = null;
 
@@ -472,8 +524,9 @@ app.post('/api/report-result', rateLimit, async (req, res) => {
             match.status = 'settled';
             match.settledAt = Date.now();
             match.winnerAddress = winnerAddr;
-            settledMatches.add(matchId);
+            settledMatches.set(matchId, Date.now());
             addFeeToPool(fee, matchId);
+            saveMatches();
             console.log(`[Settle] ✅ ${matchId} → winner=${winnerAddr.slice(0, 10)} prize=${prize} AVAX fee=${fee.toFixed(4)} AVAX tx=${tx.hash}`);
 
             res.json({ ok: true, status: 'settled', winnerAddress: winnerAddr, prizeAVAX: prize, txHash: tx.hash });
@@ -511,20 +564,16 @@ async function refundBothPlayers(matchId, match) {
     }
     match.status = 'refunded';
     match.settledAt = Date.now();
+    saveMatches();
 }
 
-/** GET /api/match/:matchId — Match durumu sorgula */
-app.get('/api/match/:matchId', (req, res) => {
+/** GET /api/match/:matchId — Match durumu sorgula (sadece durum bilgisi, hassas veri yok) */
+app.get('/api/match/:matchId', rateLimit, (req, res) => {
     const match = matches.get(req.params.matchId);
     if (!match) return res.status(404).json({ error: 'Maç bulunamadı' });
     res.json({
         ok: true,
         status: match.status,
-        amount: match.amount,
-        hostVerified: match.hostVerified,
-        guestVerified: match.guestVerified,
-        hostResult: match.hostResult,
-        guestResult: match.guestResult,
         winnerAddress: match.winnerAddress || null,
     });
 });
@@ -542,9 +591,10 @@ app.post('/api/match/:matchId/refund-both', rateLimit, async (req, res) => {
     const match = matches.get(req.params.matchId);
     if (!match) return res.status(404).json({ error: 'Maç bulunamadı' });
 
-    const isPlayer = addr.toLowerCase() === match.hostAddress?.toLowerCase() ||
-                     addr.toLowerCase() === match.guestAddress?.toLowerCase();
-    if (!isPlayer) return res.status(403).json({ error: 'Bu maçın oyuncusu değilsin' });
+    const isHost = addr.toLowerCase() === match.hostAddress?.toLowerCase();
+    const isGuest = addr.toLowerCase() === match.guestAddress?.toLowerCase();
+    const isAdmin = ADMIN_WALLETS.includes(addr.toLowerCase());
+    if (!isHost && !isGuest && !isAdmin) return res.status(403).json({ error: 'Bu maçın oyuncusu değilsin' });
 
     if (['settled', 'refunded', 'disputed'].includes(match.status)) {
         return res.status(409).json({ error: 'Maç zaten sonuçlandı', status: match.status });
@@ -553,9 +603,29 @@ app.post('/api/match/:matchId/refund-both', rateLimit, async (req, res) => {
         return res.status(409).json({ error: 'Maç locked değil', status: match.status });
     }
 
-    console.log(`[RefundBoth] ${req.params.matchId} — requested by ${addr.slice(0, 10)}`);
-    await refundBothPlayers(req.params.matchId, match);
-    res.json({ ok: true, status: 'refunded' });
+    // Admin direkt refund yapabilir, oyuncular iki taraf onaylamali
+    if (isAdmin) {
+        console.log(`[RefundBoth] ${req.params.matchId} — ADMIN refund by ${addr.slice(0, 10)}`);
+        await refundBothPlayers(req.params.matchId, match);
+        return res.json({ ok: true, status: 'refunded' });
+    }
+
+    // Oyuncu refund istegi — iki tarafin onayini bekle
+    if (!match.refundRequests) match.refundRequests = {};
+    match.refundRequests[addr.toLowerCase()] = Date.now();
+    saveMatches();
+
+    const hostRequested = !!match.refundRequests[match.hostAddress?.toLowerCase()];
+    const guestRequested = !!match.refundRequests[match.guestAddress?.toLowerCase()];
+
+    if (hostRequested && guestRequested) {
+        console.log(`[RefundBoth] ${req.params.matchId} — both sides agreed, refunding`);
+        await refundBothPlayers(req.params.matchId, match);
+        return res.json({ ok: true, status: 'refunded' });
+    }
+
+    console.log(`[RefundBoth] ${req.params.matchId} — ${isHost ? 'host' : 'guest'} requested, waiting for other side`);
+    res.json({ ok: true, status: 'waiting_refund', message: 'Rakibinin de onaylaması gerekiyor' });
 });
 
 /**
@@ -563,16 +633,13 @@ app.post('/api/match/:matchId/refund-both', rateLimit, async (req, res) => {
  * Body: { hostAddress, betAmountPerPlayer, matchId }
  * → Refunds host's deposit (no fee taken)
  */
-const refundedMatches = new Set();
+const refundedMatches = new Map(); // matchId → timestamp
 
 app.post('/api/refund', rateLimit, async (req, res) => {
     const { hostAddress, betAmountPerPlayer, matchId } = req.body ?? {};
 
     const host = validateAddress(hostAddress);
     if (!host) return res.status(400).json({ error: 'Geçersiz hostAddress' });
-
-    const amount = validateAmount(betAmountPerPlayer);
-    if (!amount) return res.status(400).json({ error: 'Geçersiz betAmountPerPlayer' });
 
     if (!matchId || typeof matchId !== 'string') {
         return res.status(400).json({ error: 'Geçersiz matchId' });
@@ -582,6 +649,23 @@ app.post('/api/refund', rateLimit, async (req, res) => {
         return res.status(409).json({ error: 'Bu maç zaten iade edildi.' });
     }
 
+    // Match registry kontrolu — sadece gercek mac ve o macin host'u refund alabilir
+    const match = matches.get(matchId);
+    if (!match) {
+        return res.status(404).json({ error: 'Maç bulunamadı. Kayıtlı bir maç yok.' });
+    }
+    if (match.hostAddress.toLowerCase() !== host.toLowerCase()) {
+        return res.status(403).json({ error: 'Sadece bu maçın host\'u refund alabilir' });
+    }
+    if (['settled', 'refunded'].includes(match.status)) {
+        return res.status(409).json({ error: 'Maç zaten sonuçlandı', status: match.status });
+    }
+    if (match.status === 'locked') {
+        return res.status(409).json({ error: 'Her iki taraf da deposit yaptı, /api/refund kullanılamaz' });
+    }
+
+    // Miktari match registry'den al (client'a guvenme)
+    const amount = match.amount;
     const refundWei = ethers.parseEther(amount.toFixed(6));
 
     try {
@@ -590,7 +674,10 @@ app.post('/api/refund', rateLimit, async (req, res) => {
             value: refundWei,
         });
 
-        refundedMatches.add(matchId);
+        match.status = 'refunded';
+        match.settledAt = Date.now();
+        saveMatches();
+        refundedMatches.set(matchId, Date.now());
         console.log(`[Refund] matchId=${matchId} host=${host} amount=${amount} AVAX tx=${tx.hash}`);
         res.json({ ok: true, txHash: tx.hash, refundAVAX: amount, matchId });
 
@@ -655,7 +742,7 @@ try {
 function saveLbData() {
     try {
         fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
-        fs.writeFileSync(LB_FILE, JSON.stringify(lbData, null, 2));
+        atomicWriteSync(LB_FILE, JSON.stringify(lbData, null, 2));
     } catch (e) {
         console.error('[LB] Save failed:', e.message);
     }
@@ -723,9 +810,21 @@ let sharp;
 try { sharp = require('sharp'); } catch { sharp = null; }
 
 app.post('/api/avatar/upload', rateLimit, async (req, res) => {
-    const { address, dataUrl } = req.body ?? {};
+    const { address, dataUrl, signature } = req.body ?? {};
     const addr = validateAddress(address);
     if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
+
+    // Imza dogrulamasi — sadece kendi avatarini yukleyebilir
+    if (!signature) return res.status(401).json({ error: 'Imza gerekli' });
+    try {
+        const msg = `A2 Avatar Upload: ${addr.toLowerCase()}`;
+        const recovered = ethers.verifyMessage(msg, signature);
+        if (recovered.toLowerCase() !== addr.toLowerCase()) {
+            return res.status(403).json({ error: 'Imza dogrulanamadi' });
+        }
+    } catch {
+        return res.status(403).json({ error: 'Gecersiz imza' });
+    }
 
     const match = typeof dataUrl === 'string' && dataUrl.match(/^data:image\/(jpeg|jpg|png|webp|gif);base64,(.+)$/);
     if (!match) return res.status(400).json({ error: 'Geçersiz görsel formatı' });
@@ -799,14 +898,46 @@ app.get('/api/leaderboard/matches/:address', (req, res) => {
 });
 
 /** POST /api/leaderboard/result — Oyun sonucu kaydet (mode: online|local) */
+const localResultLimits = new Map(); // address → timestamp[]
+setInterval(() => {
+    const now = Date.now();
+    for (const [addr, arr] of localResultLimits) {
+        if (arr.every(t => now - t > 3_600_000)) localResultLimits.delete(addr);
+    }
+}, 120_000);
 app.post('/api/leaderboard/result', rateLimit, (req, res) => {
-    const { address, result, betWon, betLost, mode, opponentAddress, opponentUsername } = req.body ?? {};
+    const { address, result, betWon, betLost, mode, opponentAddress, opponentUsername, matchId } = req.body ?? {};
     const addr = validateAddress(address);
     if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
     if (!['win', 'loss', 'draw'].includes(result)) {
         return res.status(400).json({ error: 'Geçersiz result' });
     }
     const isOnline = mode === 'online' || mode === 'multiplayer';
+
+    // Local sonuclar icin per-address rate limit — saatte max 10
+    if (!isOnline) {
+        const key = addr.toLowerCase();
+        const now = Date.now();
+        const arr = (localResultLimits.get(key) ?? []).filter(t => now - t < 3_600_000);
+        if (arr.length >= 10) {
+            return res.status(429).json({ error: 'Saatte en fazla 10 local sonuç kaydedebilirsin' });
+        }
+        arr.push(now);
+        localResultLimits.set(key, arr);
+    }
+
+    // Online sonuclar icin match registry kontrolu — sahte win engelle
+    if (isOnline && matchId) {
+        const match = matches.get(matchId);
+        if (!match) {
+            return res.status(404).json({ error: 'Maç bulunamadı — sonuç kaydedilemez' });
+        }
+        const isPlayer = addr.toLowerCase() === match.hostAddress?.toLowerCase() ||
+                         addr.toLowerCase() === match.guestAddress?.toLowerCase();
+        if (!isPlayer) {
+            return res.status(403).json({ error: 'Bu maçın oyuncusu değilsin' });
+        }
+    }
     const key = addr.toLowerCase();
     if (!lbData[key]) {
         lbData[key] = {
@@ -913,7 +1044,7 @@ try {
 function savePoolData() {
     try {
         fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
-        fs.writeFileSync(POOL_FILE, JSON.stringify(poolData, null, 2));
+        atomicWriteSync(POOL_FILE, JSON.stringify(poolData, null, 2));
     } catch (e) { console.error('[Pool] Save failed:', e.message); }
 }
 
@@ -962,18 +1093,25 @@ async function runWeeklyDistribution() {
         return;
     }
 
-    const sorted = Object.values(lbData)
-        .map(p => { maybeResetWeekly(p); return p; })
-        .filter(p => (p.weeklyWins || 0) > 0)
-        .sort((a, b) => (b.weeklyWins || 0) - (a.weeklyWins || 0))
+    // SNAPSHOT AL — maybeResetWeekly cagirmadan once weeklyWins degerlerini kaydet
+    // (Pazartesi gunu ISO hafta degismis olabilir, reset edersek veriler kaybolur)
+    const snapshot = Object.values(lbData)
+        .map(p => ({ address: p.address, weeklyWins: p.weeklyWins || 0 }))
+        .filter(p => p.weeklyWins > 0)
+        .sort((a, b) => b.weeklyWins - a.weeklyWins)
         .slice(0, 3);
 
-    if (sorted.length === 0) {
+    if (snapshot.length === 0) {
         console.log('[WeeklyPrize] Bu hafta oynayan yok, dağıtım atlandı');
         poolData.lastDistributedWeek = currentWeek;
         savePoolData();
+        // Simdi guvenle reset edebiliriz
+        for (const p of Object.values(lbData)) maybeResetWeekly(p);
+        saveLbData();
         return;
     }
+
+    const sorted = snapshot;
 
     const ratios = [40, 20, 10];
     const distributedAmounts = [];
@@ -1012,7 +1150,14 @@ async function runWeeklyDistribution() {
     poolData.matchIds = [];
     poolData.lastDistributedWeek = currentWeek;
     savePoolData();
-    console.log(`[WeeklyPrize] Dağıtım tamamlandı. Toplam: ${totalSent.toFixed(4)} AVAX`);
+    // Dagitim sonrasi weeklyWins'i sifirla (snapshot zaten alindi)
+    for (const p of Object.values(lbData)) {
+        p.weeklyWins = 0;
+        p.weeklyBetWon = 0;
+        p.lastWeek = getISOWeek();
+    }
+    saveLbData();
+    console.log(`[WeeklyPrize] Dağıtım tamamlandı. Toplam: ${totalSent.toFixed(4)} AVAX — weeklyWins sıfırlandı`);
 }
 
 // Her saat çalıştır (3_600_000 ms)
@@ -1138,9 +1283,152 @@ app.delete('/api/lobby/:code', (req, res) => {
     res.json({ ok: true });
 });
 
-/** GET /api/lobbies — Public lobileri listele */
+// --- FAKE LOBBIES ---
+const fakeLobbies = new Map();
+
+// --- FAKE LOBBY POOL ---
+const FAKE_LOBBY_POOL_FILE = path.join(__dirname, 'data', 'fakeLobbyPool.json');
+let fakeLobbyPoolConfig = {
+    enabled: false,
+    maxLobbies: 3,
+    minDuration: 10,  // dakika
+    maxDuration: 30,  // dakika
+    lobbyNames: ['Avax Pro', 'Türkiyem', 'Savaş', 'Hodl', 'Fuji Test'],
+    nicknames: ['Oyuncu1', 'Alaz', 'Kral', 'ProGamer', 'Ayaz']
+};
+
+try {
+    if (fs.existsSync(FAKE_LOBBY_POOL_FILE)) {
+        fakeLobbyPoolConfig = { ...fakeLobbyPoolConfig, ...JSON.parse(fs.readFileSync(FAKE_LOBBY_POOL_FILE, 'utf8')) };
+    }
+} catch (e) { console.error('[FakeLobbyPool] Load error:', e.message); }
+
+function saveFakeLobbyPoolConfig() {
+    try {
+        fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
+        atomicWriteSync(FAKE_LOBBY_POOL_FILE, JSON.stringify(fakeLobbyPoolConfig, null, 2));
+    } catch (e) {
+        console.error('[FakeLobbyPool] Save error:', e.message);
+    }
+}
+
+// Havuz döngüsü (her 30 saniyede bir çalışır)
+setInterval(() => {
+    const now = Date.now();
+    let autoLobbyCount = 0;
+
+    // 1. Süresi dolan otomatik lobileri temizle ve mevcut otomatik lobi sayısını say
+    for (const [code, lobby] of fakeLobbies) {
+        if (lobby.isAutoPool) {
+            if (lobby.expiresAt && now > lobby.expiresAt) {
+                fakeLobbies.delete(code);
+                console.log(`[FakeLobbyPool] Süresi doldu, silindi: ${code}`);
+            } else {
+                autoLobbyCount++;
+            }
+        }
+    }
+
+    // 2. Havuz aktifse ve limitin altındaysa yeni lobi oluşturma şansı
+    if (fakeLobbyPoolConfig.enabled && autoLobbyCount < fakeLobbyPoolConfig.maxLobbies) {
+        // %50 ihtimalle lobi oluştur (hepsini aynı saniyede açmasın diye)
+        if (Math.random() > 0.5) {
+            const code = 'F_' + Math.random().toString(36).substring(2, 6).toUpperCase();
+            
+            // Rastgele özellikler seç
+            const names = fakeLobbyPoolConfig.lobbyNames.length > 0 ? fakeLobbyPoolConfig.lobbyNames : ['Oda'];
+            const nicks = fakeLobbyPoolConfig.nicknames.length > 0 ? fakeLobbyPoolConfig.nicknames : ['Bot'];
+            const randomName = names[Math.floor(Math.random() * names.length)];
+            const randomNick = nicks[Math.floor(Math.random() * nicks.length)];
+            const randomTeam = Math.random() > 0.5 ? 'ice' : 'fire';
+            const randomBet = [0, 0.5, 1, 2][Math.floor(Math.random() * 4)];
+            
+            // Rastgele yaşam süresi (dakika -> milisaniye)
+            const minMs = fakeLobbyPoolConfig.minDuration * 60000;
+            const maxMs = fakeLobbyPoolConfig.maxDuration * 60000;
+            const liveFor = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+            
+            fakeLobbies.set(code, {
+                code,
+                lobbyName: randomName.slice(0, 20),
+                nickname: randomNick.slice(0, 20),
+                team: randomTeam,
+                betAmount: randomBet,
+                playerCount: '2/2',
+                createdAt: now,
+                expiresAt: now + liveFor,
+                isFake: true,
+                isAutoPool: true // Havuz tarafından üretildiğini belirtir
+            });
+            console.log(`[FakeLobbyPool] Yeni otomatik lobi oluşturuldu: ${code} - ${randomName} (Süre: ${Math.round(liveFor/60000)} d)`);
+        }
+    }
+}, 30000);
+
+/** GET /api/admin/fake-lobby-pool — Havuz ayarlarını getir */
+app.get('/api/admin/fake-lobby-pool', requireAdmin, (req, res) => {
+    res.json({ ok: true, config: fakeLobbyPoolConfig });
+});
+
+/** POST /api/admin/fake-lobby-pool — Havuz ayarlarını güncelle */
+app.post('/api/admin/fake-lobby-pool', requireAdmin, (req, res) => {
+    const { enabled, maxLobbies, minDuration, maxDuration, lobbyNames, nicknames } = req.body ?? {};
+    
+    if (typeof enabled === 'boolean') fakeLobbyPoolConfig.enabled = enabled;
+    if (typeof maxLobbies === 'number') fakeLobbyPoolConfig.maxLobbies = Math.max(0, Math.min(20, maxLobbies));
+    if (typeof minDuration === 'number') fakeLobbyPoolConfig.minDuration = Math.max(1, minDuration);
+    if (typeof maxDuration === 'number') fakeLobbyPoolConfig.maxDuration = Math.max(fakeLobbyPoolConfig.minDuration, maxDuration);
+    
+    if (Array.isArray(lobbyNames)) {
+        fakeLobbyPoolConfig.lobbyNames = lobbyNames.map(s => String(s).trim()).filter(Boolean);
+    }
+    if (Array.isArray(nicknames)) {
+        fakeLobbyPoolConfig.nicknames = nicknames.map(s => String(s).trim()).filter(Boolean);
+    }
+    
+    saveFakeLobbyPoolConfig();
+    console.log('[FakeLobbyPool] Ayarlar güncellendi:', fakeLobbyPoolConfig);
+    res.json({ ok: true });
+});
+
+
+/** POST /api/admin/fake-lobby — Sahte lobi ekle */
+app.post('/api/admin/fake-lobby', requireAdmin, (req, res) => {
+    const { lobbyName, nickname, team, betAmount, playerCount } = req.body ?? {};
+    const code = 'F_' + Math.random().toString(36).substring(2, 6).toUpperCase();
+    
+    fakeLobbies.set(code, {
+        code,
+        lobbyName: (lobbyName || 'Oda').slice(0, 20),
+        nickname: (nickname || 'Oyuncu').slice(0, 20),
+        team: team === 'ice' ? 'ice' : 'fire',
+        betAmount: parseFloat(betAmount) || 0,
+        playerCount: playerCount || '2/2',
+        createdAt: Date.now(),
+        isFake: true
+    });
+    console.log(`[FakeLobby] Created: ${code} ${lobbyName}`);
+    res.json({ ok: true, code });
+});
+
+/** DELETE /api/admin/fake-lobby/:code — Sahte lobi sil */
+app.delete('/api/admin/fake-lobby/:code', requireAdmin, (req, res) => {
+    const code = req.params.code;
+    fakeLobbies.delete(code);
+    console.log(`[FakeLobby] Deleted: ${code}`);
+    res.json({ ok: true });
+});
+
+/** GET /api/admin/fake-lobbies — Tüm sahte lobileri listele (Admin için) */
+app.get('/api/admin/fake-lobbies', requireAdmin, (req, res) => {
+    res.json({ ok: true, lobbies: Array.from(fakeLobbies.values()) });
+});
+
+/** GET /api/lobbies — Public lobileri (ve fake lobileri) listele */
 app.get('/api/lobbies', (req, res) => {
     const publicLobbies = [];
+    
+    // Gerçek public lobiler
     for (const [code, lobby] of lobbies) {
         if (lobby.isPublic) {
             publicLobbies.push({
@@ -1150,9 +1438,25 @@ app.get('/api/lobbies', (req, res) => {
                 nickname: lobby.nickname,
                 lobbyName: lobby.lobbyName || '',
                 age: Math.floor((Date.now() - lobby.createdAt) / 1000),
+                isFake: false
             });
         }
     }
+    
+    // Fake lobileri ekle (isFake: true ile)
+    for (const [code, fLobby] of fakeLobbies) {
+        publicLobbies.push({
+            code,
+            team: fLobby.team,
+            betAmount: fLobby.betAmount,
+            nickname: fLobby.nickname,
+            lobbyName: fLobby.lobbyName,
+            age: Math.floor((Date.now() - fLobby.createdAt) / 1000),
+            isFake: true,
+            playerCount: fLobby.playerCount
+        });
+    }
+
     // En yeniler önce
     publicLobbies.sort((a, b) => a.age - b.age);
     res.json({ ok: true, lobbies: publicLobbies });
@@ -1259,7 +1563,7 @@ setInterval(() => {
  * First report is stored as authoritative. Subsequent calls return the same winner.
  */
 app.post('/api/win-report', rateLimit, (req, res) => {
-    const { lobbyCode, winner } = req.body ?? {};
+    const { lobbyCode, winner, address } = req.body ?? {};
     if (!lobbyCode || typeof lobbyCode !== 'string' || lobbyCode.length > 20) {
         return res.status(400).json({ error: 'Geçersiz lobbyCode' });
     }
@@ -1267,9 +1571,23 @@ app.post('/api/win-report', rateLimit, (req, res) => {
         return res.status(400).json({ error: 'winner must be fire or ice' });
     }
     const code = lobbyCode.toUpperCase();
+
+    // Address zorunlu — anonim rapor kabul etme
+    if (!address) {
+        return res.status(400).json({ error: 'address gerekli' });
+    }
+    const addr = validateAddress(address);
+    if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
+
+    // Kayitli oyuncu kontrolu
+    const lbKey = addr.toLowerCase();
+    if (!lbData[lbKey]) {
+        return res.status(403).json({ error: 'Kayitli bir oyuncu degilsin' });
+    }
+
     if (!winReports.has(code)) {
-        winReports.set(code, { winner, reportedAt: Date.now() });
-        console.log(`[WinReport] ${code} → winner: ${winner}`);
+        winReports.set(code, { winner, reportedAt: Date.now(), reportedBy: addr });
+        console.log(`[WinReport] ${code} → winner: ${winner} by ${addr.slice(0, 10)}`);
     }
     const stored = winReports.get(code);
     res.json({ ok: true, winner: stored.winner });
@@ -1304,7 +1622,7 @@ function saveErrorReports() {
         fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
         // Keep last 500 reports
         if (errorReports.length > 500) errorReports = errorReports.slice(-500);
-        fs.writeFileSync(ERROR_FILE, JSON.stringify(errorReports, null, 2));
+        atomicWriteSync(ERROR_FILE, JSON.stringify(errorReports, null, 2));
     } catch (e) {
         console.error('[ErrorReport] Save failed:', e.message);
     }
@@ -1332,11 +1650,8 @@ app.post('/api/error-report', rateLimit, (req, res) => {
     res.json({ ok: true, id: report.id });
 });
 
-/** GET /api/error-reports?adminKey=xxx */
-app.get('/api/error-reports', (req, res) => {
-    if (!process.env.ADMIN_KEY || req.query.adminKey !== process.env.ADMIN_KEY) {
-        return res.status(403).json({ error: 'Yetkisiz' });
-    }
+/** GET /api/admin/error-reports — Admin token ile korunan endpoint */
+app.get('/api/admin/error-reports', requireAdmin, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     res.json({ ok: true, total: errorReports.length, reports: errorReports.slice(-limit).reverse() });
 });
@@ -1358,7 +1673,7 @@ function saveFeedback() {
     try {
         fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
         if (feedbackReports.length > 1000) feedbackReports = feedbackReports.slice(-1000);
-        fs.writeFileSync(FEEDBACK_FILE, JSON.stringify(feedbackReports, null, 2));
+        atomicWriteSync(FEEDBACK_FILE, JSON.stringify(feedbackReports, null, 2));
     } catch (e) {
         console.error('[Feedback] Save failed:', e.message);
     }
@@ -1386,11 +1701,8 @@ app.post('/api/feedback', rateLimit, (req, res) => {
     res.json({ ok: true, id: fb.id });
 });
 
-/** GET /api/feedback?adminKey=xxx */
-app.get('/api/feedback', (req, res) => {
-    if (!process.env.ADMIN_KEY || req.query.adminKey !== process.env.ADMIN_KEY) {
-        return res.status(403).json({ error: 'Yetkisiz' });
-    }
+/** GET /api/admin/feedback — Admin token ile korunan endpoint */
+app.get('/api/admin/feedback', requireAdmin, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     res.json({ ok: true, total: feedbackReports.length, reports: feedbackReports.slice(-limit).reverse() });
 });
@@ -1403,6 +1715,19 @@ const TURN_SECRET = process.env.TURN_SECRET;
 const TURN_HOST = '34.170.132.21';
 
 app.get('/api/turn-credentials', (req, res) => {
+    // TURN_SECRET yoksa sadece STUN dön (crash etme)
+    if (!TURN_SECRET) {
+        return res.json({
+            ok: true,
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun.cloudflare.com:3478' },
+            ],
+            ttl: 0,
+        });
+    }
+
     const ttl = 3600; // 1 saat
     const timestamp = Math.floor(Date.now() / 1000) + ttl;
     const username = `${timestamp}:a2player`;
@@ -1472,7 +1797,7 @@ try {
 } catch { /* baştan başla */ }
 
 function saveFaucetData() {
-    try { fs.writeFileSync(FAUCET_FILE, JSON.stringify(faucetData, null, 2)); } catch { }
+    try { atomicWriteSync(FAUCET_FILE, JSON.stringify(faucetData, null, 2)); } catch { }
 }
 
 function getFaucetEligibility(addr) {
@@ -1582,7 +1907,7 @@ try {
 } catch { bansData = {}; }
 
 function saveBansData() {
-    try { fs.writeFileSync(BANS_FILE, JSON.stringify(bansData, null, 2)); }
+    try { atomicWriteSync(BANS_FILE, JSON.stringify(bansData, null, 2)); }
     catch (e) { console.error('[Bans] Save failed:', e.message); }
 }
 
@@ -1594,7 +1919,7 @@ try {
 } catch { reportsData = []; }
 
 function saveReportsData() {
-    try { fs.writeFileSync(REPORTS_FILE, JSON.stringify(reportsData, null, 2)); }
+    try { atomicWriteSync(REPORTS_FILE, JSON.stringify(reportsData, null, 2)); }
     catch (e) { console.error('[Reports] Save failed:', e.message); }
 }
 
@@ -1606,7 +1931,7 @@ try {
 } catch { campaignsData = []; }
 
 function saveCampaignsData() {
-    try { fs.writeFileSync(CAMPAIGNS_FILE, JSON.stringify(campaignsData, null, 2)); }
+    try { atomicWriteSync(CAMPAIGNS_FILE, JSON.stringify(campaignsData, null, 2)); }
     catch (e) { console.error('[Campaigns] Save failed:', e.message); }
 }
 
@@ -2238,6 +2563,63 @@ app.delete('/api/admin/chat/:id', requireAdmin, (req, res) => {
     res.json({ ok: true });
 });
 
+// ══════════════════════════════════════════════════════════════════════
+//  MAINTENANCE MODE — Bakım modu (admin toggle + cüzdan whitelist)
+// ══════════════════════════════════════════════════════════════════════
+
+const MAINTENANCE_FILE = path.join(__dirname, 'data', 'maintenance.json');
+let maintenanceData = { active: false, message: '', whitelist: [] };
+try {
+    if (fs.existsSync(MAINTENANCE_FILE)) maintenanceData = JSON.parse(fs.readFileSync(MAINTENANCE_FILE, 'utf8'));
+} catch { maintenanceData = { active: false, message: '', whitelist: [] }; }
+
+function saveMaintenanceData() {
+    try { atomicWriteSync(MAINTENANCE_FILE, JSON.stringify(maintenanceData, null, 2)); }
+    catch (e) { console.error('[Maintenance] Save failed:', e.message); }
+}
+
+/** GET /api/maintenance — Bakım durumu (herkese açık) */
+app.get('/api/maintenance', (req, res) => {
+    res.json({
+        active: maintenanceData.active,
+        message: maintenanceData.message || '',
+        whitelist: maintenanceData.whitelist.map(w => w.toLowerCase()),
+    });
+});
+
+/** POST /api/admin/maintenance — Bakım modunu aç/kapat */
+app.post('/api/admin/maintenance', requireAdmin, (req, res) => {
+    const { active, message } = req.body ?? {};
+    if (typeof active === 'boolean') maintenanceData.active = active;
+    if (typeof message === 'string') maintenanceData.message = message;
+    saveMaintenanceData();
+    console.log(`[Maintenance] ${maintenanceData.active ? 'AKTIF' : 'KAPALI'} — by ${req.adminAddress}`);
+    res.json({ ok: true, active: maintenanceData.active, message: maintenanceData.message });
+});
+
+/** POST /api/admin/maintenance/whitelist — Whitelist'e cüzdan ekle */
+app.post('/api/admin/maintenance/whitelist', requireAdmin, (req, res) => {
+    const { address } = req.body ?? {};
+    const addr = validateAddress(address);
+    if (!addr) return res.status(400).json({ error: 'Geçersiz adres' });
+    const lower = addr.toLowerCase();
+    if (!maintenanceData.whitelist.includes(lower)) {
+        maintenanceData.whitelist.push(lower);
+        saveMaintenanceData();
+    }
+    res.json({ ok: true, whitelist: maintenanceData.whitelist });
+});
+
+/** DELETE /api/admin/maintenance/whitelist/:address — Whitelist'ten çıkar */
+app.delete('/api/admin/maintenance/whitelist/:address', requireAdmin, (req, res) => {
+    const addr = validateAddress(req.params.address);
+    if (!addr) return res.status(400).json({ error: 'Geçersiz adres' });
+    const lower = addr.toLowerCase();
+    maintenanceData.whitelist = maintenanceData.whitelist.filter(w => w !== lower);
+    saveMaintenanceData();
+    res.json({ ok: true, whitelist: maintenanceData.whitelist });
+});
+
 // ── PeerJS Signaling Server ────────────────────────────────────────────
 const httpServer = http.createServer(app);
 
@@ -2245,6 +2627,9 @@ const peerServer = ExpressPeerServer(httpServer, {
     path: '/',
     debug: false,
     allow_discovery: false,
+    alive_timeout: 600000,       // 10 dakika — signaling heartbeat timeout (varsayılan 60s çok kısa)
+    cleanup_out_msgs: 1000,      // buffer temizleme eşiği
+    concurrent_limit: 100,       // eşzamanlı bağlantı limiti
 });
 app.use('/peerjs', peerServer);
 

@@ -23,6 +23,7 @@ import '@babylonjs/loaders/glTF';
 import { Unit, Team, UnitType, STATS_MAP, AI_PROFILES_MAP } from './Unit';
 import { SimpleNavGraph } from '../pathfinding/SimpleNavGraph';
 import { tickPassives, tickStatusEffects, checkAbilityTrigger, applyStatusEffect, hasStatus } from './abilities/AbilitySystem';
+import { GameRandom } from '../utils/Random';
 import { UNIT_ABILITY_MAP } from './abilities/characterAbilities';
 import type { ShardBonus } from './types';
 import type { BaseBuilding } from '../scene/map/BaseBuilding';
@@ -156,7 +157,7 @@ export class UnitManager {
 
         // Yeni takım yönünde path ver
         const curPos = unit.mesh.position;
-        const lane = Math.floor(Math.random() * 3);
+        const lane = GameRandom.rangeInt(0, 2);
         const fullPath = this.buildLanePath(0, 24, lane, newTeam);
         const fullQueue = fullPath.map(n => new Vector3(n.x, unit.baseY, n.z));
         let bestIdx = 0;
@@ -410,8 +411,12 @@ export class UnitManager {
             ? new Vector3(0, 0, -38)
             : new Vector3(0, 0, 38);
 
+        // Capture nextId BEFORE buildUnitMesh — buildKorhan/buildErlik etc.
+        // store animation data using this numeric key.
+        const preSpawnId = nextId;
+
         const mesh = this.buildUnitMesh(type, team, spawnPos);
-        const chosenLane = lane ?? Math.floor(Math.random() * 3);
+        const chosenLane = lane ?? GameRandom.rangeInt(0, 2);
         // fire: 0→19, ice: 19→0 (reversed)
         const start = team === 'fire' ? 0 : 19;
         const end = team === 'fire' ? 19 : 0;
@@ -422,9 +427,20 @@ export class UnitManager {
         const { bg, fill } = this.createHealthBar(mesh, type);
         const stats = { ...STATS_MAP[type] };
 
+        // Determine final unit ID
+        let finalId: string | number;
+        if (assignedId) {
+            finalId = assignedId;
+            // nextId was NOT incremented by assignedId path, so bump it to stay
+            // in sync with the numeric key used inside buildUnitMesh / buildKorhan etc.
+            nextId++;
+        } else {
+            finalId = nextId++;
+        }
+
         const aiProfile = AI_PROFILES_MAP[type];
         const unit: Unit = {
-            id: assignedId || nextId++,
+            id: finalId,
             team, type, mesh,
             hp: stats.maxHp, stats,
             state: 'walking',
@@ -440,6 +456,21 @@ export class UnitManager {
             poaiScore: 0,
             abilityState: {},
         };
+
+        // Re-key animation maps: buildKorhan etc. stored data under preSpawnId (number),
+        // but unit.id may be a string (assignedId). Fix the key so updateGLBAnim finds it.
+        if (finalId !== preSpawnId) {
+            this.rekeyAnimMap(this.korhanAnimMap, preSpawnId, finalId);
+            this.rekeyAnimMap(this.erlikAnimMap, preSpawnId, finalId);
+            this.rekeyAnimMap(this.odAnimMap, preSpawnId, finalId);
+            this.rekeyAnimMap(this.ayazAnimMap, preSpawnId, finalId);
+            this.rekeyAnimMap(this.tulparAnimMap, preSpawnId, finalId);
+            this.rekeyAnimMap(this.umayAnimMap, preSpawnId, finalId);
+            this.rekeyAnimMap(this.albastiAnimMap, preSpawnId, finalId);
+            this.rekeyAnimMap(this.tepegozAnimMap, preSpawnId, finalId);
+            this.rekeyAnimMap(this.sahmeranAnimMap, preSpawnId, finalId);
+            this.rekeyAnimMap(this.boruAnimMap, preSpawnId, finalId);
+        }
         // Attach ability ID for the AbilitySystem
         (unit as any)._abilityId = UNIT_ABILITY_MAP[type] ?? '';
         // Fire on_deploy trigger
@@ -462,7 +493,7 @@ export class UnitManager {
      */
     spawnUnitAt(type: UnitType, team: Team, position: Vector3, lane?: number): Unit {
         const mesh = this.buildUnitMesh(type, team, position);
-        const chosenLane = lane ?? Math.floor(Math.random() * 3);
+        const chosenLane = lane ?? GameRandom.rangeInt(0, 2);
 
         // Build full lane path, then trim to nearest point from spawn position
         const fullPath = this.buildLanePath(0, 24, chosenLane, team);
@@ -1721,6 +1752,14 @@ export class UnitManager {
         // Hedefte büyük efekt
         const tgtPos = target.mesh.position.clone(); tgtPos.y += 1.5;
         this.spawnFxBillboard(tgtPos, this.unitEmissive(attacker), row, sz, 300);
+    }
+
+    // ─── RE-KEY ANIM MAP (fixes ID type mismatch) ────────────────────
+    private rekeyAnimMap(map: Map<string | number, GLBAnimData>, oldKey: number, newKey: string | number): void {
+        const data = map.get(oldKey);
+        if (!data) return;
+        map.delete(oldKey);
+        map.set(newKey, data);
     }
 
     // ─── GENERIC GLB ANIMATION STATE MACHINE ───────────────────────

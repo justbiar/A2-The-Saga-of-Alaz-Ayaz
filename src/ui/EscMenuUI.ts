@@ -36,7 +36,7 @@ export function closeEscMenu(): void {
 function handleQuit(): void {
     if (!_quitConfirmPending) {
         _quitConfirmPending = true;
-        escHome.textContent = t('escQuitConfirm' as TransKey);
+        if (escHome) escHome.textContent = t('escQuitConfirm' as TransKey);
         return;
     }
     closeEscMenu();

@@ -449,26 +449,129 @@
   display: none;
 }
 
-/* ─── ACTIVE EFFECTS BAR ─── */
+/* ─── ACTIVE EFFECTS (CENTER) ─── */
 #active-effects {
   position: fixed;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
+  left: 50%;
+  top: 100px; /* Under the bonus mana banner */
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
   z-index: 200;
   pointer-events: none;
-  width: 190px;
+  width: 260px;
 }
 
 .effect-entry {
   background: rgba(10, 8, 20, 0.88);
   border: 1px solid rgba(160, 80, 255, 0.45);
   border-radius: 8px;
-  padding: 8px 10px 10px;
-  animation: effectSlideIn 0.25s ease;
+  padding: 6px 12px 8px;
+  animation: effectFadeDown 0.3s ease;
+  width: 100%;
+  text-align: center;
+}
+
+@keyframes effectFadeDown {
+  from { opacity: 0; transform: translateY(-15px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── CARD LOGS (LEFT & RIGHT) ─── */
+.card-log-container {
+  position: fixed;
+  top: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 200;
+  pointer-events: none;
+  width: 240px;
+}
+
+.card-log-container.left-log {
+  left: 24px;
+  align-items: flex-start;
+}
+
+.card-log-container.right-log {
+  right: 24px;
+  align-items: flex-end;
+}
+
+.card-log-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(8, 12, 24, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 12px;
+  padding: 8px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.card-log-entry.fading {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.left-log .card-log-entry {
+  animation: slideInLeftLog 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transform-origin: left center;
+}
+
+.right-log .card-log-entry {
+  flex-direction: row-reverse;
+  text-align: right;
+  animation: slideInRightLog 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transform-origin: right center;
+}
+
+@keyframes slideInLeftLog {
+  from { opacity: 0; transform: translateX(-40px) scale(0.9); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes slideInRightLog {
+  from { opacity: 0; transform: translateX(40px) scale(0.9); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.cl-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 0 10px rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.cl-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cl-name {
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.cl-desc {
+  font-size: 9px;
+  color: rgba(255,255,255,0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
 }
 
 .effect-entry.fading {

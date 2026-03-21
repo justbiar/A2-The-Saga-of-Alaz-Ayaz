@@ -19,6 +19,7 @@ import { Color3 } from '@babylonjs/core/Maths/math.color';
 import '@babylonjs/core/Culling/ray';
 import '@babylonjs/loaders/glTF';
 import { DracoCompression } from '@babylonjs/core/Meshes/Compression/dracoCompression';
+import { t } from '../../i18n';
 
 DracoCompression.Configuration.decoder = {
     wasmUrl: 'https://cdn.babylonjs.com/draco_wasm_wrapper_gltf.js',
@@ -64,7 +65,7 @@ export class ResourceTree {
     private _amount = BASE_AMOUNT;
 
     // Timers
-    private _activating = true;
+    private _activating = false;
     private _activationTimer = 0;
     private _productionTimer = 0;
     private _upgrading = false;
@@ -76,6 +77,7 @@ export class ResourceTree {
     private _levelLabel: HTMLElement | null = null;
     private _barFill: HTMLElement | null = null;
     private _upgradeBtn: HTMLElement | null = null;
+    private _choiceRow: HTMLElement | null = null;
 
     // Callbacks
     public onUpgradeChoice: ((tree: ResourceTree) => void) | null = null;
@@ -111,7 +113,7 @@ export class ResourceTree {
             this._root?.dispose();
             const glbRoot = result.meshes[0] as Mesh;
             glbRoot.position = this.position.clone();
-            glbRoot.position.y = this.treeType === 'mana' ? 1.0 : 0;
+            glbRoot.position.y = this.treeType === 'mana' ? 1.0 : 1.0;
             glbRoot.scaling.setAll(TREE_SCALE);
             this._root = glbRoot;
         } catch (err) {
@@ -146,8 +148,8 @@ export class ResourceTree {
                 this._upgrading = false;
                 this._pendingChoice = true;
                 this._updateLevelLabel();
-                // Secim popup'i goster
-                this.onUpgradeChoice?.(this);
+                // Inline secim butonlarini goster (fullscreen popup yerine)
+                if (this._choiceRow) this._choiceRow.style.display = 'flex';
             }
             return null;
         }
@@ -205,6 +207,7 @@ export class ResourceTree {
             this._amount += AMOUNT_INCREASE;
         }
         this._productionTimer = 0;
+        if (this._choiceRow) this._choiceRow.style.display = 'none';
         this._updateLevelLabel();
     }
 
@@ -224,7 +227,8 @@ export class ResourceTree {
             background:rgba(0,0,0,0.6);
             color:${this.treeType === 'mana' ? '#cc88ff' : '#ffaa44'};
         `;
-        label.textContent = this.treeType === 'mana' ? 'Mana L1' : 'AVX L1';
+        const prefix = this.treeType === 'mana' ? 'Mana' : 'AVX';
+        label.textContent = `${prefix} ${t('treeLevelLabel' as any)}1`;
 
         const bar = document.createElement('div');
         bar.style.cssText = `
@@ -253,22 +257,51 @@ export class ResourceTree {
         upgradeBtn.textContent = `▲ L2 (${TREE_UPGRADE_COST[1]} ${costCurrency})`;
         upgradeBtn.addEventListener('click', () => this.onUpgradeRequest?.());
 
+        // Inline choice row (hiz / miktar secimi — upgrade cooldown bitince gorunur)
+        const choiceRow = document.createElement('div');
+        choiceRow.style.cssText = `
+            display:none; gap:4px; pointer-events:auto;
+        `;
+        const btnStyle = (bg: string, clr: string) => `
+            font:bold 9px 'Cinzel',serif; padding:4px 8px; border-radius:4px;
+            border:1px solid ${clr}; background:${bg}; color:#fff;
+            cursor:pointer; letter-spacing:0.3px; white-space:nowrap;
+        `;
+        const speedBtn = document.createElement('div');
+        speedBtn.style.cssText = btnStyle('rgba(0,102,255,0.3)', 'rgba(0,150,255,0.6)');
+        speedBtn.textContent = t('treeSpeed' as any);
+        speedBtn.addEventListener('click', () => {
+            this.applyChoice('speed');
+            choiceRow.style.display = 'none';
+        });
+        const amountBtn = document.createElement('div');
+        amountBtn.style.cssText = btnStyle('rgba(255,102,0,0.3)', 'rgba(255,150,0,0.6)');
+        amountBtn.textContent = t('treeAmount' as any);
+        amountBtn.addEventListener('click', () => {
+            this.applyChoice('amount');
+            choiceRow.style.display = 'none';
+        });
+        choiceRow.appendChild(speedBtn);
+        choiceRow.appendChild(amountBtn);
+
         wrap.appendChild(label);
         wrap.appendChild(bar);
         wrap.appendChild(upgradeBtn);
+        wrap.appendChild(choiceRow);
         document.body.appendChild(wrap);
         this._wrap = wrap;
         this._levelLabel = label;
         this._upgradeBtn = upgradeBtn;
+        this._choiceRow = choiceRow;
         this._barFill = fill;
     }
 
     private _updateLevelLabel(): void {
         if (!this._levelLabel) return;
         const prefix = this.treeType === 'mana' ? 'Mana' : 'AVX';
-        let suffix = `L${this._level}`;
+        let suffix = `${t('treeLevelLabel' as any)}${this._level}`;
         if (this._activating) suffix += ' ...';
-        else if (this._upgrading) suffix += ' UP';
+        else if (this._upgrading) suffix += ` ${t('treeLevelUp' as any)}`;
         else if (this._pendingChoice) suffix += ' ?';
         else suffix += ` (${this._interval.toFixed(1)}s x${this._amount})`;
         this._levelLabel.textContent = `${prefix} ${suffix}`;

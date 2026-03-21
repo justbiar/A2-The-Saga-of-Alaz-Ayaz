@@ -1,6 +1,7 @@
 /**
  * GameBoot.ts — boot(), cleanupGame(), tick functions, HUD updates.
  */
+import { GameRandom } from '../utils/Random';
 
 import { Engine } from '@babylonjs/core/Engines/engine';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
@@ -30,7 +31,7 @@ import { ctx, resetGameState, MAX_MANA, MANA_REGEN_INTERVAL, type GameMode } fro
 import { showScreen, canvas } from '../ui/ScreenRouter';
 import { showToast, triggerWin } from '../ui/LobbyUI';
 import { showBetResultOnWin, showWinScreen, winOverlay, winTitle, winMessage } from '../ui/WinScreenUI';
-import { buildCardUI, buildPromptUI, updateManaUI, updateAvxUI, setupLaneOverlay, setupPlayerKeyboard, initDraft, tickDraft, cleanupDraft, resetAllCooldowns, startCooldownTicker, applyPromptEffect, aiPool, enemyTeam, showBoruCard } from '../ui/CardUI';
+import { buildCardUI, buildPromptUI, updateManaUI, updateAvxUI, setupLaneOverlay, setupPlayerKeyboard, initDraft, tickDraft, cleanupDraft, resetAllCooldowns, startCooldownTicker, applyPromptEffect, aiPool, enemyTeam, showBoruCard, logCardPlay } from '../ui/CardUI';
 import { setup2Player, updateIceManaUI } from './TwoPlayerSetup';
 import { spawnAvxCoin } from './AvxCoinSystem';
 import { showMiniPlayer, hideMiniPlayer } from '../ui/SettingsUI';
@@ -209,13 +210,31 @@ function tickRealtime(dt: number, um: UnitManager): void {
         const eTeam = enemyTeam();
         const maxUnits = getAiMaxUnits();
         if (um.units.filter(u => u.team === eTeam && u.state !== 'dead').length < maxUnits) {
-            const unit = um.spawnUnit(pool[Math.floor(Math.random() * pool.length)], eTeam);
+            const cardId = GameRandom.choice(pool);
+            const unit = um.spawnUnit(cardId, eTeam);
+            
+            const cDef = [...CARD_DEFS, ...AI_CARDS].find(c => c.id === cardId);
+            if (cDef) {
+                const nameStr = (cDef as any).nameKey ? t((cDef as any).nameKey) : cDef.name;
+                const descStr = (cDef as any).descKey ? t((cDef as any).descKey) : cDef.description;
+                // logCardPlay(eTeam, nameStr, descStr, cDef.imagePath); // Disabled unit logs
+            }
+
             const mult = getAiStatMult();
             unit.hp = Math.round(unit.hp * mult);
             unit.stats.maxHp = Math.round(unit.stats.maxHp * mult);
             unit.stats.attack = Math.round(unit.stats.attack * mult);
             if (ctx.difficultyLevel >= 6 && um.units.filter(u => u.team === eTeam && u.state !== 'dead').length < maxUnits) {
-                const u2 = um.spawnUnit(pool[Math.floor(Math.random() * pool.length)], eTeam);
+                const cardId2 = GameRandom.choice(pool);
+                const u2 = um.spawnUnit(cardId2, eTeam);
+
+                const cDef2 = [...CARD_DEFS, ...AI_CARDS].find(c => c.id === cardId2);
+                if (cDef2) {
+                    const nameStr2 = (cDef2 as any).nameKey ? t((cDef2 as any).nameKey) : cDef2.name;
+                    const descStr2 = (cDef2 as any).descKey ? t((cDef2 as any).descKey) : cDef2.description;
+                    // setTimeout(() => logCardPlay(eTeam, nameStr2, descStr2, cDef2.imagePath), 400); // Disabled unit logs
+                }
+
                 u2.hp = Math.round(u2.hp * mult);
                 u2.stats.maxHp = Math.round(u2.stats.maxHp * mult);
                 u2.stats.attack = Math.round(u2.stats.attack * mult);
@@ -243,7 +262,7 @@ function tickMultiplayer(dt: number): void {
                 .then(r => r.json())
                 .then(data => {
                     if (data.winner && !ctx._mpGameEnded) {
-                        triggerWin(data.winner as 'fire' | 'ice', 'Oyun sona erdi');
+                        triggerWin(data.winner as 'fire' | 'ice', t('gameEnded' as any));
                     }
                 })
                 .catch(() => {});
@@ -307,6 +326,9 @@ export function cleanupGame(): void {
     cleanupDraft();
 
     document.querySelectorAll('.avx-coin-float').forEach(el => el.remove());
+    document.getElementById('top-wolf-container')?.remove();
+    document.getElementById('ouroboros-banner')?.remove();
+    ctx.ouroborosMode = false;
 
     const resizeHandler = (window as any).__a2ResizeHandler;
     if (resizeHandler) {
@@ -315,9 +337,19 @@ export function cleanupGame(): void {
     }
 
     mpService.disconnect();
-    betService.reset(); // Oyun bitti, bet state temizle (yeni oyun için)
+    betService.reset(); // Oyun bitti, bet state temizle (yeni oyun icin)
     winOverlay.classList.remove('show');
     canvas.style.display = 'none';
+
+    // Multiplayer callback'leri temizle — gecikmeli mesajlar triggerWin yapmasin
+    ctx._mpTriggerWin = null;
+    ctx._mpSpawnUnit = null;
+    ctx._mpApplyPrompt = null;
+    ctx._mpApplyUnitSync = null;
+    ctx._mpStartGame = null;
+    ctx._fireBase = null;
+    ctx._iceBase = null;
+    ctx.gameMode = 'realtime'; // multiplayer'dan cik — gecikmeli disconnect triggerWin yapmasin
 
     resetGameState();
     ctx.playerMana = 3;
@@ -466,52 +498,6 @@ export async function boot(mode: GameMode): Promise<void> {
     // ── Tree (Agac) sistemi ──────────────────────────────────────────
     const trees: ResourceTree[] = [];
 
-    function showTreeChoicePopup(tree: ResourceTree): void {
-        const overlay = document.createElement('div');
-        overlay.style.cssText = `
-            position:fixed; inset:0; z-index:9000; display:flex; align-items:center; justify-content:center;
-            background:rgba(0,0,0,0.6);
-        `;
-        const box = document.createElement('div');
-        box.style.cssText = `
-            background:rgba(20,15,30,0.95); border:1px solid rgba(255,255,255,0.15);
-            border-radius:12px; padding:24px 32px; text-align:center; min-width:280px;
-            color:#eee; font-family:monospace;
-        `;
-        const treeName = tree.treeType === 'mana' ? t('treeManaName' as any) : t('treeAvxName' as any);
-        box.innerHTML = `
-            <div style="font-size:14px;font-weight:bold;margin-bottom:12px;">
-                ${treeName} L${tree.level}
-            </div>
-            <div style="font-size:12px;margin-bottom:16px;color:#aaa;">
-                ${t('treeUpgradeCurrent' as any)}: ${tree.interval.toFixed(1)}s ${t('treeUpgradeInterval' as any)} ${tree.amount}x ${t('treeUpgradeProduction' as any)}
-            </div>
-            <div style="display:flex;gap:12px;justify-content:center;">
-                <button id="tree-choice-speed" style="
-                    padding:10px 20px; border:none; border-radius:8px; cursor:pointer;
-                    background:linear-gradient(135deg,#0066ff,#00aaff); color:#fff; font-weight:bold;
-                    font-size:13px;
-                ">${t('treeChoiceSpeed' as any)}<br><span style='font-size:10px;opacity:0.8;'>${t('treeChoiceSpeedDesc' as any)}</span></button>
-                <button id="tree-choice-amount" style="
-                    padding:10px 20px; border:none; border-radius:8px; cursor:pointer;
-                    background:linear-gradient(135deg,#ff6600,#ffaa00); color:#fff; font-weight:bold;
-                    font-size:13px;
-                ">${t('treeChoiceAmount' as any)}<br><span style='font-size:10px;opacity:0.8;'>${t('treeChoiceAmountDesc' as any)}</span></button>
-            </div>
-        `;
-        overlay.appendChild(box);
-        document.body.appendChild(overlay);
-
-        box.querySelector('#tree-choice-speed')!.addEventListener('click', () => {
-            tree.applyChoice('speed');
-            overlay.remove();
-        });
-        box.querySelector('#tree-choice-amount')!.addEventListener('click', () => {
-            tree.applyChoice('amount');
-            overlay.remove();
-        });
-    }
-
     ctx.spawnTree = (): boolean => {
         if (!ctx.selectedTreeType) return false;
         const team = ctx.selectedTeam as 'fire' | 'ice';
@@ -521,7 +507,6 @@ export async function boot(mode: GameMode): Promise<void> {
         const freeSlot = slots.find(s => !usedPositions.some(u => Vector3.Distance(u, s) < 1));
         if (!freeSlot) { showToast('Bos slot yok', 1500); return false; }
         const tree = new ResourceTree(scene, team, ctx.selectedTreeType, freeSlot);
-        tree.onUpgradeChoice = (t) => showTreeChoicePopup(t);
         tree.onUpgradeRequest = () => upgradeTreeDirect(tree);
         trees.push(tree);
         return true;
@@ -710,13 +695,16 @@ export async function boot(mode: GameMode): Promise<void> {
             const def = PROMPT_DEFS.find(p => p.id === promptId);
             if (def) applyPromptEffect(def, team);
         };
+        ctx._mpApplyUnitSync = (data) => {
+            um.syncUnits(data);
+        };
         ctx._mpTriggerWin = (winner, msg, isDisconnect) => {
             // Guard: use overlay visibility, NOT _mpGameEnded flag
             if (winOverlay.classList.contains('show')) return;
             ctx._mpGameEnded = true;
 
             cleanupDraft();
-            winTitle.textContent = winner === 'fire' ? 'ALAZ KAZANDI' : 'AYAZ KAZANDI';
+            winTitle.textContent = winner === 'fire' ? t('winFireBase' as any) : t('winIceBase' as any);
             winMessage.textContent = msg;
             winOverlay.classList.add('show');
             engine.stopRenderLoop();
@@ -1149,8 +1137,8 @@ export async function boot(mode: GameMode): Promise<void> {
         mpService.send({ type: 'loaded' });
 
         if (mpService.role === 'host' && (mpService as any)._opponentLoaded) {
-            // Guest zaten loaded gönderdiyse direkt başlat
-            mpService.send({ type: 'start' });
+            // Guest zaten loaded gonderdiyse — seed LobbyUI'da uretildi,
+            // burada tekrar uretme (cift seed race condition)
             ctx._mpStartGame?.();
         } else if (mpService.role === 'guest' && (mpService as any)._startReceived) {
             // Host zaten start gönderdiyse (race condition: guest geç yüklendi) direkt başlat

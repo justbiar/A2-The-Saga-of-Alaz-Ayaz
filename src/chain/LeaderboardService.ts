@@ -198,58 +198,6 @@ class LeaderboardService {
         this._saveConfig();
     }
 
-    /** Distribute prizes — call once per week (admin action) */
-    async distributeWeeklyPrizes(
-        topAddresses: string[],
-        houseWalletPk: string
-    ): Promise<{ address: string; amount: number; txHash: string }[]> {
-        const _ethers = (globalThis as any).ethers;
-        if (!_ethers || !houseWalletPk || !this.prizeConfig.enabled) return [];
-
-        const feePool = this._getFeePool();
-        if (feePool.totalFee < this.prizeConfig.minPoolToDistribute) {
-            console.warn('[Leaderboard] Pool too small to distribute');
-            return [];
-        }
-
-        const FUJI_RPC = 'https://api.avax-test.network/ext/bc/C/rpc';
-        const provider = new _ethers.JsonRpcProvider(FUJI_RPC);
-        const signer = new _ethers.Wallet(houseWalletPk, provider);
-        const results = [];
-
-        for (let i = 0; i < Math.min(3, topAddresses.length); i++) {
-            const ratio = this.prizeConfig.prizeRatios[i] ?? 0;
-            if (ratio <= 0) continue;
-            const amount = +(feePool.totalFee * (ratio / 100)).toFixed(6);
-            if (amount < 0.001) continue;
-
-            try {
-                const tx = await signer.sendTransaction({
-                    to: topAddresses[i],
-                    value: _ethers.parseEther(String(amount)),
-                    data: _ethers.hexlify(_ethers.toUtf8Bytes(`A2:week${feePool.week}:prize${i + 1}`)),
-                });
-                await tx.wait(1);
-                results.push({ address: topAddresses[i], amount, txHash: tx.hash });
-                console.log(`[Leaderboard] Prize sent: ${amount} AVAX → ${topAddresses[i]}`);
-            } catch (err) {
-                console.error('[Leaderboard] Prize tx failed:', err);
-            }
-        }
-
-        // Mark week as distributed
-        this.prizeConfig.lastDistributedWeek = feePool.week;
-        this._saveConfig();
-        // Reset fee pool for next week
-        localStorage.setItem('a2_fee_pool', JSON.stringify({
-            totalFee: 0,
-            week: getISOWeek(),
-            matches: [],
-        }));
-
-        return results;
-    }
-
     /** Get current week fee pool */
     private _getFeePool(): { totalFee: number; week: number } {
         const raw = localStorage.getItem('a2_fee_pool') ?? '{}';

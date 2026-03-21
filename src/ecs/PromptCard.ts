@@ -2,13 +2,14 @@
  * PromptCard.ts — Skill Card + Tower Card definitions for A2.
  */
 import type { PromptCardDef } from './types';
+import { t } from '../i18n';
 
 /** Takıma göre topçu kulesi kartı oluştur (45. saniyede otomatik eklenir). */
 export function getTowerCard(team: 'fire' | 'ice'): PromptCardDef {
     return {
         id: 'tower_place',
-        name: 'Topçu Kulesi',
-        description: 'Savunma kulesi kur. Her 5 AVX ile seviye atla (max 5).',
+        name: t('towerName' as any),
+        description: t('towerDesc' as any),
         manaCost: 0,
         avxCost: 5,
         effectType: 'tower_place',
@@ -26,8 +27,8 @@ export function getTowerCard(team: 'fire' | 'ice'): PromptCardDef {
 export function getFlowerCard(team: 'fire' | 'ice'): PromptCardDef {
     return {
         id: 'flower_place',
-        name: team === 'fire' ? 'Alaz Çiçeği' : 'Ayaz Çiçeği',
-        description: 'Düşman kulesini yok eden çiçek ek. 15s büyür, 3 vuruşta kule yıkar.',
+        name: team === 'fire' ? t('flowerFireName' as any) : t('flowerIceName' as any),
+        description: t('flowerCardDesc' as any),
         manaCost: 0,
         avxCost: 3,
         effectType: 'flower_place',
@@ -45,10 +46,10 @@ export function getFlowerCard(team: 'fire' | 'ice'): PromptCardDef {
 export function getTreeCard(treeType: 'mana' | 'avx'): PromptCardDef {
     return {
         id: 'tree_place',
-        name: treeType === 'mana' ? 'Mana Agaci' : 'AVX Agaci',
+        name: treeType === 'mana' ? t('treeCardManaName' as any) : t('treeCardAvxName' as any),
         description: treeType === 'mana'
-            ? 'Mana ureten agac dik (5 AVX). 15s sonra aktif.'
-            : 'AVX ureten agac dik (5 Mana). 15s sonra aktif.',
+            ? t('treeCardManaDesc' as any)
+            : t('treeCardAvxDesc' as any),
         manaCost: treeType === 'avx' ? 5 : 0,
         avxCost: treeType === 'mana' ? 5 : 0,
         effectType: 'tree_place',
@@ -120,7 +121,7 @@ export const PROMPT_DEFS: PromptCardDef[] = [
         nameKey: 'banCollect',
         descKey: 'banCollectDesc',
         name: '', description: '',
-        manaCost: 0,
+        manaCost: 7,
         effectType: 'bancollect',
         magnitude: 0,
         duration: 45,
@@ -150,7 +151,7 @@ export const PROMPT_DEFS: PromptCardDef[] = [
         effectType: 'recall',
         magnitude: 0,
         duration: 0,
-        cooldown: 9999,
+        cooldown: 30,
         targetTeam: 'self',
         imagePath: '/assets/images/skills/recall.webp',
     },

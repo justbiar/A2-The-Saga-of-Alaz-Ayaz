@@ -259,19 +259,21 @@
 }
 
 
+
 #card-area {
   pointer-events: all;
-  background: rgba(3, 2, 12, 0.82);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  border-top: 1px solid rgba(140, 70, 255, 0.15);
-  padding: 10px 16px 8px;
-  width: 100%;
+  padding: 0 0 5px;
   display: flex;
   justify-content: center;
+  align-items: flex-end;
   overflow: visible;
+  background: transparent;
+  border-top: none;
+  border-radius: 0;
+  box-shadow: none;
+  margin-bottom: 0;
 }
+
 
 #card-row {
   display: flex;
@@ -294,8 +296,8 @@
   border-radius: 10px;
   border: 1px solid rgba(140, 90, 255, 0.35);
   background: linear-gradient(170deg,
-      rgba(28, 8, 55, 0.98) 0%,
-      rgba(18, 5, 38, 0.95) 100%);
+      rgba(28, 8, 55, 1) 0%,
+      rgba(18, 5, 38, 1) 100%);
   cursor: pointer;
   position: relative;
   overflow: hidden;
@@ -305,6 +307,7 @@
   transition: transform 0.2s cubic-bezier(.34, 1.56, .64, 1), box-shadow 0.2s ease, opacity 0.25s;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7), 0 0 10px rgba(120, 60, 255, 0.2);
 }
+
 
 .prompt-card::before {
   content: '';
@@ -358,6 +361,7 @@
   padding: 0;
   overflow: hidden;
   border-radius: 10px 10px 0 0;
+  background: #100820;
 }
 
 .prompt-card-icon img {
@@ -368,8 +372,9 @@
   filter: drop-shadow(0 0 8px rgba(180, 120, 255, 0.4));
 }
 
+
 .prompt-card-footer {
-  background: linear-gradient(to top, rgba(5, 3, 18, 0.95) 60%, transparent);
+  background: linear-gradient(to top, rgba(5, 3, 18, 1) 60%, rgba(5, 3, 18, 0.4));
   padding: 4px 6px 5px;
   border-top: none;
   margin-top: -22px;
@@ -377,6 +382,7 @@
   z-index: 1;
   border-radius: 0 0 10px 10px;
 }
+
 
 .prompt-card-name {
   font-size: 11px;
@@ -411,6 +417,7 @@
   height: 175px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(8, 5, 15, 1);
   cursor: pointer;
   position: relative;
   overflow: hidden;
@@ -420,6 +427,7 @@
   transition: transform 0.22s cubic-bezier(.34, 1.56, .64, 1), box-shadow 0.2s ease, opacity 0.25s, filter 0.25s;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
+
 
 .game-card::before {
   content: '';
@@ -567,20 +575,22 @@
   flex: 1 1 auto;
   overflow: hidden;
   border-radius: 10px 10px 0 0;
+  background: #07040f;
 }
 
 .card-art-zone img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  object-position: center bottom;
+  object-fit: cover;
+  object-position: center top;
   border-radius: 10px 10px 0 0;
   display: block;
 }
 
+
 .card-footer {
   flex: 0 0 auto;
-  background: linear-gradient(to top, rgba(5, 3, 18, 0.95) 60%, transparent);
+  background: linear-gradient(to top, rgba(5, 3, 18, 1) 60%, rgba(5, 3, 18, 0.5));
   border-top: none;
   padding: 4px 6px 5px;
   border-radius: 0 0 12px 12px;
@@ -590,6 +600,7 @@
   display: flex;
   flex-direction: column;
 }
+
 
 .card-name {
   font-size: 11px;
@@ -943,7 +954,7 @@
   border-radius: 3px;
   flex: 1;
   transition: width 0.2s;
-  box-shadow: 0 0 4px rgba(80,255,80,0.5);
+  box-shadow: 0 0 4px rgba(80, 255, 80, 0.5);
 }
 
 .tower-lvl {
@@ -957,8 +968,8 @@
 .tower-upgrade-btn {
   position: fixed;
   z-index: 185;
-  background: rgba(10,10,20,0.82);
-  border: 1px solid rgba(255,185,50,0.5);
+  background: rgba(10, 10, 20, 0.82);
+  border: 1px solid rgba(255, 185, 50, 0.5);
   color: #ffc94d;
   font-size: 9px;
   font-family: 'Cinzel', serif;
@@ -970,8 +981,8 @@
 }
 
 .tower-upgrade-btn:hover {
-  background: rgba(255,185,50,0.15);
-  border-color: rgba(255,185,50,0.9);
+  background: rgba(255, 185, 50, 0.15);
+  border-color: rgba(255, 185, 50, 0.9);
 }
 
 .tower-projectile {

@@ -37,3 +37,7 @@ glb fix/
 "Effect and FX Pixel Part 12 Free/"
 "Effect and FX Pixel Part 12 Free.zip"
 Meshy_AI_biped/
+
+# Admin panel (gizli kalmalı)
+src/ui/AdminPanel.ts
+src/styles/screens/admin.css

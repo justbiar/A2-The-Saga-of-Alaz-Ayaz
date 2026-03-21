@@ -10,7 +10,9 @@ import { betService, BET_FEE_PERCENT, MIN_BET, MAX_BET } from '../chain/BetServi
 import { leaderboardService } from '../chain/LeaderboardService';
 import { profileService } from '../chain/ProfileService';
 import { showWalletModal } from './WalletUI';
-import type { UnitType } from '../ecs/Unit';
+import { PLAYER_CARDS, AI_CARDS, type UnitType } from '../ecs/Unit';
+import { logCardPlay } from './CardUI';
+import { GameRandom } from '../utils/Random';
 
 // ─── TOAST ─────────────────────────────────────────────────────────
 export function showToast(msg: string, durationMs = 4000): void {
@@ -83,9 +85,12 @@ function showBetPanel(state: BetPanelState): void {
         case 'host-waiting':
             offerSent!.style.display = 'block';
             break;
-        case 'guest-incoming':
+        case 'guest-incoming': {
             incoming!.style.display = 'block';
+            const acceptBtn = document.getElementById('bet-accept-btn') as HTMLButtonElement;
+            if (acceptBtn) { acceptBtn.disabled = false; acceptBtn.textContent = t('betAcceptBtn'); }
             break;
+        }
         case 'guest-depositing': {
             incoming!.style.display = 'block';
             const acceptBtn = document.getElementById('bet-accept-btn') as HTMLButtonElement;
@@ -283,15 +288,19 @@ async function fetchPublicLobbies(): Promise<void> {
             <tr class="ko-row" data-code="${l.code}">
                 <td>${String(i + 1).padStart(2, '0')}</td>
                 <td>${l.lobbyName ? l.lobbyName : (l.nickname || 'Adsız Oda')}</td>
-                <td><span class="ko-status-open">${t('lobbyStatusOpen')}</span></td>
-                <td>1/2</td>
+                <td><span class="${l.isFake ? 'ko-status-closed' : 'ko-status-open'}">${l.isFake ? t('lobbyStatusOpen') /* Fake lobi ama dolu göstereceğiz */ : t('lobbyStatusOpen')}</span></td>
+                <td>${l.isFake ? (l.playerCount || '2/2') : '1/2'}</td>
                 <td>${l.betAmount > 0 ? l.betAmount + ' A' : '—'}</td>
                 <td class="${l.team === 'fire' ? 'ko-team-fire' : 'ko-team-ice'}">${l.team === 'fire' ? 'ALAZ' : 'AYAZ'}</td>
-                <td><button class="ko-row-join lb-item-join" data-code="${l.code}" data-team="${l.team}">KATIL</button></td>
+                <td><button class="ko-row-join lb-item-join ${l.isFake ? 'lb-btn-disabled' : ''}" data-code="${l.code}" data-team="${l.team}" data-fake="${l.isFake ? 'true' : 'false'}">${l.isFake ? 'DOLU' : 'KATIL'}</button></td>
             </tr>
         `).join('');
         listEl.querySelectorAll('.lb-item-join').forEach((btn: Element) => {
             (btn as HTMLButtonElement).onclick = () => {
+                if (btn.getAttribute('data-fake') === 'true') {
+                    showLobbyError(t('lobbyRoomFull'));
+                    return;
+                }
                 const code = btn.getAttribute('data-code') ?? '';
                 const hostTeam = (btn.getAttribute('data-team') ?? 'fire') as 'fire' | 'ice';
                 ctx.lobbyTeam = hostTeam === 'fire' ? 'ice' : 'fire';
@@ -520,7 +529,10 @@ export function handleMPMessage(msg: import('../multiplayer/MultiplayerService')
 
     if (msg.type === 'loaded') {
         if (mpService.role === 'host') {
-            mpService.send({ type: 'start' });
+            const seed = Math.floor(Math.random() * 1000000000);
+            GameRandom.setSeed(seed);
+            console.log(`[MP] Host generating seed: ${seed}`);
+            mpService.send({ type: 'start', seed });
             ctx._mpStartGame?.();
         }
     } else if (msg.type === 'start') {
@@ -530,6 +542,13 @@ export function handleMPMessage(msg: import('../multiplayer/MultiplayerService')
         const oppTeam = mpService.opponentTeam ?? (ctx.lobbyTeam === 'fire' ? 'ice' : 'fire');
         console.log(`[MP-SYNC] Received place: ${cardId} lane=${lane} oppTeam=${oppTeam} unitId=${unitId}`);
         spawnUnitForTeam(oppTeam as 'fire' | 'ice', cardId as UnitType, lane, unitId);
+        
+        const cDef = [...PLAYER_CARDS, ...AI_CARDS].find(c => c.id === cardId);
+        if (cDef) {
+            const nameStr = (cDef as any).nameKey ? t((cDef as any).nameKey) : cDef.name;
+            const descStr = (cDef as any).descKey ? t((cDef as any).descKey) : cDef.description;
+            // logCardPlay(oppTeam as 'fire' | 'ice', nameStr, descStr, cDef.imagePath); // Disabled unit logs
+        }
     } else if (msg.type === 'prompt') {
         const { promptId } = msg;
         const oppTeam = mpService.opponentTeam ?? (ctx.lobbyTeam === 'fire' ? 'ice' : 'fire');
@@ -540,6 +559,11 @@ export function handleMPMessage(msg: import('../multiplayer/MultiplayerService')
     } else if (msg.type === 'game_over') {
         console.log(`[MP-SYNC] Received game_over: winner=${msg.winner} reason=${msg.reason} _mpGameEnded=${ctx._mpGameEnded}`);
         triggerWin(msg.winner, msg.reason);
+    } else if (msg.type === 'unit_sync') {
+        // Guest: host'tan gelen unit pozisyon/HP senkronizasyonu
+        if (mpService.role === 'guest') {
+            ctx._mpApplyUnitSync?.(msg.data);
+        }
     } else if (msg.type === 'base_sync') {
         // Guest: host'tan gelen otoritif base HP degerlerini uygula
         if (mpService.role === 'guest') {
@@ -814,13 +838,23 @@ export function initLobbyScreen(): void {
         }
         const matchId = mpService.lobbyCode + '_' + Date.now();
         showBetPanel('host-depositing');
-        const txHash = await betService.depositBet(amount, matchId);
-        if (!txHash) {
+        try {
+            const txPromise = betService.depositBet(amount, matchId);
+            const timeoutPromise = new Promise<null>((_, reject) =>
+                setTimeout(() => reject(new Error('timeout')), 90_000)
+            );
+            const txHash = await Promise.race([txPromise, timeoutPromise]);
+            if (!txHash) {
+                showBetPanel('host-idle');
+                return showLobbyError(betService.lastError || t('betDepositFailed'));
+            }
+            mpService.sendBetOffer(amount, matchId, ctx.walletAddress!);
+            showBetPanel('host-waiting');
+        } catch (e: any) {
+            console.warn('[Bet] Deposit failed:', e);
             showBetPanel('host-idle');
-            return showLobbyError(betService.lastError || t('betDepositFailed'));
+            showLobbyError(e?.message === 'timeout' ? 'Islem zaman asimina ugradi' : (betService.lastError || t('betDepositFailed')));
         }
-        mpService.sendBetOffer(amount, matchId, ctx.walletAddress!);
-        showBetPanel('host-waiting');
     };
 
     document.getElementById('bet-cancel-btn')!.onclick = async () => {
@@ -835,14 +869,24 @@ export function initLobbyScreen(): void {
         const amount = betService.state.amount;
         const matchId = betService.state.matchId ?? '';
         showBetPanel('guest-depositing');
-        const txHash = await betService.acceptBet(amount, matchId);
-        if (!txHash) {
+        try {
+            const txPromise = betService.acceptBet(amount, matchId);
+            const timeoutPromise = new Promise<null>((_, reject) =>
+                setTimeout(() => reject(new Error('timeout')), 90_000)
+            );
+            const txHash = await Promise.race([txPromise, timeoutPromise]);
+            if (!txHash) {
+                showBetPanel('guest-incoming');
+                return showLobbyError(betService.lastError || t('betDepositFailed'));
+            }
+            mpService.sendBetAccept(txHash, ctx.walletAddress!);
+            betService.state.status = 'locked';
+            showBetPanel('locked');
+        } catch (e: any) {
+            console.warn('[Bet] Accept failed:', e);
             showBetPanel('guest-incoming');
-            return showLobbyError(betService.lastError || t('betDepositFailed'));
+            showLobbyError(e?.message === 'timeout' ? 'Islem zaman asimina ugradi' : (betService.lastError || t('betDepositFailed')));
         }
-        mpService.sendBetAccept(txHash, ctx.walletAddress!);
-        betService.state.status = 'locked';
-        showBetPanel('locked');
     };
 
     document.getElementById('bet-decline-btn')!.onclick = () => {

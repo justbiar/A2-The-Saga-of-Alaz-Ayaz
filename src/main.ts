@@ -27,6 +27,69 @@ import { profileService } from './chain/ProfileService';
 // Register character abilities at startup
 import './ecs/abilities/characterAbilities';
 
+// ─── MAINTENANCE CHECK ────────────────────────────────────────────
+// Icerik gorunmeden once kontrol yap — flash onlenir
+document.body.style.visibility = 'hidden';
+
+function _mRevealContent() {
+    document.body.style.visibility = '';
+}
+
+(async function checkMaintenance() {
+    try {
+        const res = await fetch('/api/maintenance');
+        const data = await res.json();
+        if (!data.active) { _mRevealContent(); return; }
+
+        const screen = document.getElementById('maintenance-screen')!;
+        const msgEl = document.getElementById('maintenance-msg')!;
+        const walletSection = document.getElementById('maintenance-wallet-section')!;
+        const connectBtn = document.getElementById('maintenance-connect-btn')!;
+        const walletMsg = document.getElementById('maintenance-wallet-msg')!;
+        const whitelist: string[] = (data.whitelist || []).map((w: string) => w.toLowerCase());
+
+        if (data.message) msgEl.textContent = data.message;
+        else msgEl.textContent = t('maintMsg' as any);
+        screen.style.display = 'flex';
+        walletSection.style.display = 'flex';
+        _mRevealContent(); // body gorunur yap — maintenance overlay zaten uzerini kapatiyor
+
+        // Zaten bagli cuzdan varsa kontrol et
+        const connected = ctx.walletAddress;
+        if (connected && whitelist.includes(connected.toLowerCase())) {
+            screen.style.display = 'none';
+            _mRevealContent();
+            return;
+        }
+
+        connectBtn.addEventListener('click', async () => {
+            const provider = ctx._activeProvider ?? (window as any).ethereum;
+            if (!provider) {
+                walletMsg.textContent = t('maintNoWallet' as any);
+                walletMsg.style.display = 'block';
+                return;
+            }
+            try {
+                connectBtn.textContent = t('maintConnecting' as any);
+                const accounts = await provider.request({ method: 'eth_requestAccounts' });
+                const addr = accounts[0]?.toLowerCase();
+                if (addr && whitelist.includes(addr)) {
+                    screen.style.display = 'none';
+                    _mRevealContent();
+                } else {
+                    walletMsg.textContent = t('maintNotAllowed' as any);
+                    walletMsg.style.display = 'block';
+                    connectBtn.textContent = t('maintConnect' as any);
+                }
+            } catch {
+                walletMsg.textContent = t('maintFailed' as any);
+                walletMsg.style.display = 'block';
+                connectBtn.textContent = t('maintConnect' as any);
+            }
+        });
+    } catch { _mRevealContent(); /* API erisilemediyse bakimi atla */ }
+})();
+
 // ─── GLB WARM-CACHE (EAGER) ────────────────────────────────────────
 startGLBWarmCache();
 
@@ -52,6 +115,7 @@ setTimeout(() => {
 }, 2000);
 
 // ─── WINDOW GLOBALS (cross-module callbacks) ────────────────────────
+(window as any).__a2ctx = ctx;
 (window as any).__cleanupGame = () => cleanupGame();
 (window as any).__bootGame = (mode: GameMode) => boot(mode).catch(console.error);
 (window as any).__startMultiplayerBoot = () => {
@@ -98,12 +162,12 @@ function updateModeSelectTeamBadge(): void {
         badge.style.color = 'rgba(255,85,32,0.55)';
         badge.style.background = 'rgba(255,85,32,0.05)';
         badge.style.border = '1px solid rgba(255,85,32,0.15)';
-        badge.innerHTML = 'Ates Klani';
+        badge.innerHTML = t('fireClanShort' as any);
     } else {
         badge.style.color = 'rgba(56,170,255,0.55)';
         badge.style.background = 'rgba(56,170,255,0.05)';
         badge.style.border = '1px solid rgba(56,170,255,0.15)';
-        badge.innerHTML = 'Buz Klani';
+        badge.innerHTML = t('iceClanShort' as any);
     }
 }
 setModeSelectBadgeCallback(updateModeSelectTeamBadge);
@@ -157,7 +221,7 @@ document.getElementById('nav-play')!.addEventListener('click', () => {
     if (!ctx.walletAddress || !profileService.currentProfile) {
         console.log('[DEBUG] Blocked — showing wallet modal');
         showWalletModal();
-        showToast('Oyuna girmek icin cuzdanini bagla ve profil olustur!');
+        showToast(t('walletProfileRequired' as any));
         return;
     }
     console.log('[DEBUG] Showing lobby');

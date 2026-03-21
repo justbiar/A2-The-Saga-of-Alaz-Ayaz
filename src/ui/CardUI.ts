@@ -13,6 +13,7 @@ import { mpService } from '../multiplayer/MultiplayerService';
 import { loadBindings } from './SettingsUI';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import avxCoinUrl from '../../assets/avxcoin.webp';
+import { GameRandom } from '../utils/Random';
 
 // ─── DOM REFS ──────────────────────────────────────────────────────
 const cardContainer = document.getElementById('card-container')!;
@@ -100,7 +101,7 @@ export function updateCardStates(): void {
         const el = document.getElementById(`card-${card.id}`) as HTMLElement | null;
         if (!el) return;
         const onCd = (ctx.unitCooldowns[card.id] ?? 0) > 0;
-        const canPlay = ctx.phase === 'player' && canAffordCard(card) && !onCd;
+        const canPlay = ctx.phase === 'player' && !ctx.isPaused && canAffordCard(card) && !onCd;
         el.classList.toggle('card-disabled', !canPlay);
         el.style.opacity = canPlay ? '1' : '0.4';
         el.style.cursor = canPlay ? 'pointer' : 'not-allowed';
@@ -148,7 +149,7 @@ function createCardEl(card: CardDef, um: UnitManager, idx = 0): HTMLElement {
     `;
 
     el.addEventListener('click', () => {
-        if (ctx.phase !== 'player' || !canAffordCard(card) || (ctx.unitCooldowns[card.id] ?? 0) > 0) {
+        if (ctx.phase !== 'player' || ctx.isPaused || !canAffordCard(card) || (ctx.unitCooldowns[card.id] ?? 0) > 0) {
             pulseRed(el); return;
         }
         ctx.pendingCard = card;
@@ -260,6 +261,10 @@ export function deployPendingCard(lane: number): void {
 
     _laneUm.spawnUnit(card.id as UnitType, ctx.selectedTeam, structuralLane, unitId);
 
+    const nameStr = (card as any).nameKey ? t((card as any).nameKey) : card.name;
+    const descStr = (card as any).descKey ? t((card as any).descKey) : card.description;
+    // Removed logCardPlay for units here.
+
     if (ctx.gameMode === 'multiplayer') {
         const laneKey = (['left', 'mid', 'right'] as const)[structuralLane] ?? 'mid';
         console.log(`[MP-SYNC] Sending place: ${card.id} lane=${laneKey} myTeam=${ctx.selectedTeam} unitId=${unitId}`);
@@ -300,7 +305,7 @@ export function setupPlayerKeyboard(): void {
     window.addEventListener('keydown', (e) => {
         if (ctx._listeningEl) return;
         if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-        if (ctx.phase !== 'player') return;
+        if (ctx.phase !== 'player' || ctx.isPaused) return;
 
         const key = e.key;
         const kl = key.toLowerCase();
@@ -506,7 +511,7 @@ function createPromptCardEl(def: PromptCardDef): HTMLElement {
 
     el.addEventListener('click', () => {
         if (ctx.gameMode === 'multiplayer' && !ctx.mpGameStarted) { pulseRed(el); return; }
-        if (ctx.phase !== 'player') { pulseRed(el); return; }
+        if (ctx.phase !== 'player' || ctx.isPaused) { pulseRed(el); return; }
 
         // Tower kart özel akışı
         if (def.effectType === 'tower_place') {
@@ -599,7 +604,7 @@ export function updatePromptStates(): void {
         const el = document.getElementById(`prompt-${def.id}`);
         if (!el) return;
 
-        let canPlay = ctx.phase === 'player';
+        let canPlay = ctx.phase === 'player' && !ctx.isPaused;
         if (def.effectType === 'tower_place') {
             // tower kart: AVX yeterli mi + slot boş mu
             const hasAvx = ctx.playerAvx >= (def.avxCost ?? 5);
@@ -618,7 +623,7 @@ export function updatePromptStates(): void {
             canPlay = canPlay && hasResource && hasSlot;
         } else {
             const onCooldown = (ctx.skillCooldowns[def.id] ?? 0) > 0;
-            const isRecallUsed = def.effectType === 'recall' && ctx.recallUsed;
+            const isRecallUsed = def.effectType === 'recall' && ctx.recallUses >= 2;
             canPlay = canPlay && ctx.playerMana >= def.manaCost && !onCooldown && !isRecallUsed;
         }
 
@@ -640,51 +645,25 @@ const EFFECT_DISPLAY: Record<string, { labelKey: string; color: string }> = {
     unlucky: { labelKey: 'unlucky', color: '#ffaa00' },
 };
 
-function showActiveEffect(def: PromptCardDef): void {
-    const displaySec = def.duration > 0 ? def.duration : 3;
-    const info = EFFECT_DISPLAY[def.effectType];
-    const color = info?.color ?? '#cc99ff';
-
-    const entry = document.createElement('div');
-    entry.className = 'effect-entry';
-    const eName = def.nameKey ? t(def.nameKey as any) : def.name;
-    const eDesc = def.descKey ? t(def.descKey as any) : def.description;
-    entry.innerHTML = `
-        <div class="effect-name" style="color:${color}">${eName}</div>
-        <div class="effect-desc">${eDesc}</div>
-        <div class="effect-timer-track">
-            <div class="effect-timer-fill" style="background:linear-gradient(90deg,${color}88,${color});width:100%"></div>
-        </div>
-    `;
-    activeEffectsEl.appendChild(entry);
-
-    const fill = entry.querySelector<HTMLElement>('.effect-timer-fill')!;
-    const startTime = performance.now();
-    const totalMs = displaySec * 1000;
-
-    function tick(): void {
-        const elapsed = performance.now() - startTime;
-        const pct = Math.max(0, 1 - elapsed / totalMs);
-        fill.style.width = `${pct * 100}%`;
-        if (pct > 0) {
-            requestAnimationFrame(tick);
-        } else {
-            entry.classList.add('fading');
-            setTimeout(() => entry.remove(), 350);
-        }
-    }
-    requestAnimationFrame(tick);
-}
+// REMOVED showActiveEffect
 
 // ─── PROMPT EFFECTS ────────────────────────────────────────────────
 import { worldToScreen } from '../game/AvxCoinSystem';
 
 export function applyPromptEffect(def: PromptCardDef, forTeam?: 'fire' | 'ice'): void {
-    showActiveEffect(def);
     const um = ctx._um;
     if (!um) return;
     const playerTeam = forTeam ?? ctx.selectedTeam;
     const enemySide = playerTeam === 'fire' ? 'ice' : 'fire';
+
+    const nameStr = def.nameKey ? t(def.nameKey as any) : def.name;
+    const descStr = def.descKey ? t(def.descKey as any) : def.description;
+
+    const info = EFFECT_DISPLAY[def.effectType];
+    const color = info?.color ?? '#cc99ff';
+    const duration = def.duration > 0 ? def.duration : 0;
+
+    logCardPlay(playerTeam, nameStr, descStr, def.imagePath, duration, color);
 
     switch (def.effectType) {
         case 'mana_fill':
@@ -732,16 +711,18 @@ export function applyPromptEffect(def: PromptCardDef, forTeam?: 'fire' | 'ice'):
         }
 
         case 'recall': {
-            ctx.recallUsed = true;
+            ctx.recallUses++;
             const allies = um.units.filter(u => u.team === playerTeam && u.state !== 'dead');
             if (allies.length === 0) break;
             const baseX = 0;
             const baseZ = playerTeam === 'fire' ? -11 : 11;
-            allies.forEach(u => {
-                u.mesh.position.x = baseX + (Math.random() - 0.5) * 4;
-                u.mesh.position.z = baseZ + (Math.random() - 0.5) * 2;
+            allies.forEach((u, i) => {
+                u.mesh.position.x = baseX + (i % 3 - 1) * 2;
+                u.mesh.position.z = baseZ + (i < 3 ? -1 : 1);
+                u.targetUnit = null;
+                u.pathQueue = [];
+                u.state = 'walking';
             });
-            showRecallLanePicker(allies, um, playerTeam);
             break;
         }
 
@@ -755,8 +736,8 @@ export function applyPromptEffect(def: PromptCardDef, forTeam?: 'fire' | 'ice'):
                 if (enemies.length > 0) {
                     const count = Math.min(2, enemies.length);
                     for (let i = 0; i < count; i++) {
-                        const target = enemies[Math.floor(Math.random() * enemies.length)];
-                        const dmg = 25 + Math.random() * 15;
+                        const target = GameRandom.choice(enemies);
+                        const dmg = 25 + GameRandom.value() * 15;
                         target.hp -= dmg;
                         showLightningVFX(target.mesh.position);
                     }
@@ -846,38 +827,6 @@ function showEnemyPicker(enemies: import('../ecs/Unit').Unit[], um: UnitManager,
     document.getElementById('ouroboros-cancel')!.onclick = () => cleanup(false);
 }
 
-function showRecallLanePicker(allies: import('../ecs/Unit').Unit[], um: UnitManager, team: 'fire' | 'ice'): void {
-    let overlay = document.getElementById('recall-overlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'recall-overlay';
-        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;';
-        document.body.appendChild(overlay);
-    }
-    overlay.innerHTML = `<div style="color:#4488ff;font-size:22px;font-weight:bold;margin-bottom:8px;">${t('draftLanePick' as any)}</div>`;
-    const lanes = [
-        { label: t('laneLeft' as any), lane: 0 },
-        { label: t('laneMid' as any), lane: 1 },
-        { label: t('laneRight' as any), lane: 2 },
-    ];
-    for (const l of lanes) {
-        const btn = document.createElement('button');
-        btn.style.cssText = 'padding:10px 32px;font-size:16px;background:#1a1a2e;color:#fff;border:2px solid #4488ff;border-radius:8px;cursor:pointer;min-width:140px;';
-        btn.textContent = l.label;
-        btn.addEventListener('click', () => {
-            const path = um.buildLanePath(0, 24, l.lane, team);
-            allies.forEach(u => {
-                u.pathQueue = path.map(n => new Vector3(n.x, u.baseY, n.z));
-                u.targetUnit = null;
-                (u.abilityState as any)._cachedEnemy = null;
-                (u.abilityState as any)._enemyLockTimer = 0;
-                u.state = 'walking';
-            });
-            overlay!.remove();
-        });
-        overlay.appendChild(btn);
-    }
-}
 
 /** Yıldırım VFX — canvas-based (şeffaf, pozisyon düzeltildi) */
 export function showLightningAt(cx: number, cy: number): void {
@@ -956,7 +905,7 @@ export function initDraft(): void {
     ctx.playerDeck = [];
     ctx.draftTimer = 45;
     ctx.draftPopupOpen = false;
-    ctx.recallUsed = false;
+    ctx.recallUses = 0;
 
     // Çiçek kartı oyunun başından itibaren mevcut
     ctx.playerDeck.push(getFlowerCard(ctx.selectedTeam));
@@ -968,7 +917,7 @@ export function initDraft(): void {
 
     const pool = [...PROMPT_DEFS];
     for (let i = 0; i < 2; i++) {
-        const idx = Math.floor(Math.random() * pool.length);
+        const idx = GameRandom.rangeInt(0, pool.length - 1);
         ctx.playerDeck.push(pool.splice(idx, 1)[0]);
     }
 
@@ -1010,7 +959,7 @@ function openDraftPopup(): void {
     const available = getAvailableDraftCards();
     if (available.length === 0) { ctx.draftPopupOpen = false; return; }
 
-    const shuffled = [...available].sort(() => Math.random() - 0.5);
+    const shuffled = GameRandom.shuffle([...available]);
     let offered = shuffled.slice(0, Math.min(2, shuffled.length));
 
     const skillCardCount = ctx.playerDeck.filter(d => d.effectType !== 'tower_place' && d.effectType !== 'flower_place' && d.effectType !== 'tree_place').length;
@@ -1027,7 +976,7 @@ function openDraftPopup(): void {
             ctx.playerAvx -= 10;
             updateAvxUI();
             const newAvailable = getAvailableDraftCards();
-            const newShuffled = [...newAvailable].sort(() => Math.random() - 0.5);
+            const newShuffled = GameRandom.shuffle([...newAvailable]);
             offered = newShuffled.slice(0, Math.min(2, newShuffled.length));
             renderDraftCards(offered, isSwapMode);
             if (draftRerollBtn) draftRerollBtn.disabled = ctx.playerAvx < 10;
@@ -1104,7 +1053,7 @@ export function cleanupDraft(): void {
     ctx.playerDeck = [];
     ctx.draftTimer = 45;
     ctx.draftPopupOpen = false;
-    ctx.recallUsed = false;
+    ctx.recallUses = 0;
     if (ctx.healHomeInterval) { clearInterval(ctx.healHomeInterval); ctx.healHomeInterval = null; }
     if (ctx.unluckyInterval) { clearInterval(ctx.unluckyInterval); ctx.unluckyInterval = null; }
     ctx._fireBase = null;
@@ -1126,29 +1075,46 @@ export function showBoruCard(spirit: 'good' | 'bad', boruTeam: 'fire' | 'ice', _
     const teamColor = boruTeam === 'fire' ? '#ff6600' : '#4488ff';
     const teamSuffix = t('boruTeamSuffix' as any);
 
+    let container = document.getElementById('top-wolf-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'top-wolf-container';
+        container.style.cssText = `
+            position: fixed;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 16px;
+            z-index: 800;
+            pointer-events: none;
+            justify-content: center;
+        `;
+        document.body.appendChild(container);
+    }
+
     const card = document.createElement('div');
     card.className = 'boru-spirit-card';
     card.style.cssText = `
-        position: fixed;
-        left: 12px;
-        top: ${180 + activeBoruCards.length * 130}px;
-        width: 120px;
-        background: rgba(15,10,25,0.92);
-        border: 2px solid ${borderColor};
-        border-radius: 10px;
-        padding: 8px;
-        z-index: 800;
-        box-shadow: 0 0 16px ${glowColor}, 0 4px 12px rgba(0,0,0,0.6);
+        width: 140px;
+        background: rgba(8, 12, 24, 0.85);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid ${borderColor};
+        border-radius: 12px;
+        padding: 10px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.1), 0 0 12px ${glowColor};
         transition: opacity 0.4s ease, transform 0.3s ease;
-        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
     `;
     card.innerHTML = `
+        <img src="/assets/images/characters/boru.webp" alt="Boru"
+             style="width:50px;height:50px;object-fit:cover;border-radius:6px;box-shadow:0 0 8px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);" />
         <div style="text-align:center;">
-            <img src="/assets/images/characters/boru.webp" alt="Boru"
-                 style="width:70px;height:70px;object-fit:contain;filter:drop-shadow(0 0 6px ${spiritColor});" />
-        </div>
-        <div style="text-align:center;margin-top:4px;">
-            <div style="font-size:11px;font-weight:700;color:${spiritColor};text-shadow:0 0 6px ${glowColor};letter-spacing:0.5px;">
+            <div style="font-family:'Cinzel',serif;font-size:11px;font-weight:700;color:${spiritColor};text-shadow:0 1px 3px rgba(0,0,0,0.8);letter-spacing:0.5px;">
                 ${spiritLabel}
             </div>
             <div style="font-size:9px;color:${teamColor};margin-top:2px;">
@@ -1157,13 +1123,13 @@ export function showBoruCard(spirit: 'good' | 'bad', boruTeam: 'fire' | 'ice', _
         </div>
     `;
 
-    document.body.appendChild(card);
+    container.appendChild(card);
     activeBoruCards.push(card);
 
-    card.style.transform = 'translateX(-50px)';
+    card.style.transform = 'translateY(-20px)';
     card.style.opacity = '0';
     requestAnimationFrame(() => {
-        card.style.transform = 'translateX(0)';
+        card.style.transform = 'translateY(0)';
         card.style.opacity = '1';
     });
 
@@ -1174,16 +1140,79 @@ export function showBoruCard(spirit: 'good' | 'bad', boruTeam: 'fire' | 'ice', _
             if (!boruAlive) {
                 clearInterval(checkDeath);
                 card.style.opacity = '0';
-                card.style.transform = 'translateX(-50px)';
+                card.style.transform = 'translateY(-20px)';
                 setTimeout(() => {
                     card.remove();
                     const idx = activeBoruCards.indexOf(card);
                     if (idx >= 0) activeBoruCards.splice(idx, 1);
-                    activeBoruCards.forEach((c, i) => {
-                        c.style.top = `${180 + i * 130}px`;
-                    });
                 }, 400);
             }
         }, 500);
+    }
+}
+
+export function logCardPlay(team: 'fire' | 'ice', nameStr: string, descStr: string, imagePath: string, durationSec: number = 0, color: string = '#cc99ff'): void {
+    const isPlayer = team === ctx.selectedTeam;
+    const containerId = isPlayer ? 'left-card-log' : 'right-card-log';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const entry = document.createElement('div');
+    entry.className = 'card-log-entry';
+
+    let timerHtml = '';
+    if (durationSec > 0) {
+        timerHtml = `
+        <div class="effect-timer-track" style="margin-top:6px;width:100%;">
+            <div class="effect-timer-fill" style="background:linear-gradient(90deg,${color}88,${color});width:100%;height:100%;"></div>
+        </div>
+        `;
+    }
+
+    entry.innerHTML = `
+        <img class="cl-icon" src="${imagePath}" alt="${nameStr}" />
+        <div class="cl-info" style="flex:1;">
+            <div class="cl-name" style="color:${durationSec > 0 ? color : '#fff'}">${nameStr}</div>
+            <div class="cl-desc">${descStr}</div>
+            ${timerHtml}
+        </div>
+    `;
+
+    container.appendChild(entry);
+
+    if (container.children.length > 3) {
+        const oldest = container.firstElementChild as HTMLElement;
+        if (oldest && !oldest.classList.contains('fading')) {
+            oldest.classList.add('fading');
+            setTimeout(() => oldest.remove(), 350);
+        }
+    }
+
+    if (durationSec > 0) {
+        const fill = entry.querySelector<HTMLElement>('.effect-timer-fill')!;
+        const startTime = performance.now();
+        const totalMs = durationSec * 1000;
+
+        function tick(): void {
+            const elapsed = performance.now() - startTime;
+            const pct = Math.max(0, 1 - elapsed / totalMs);
+            if (fill) fill.style.width = `${pct * 100}%`;
+            if (pct > 0) {
+                requestAnimationFrame(tick);
+            } else {
+                if (!entry.classList.contains('fading')) {
+                    entry.classList.add('fading');
+                    setTimeout(() => entry.remove(), 350);
+                }
+            }
+        }
+        requestAnimationFrame(tick);
+    } else {
+        setTimeout(() => {
+            if (!entry.classList.contains('fading')) {
+                entry.classList.add('fading');
+                setTimeout(() => entry.remove(), 350);
+            }
+        }, 6000);
     }
 }

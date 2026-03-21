@@ -16,6 +16,7 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { Unit, Team } from '../../ecs/Unit';
 import type { UnitManager } from '../../ecs/UnitManager';
 import type { ShardBonus } from '../../ecs/types';
+import { GameRandom } from '../../utils/Random';
 
 export type ShardOwner = 'fire' | 'ice' | 'neutral';
 export type BoruSpirit = 'good' | 'bad';
@@ -82,13 +83,9 @@ export class AvaShardManager {
     }
 
     private createShards(): void {
-        // Randomly assign spirits: 2 good, 1 bad (shuffled)
+        // Randomly assign spirits: 2 good, 1 bad (seeded shuffle for MP sync)
         const spirits: BoruSpirit[] = ['good', 'good', 'bad'];
-        // Fisher-Yates shuffle
-        for (let i = spirits.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [spirits[i], spirits[j]] = [spirits[j], spirits[i]];
-        }
+        GameRandom.shuffle(spirits);
 
         for (let idx = 0; idx < SHARD_POSITIONS.length; idx++) {
             const { lane, x, z } = SHARD_POSITIONS[idx];

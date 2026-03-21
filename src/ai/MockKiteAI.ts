@@ -4,6 +4,7 @@
  */
 import type { IKiteAI } from './KiteAIInterface';
 import type { BoardState, ActionQueue, AIProfile, KiteAction } from '../ecs/types';
+import { GameRandom } from '../utils/Random';
 
 // Ice unit pool for AI deployment decisions
 const ICE_UNIT_POOL: string[] = ['ayaz', 'tulpar', 'tulpar', 'umay', 'albasti', 'tepegoz'];
@@ -85,9 +86,9 @@ export class MockKiteAI implements IKiteAI {
         if (turn >= 7) {
             // Late game: use heavier units
             const late = ['tepegoz', 'umay', 'albasti'];
-            return late[Math.floor(Math.random() * late.length)];
+            return GameRandom.choice(late);
         }
-        return ICE_UNIT_POOL[Math.floor(Math.random() * ICE_UNIT_POOL.length)];
+        return GameRandom.choice(ICE_UNIT_POOL);
     }
 
     private pickLane(profile: AIProfile, board: BoardState, index: number): number {

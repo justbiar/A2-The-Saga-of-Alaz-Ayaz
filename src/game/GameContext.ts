@@ -47,6 +47,7 @@ export const ctx = {
     _mpApplyPrompt: null as ((team: 'fire' | 'ice', promptId: string) => void) | null,
     _mpTriggerWin: null as ((winner: 'fire' | 'ice', msg: string, isDisconnect?: boolean) => void) | null,
     _mpStartGame: null as (() => void) | null,
+    _mpApplyUnitSync: null as ((data: { id: string, hp: number, x: number, z: number, state: string, team: string }[]) => void) | null,
     _mpGameEnded: false,
 
     // ── Realtime / 2P accumulators ──
@@ -67,7 +68,7 @@ export const ctx = {
     playerDeck: [] as PromptCardDef[],
     draftTimer: 45,
     draftPopupOpen: false,
-    recallUsed: false,
+    recallUses: 0,
     towerCardAdded: false,
     healHomeInterval: null as ReturnType<typeof setInterval> | null,
     unluckyInterval: null as ReturnType<typeof setInterval> | null,

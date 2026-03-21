@@ -192,7 +192,8 @@ export async function connectWithProvider(provider: any, silent = false, rdns = 
                     lockGameUntilProfile(true);
                     showScreen('profile');
                 } else {
-                    leaderboardService.upsertPlayer(ctx.walletAddress!, profileService.currentProfile.username);
+                    const prof = profileService.currentProfile as any;
+                    leaderboardService.upsertPlayer(ctx.walletAddress!, prof.username);
                     lockGameUntilProfile(false);
                 }
             }

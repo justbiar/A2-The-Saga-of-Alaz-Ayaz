@@ -16,11 +16,13 @@
 
 declare const Peer: any; // PeerJS CDN'den geliyor
 
+import { GameRandom } from '../utils/Random';
+
 export type MPRole = 'host' | 'guest' | null;
 export type MPMessage =
     | { type: 'ready'; team: 'fire' | 'ice' }
     | { type: 'loaded' }
-    | { type: 'start' }
+    | { type: 'start'; seed?: number }
     | { type: 'place'; cardId: string; lane: 'left' | 'mid' | 'right'; unitId?: string }
     | { type: 'prompt'; promptId: string }
     | { type: 'sync'; mana: number; avx: number; turn: number }
@@ -69,6 +71,8 @@ async function fetchIceServers(): Promise<RTCIceServer[]> {
 
 const JOIN_TIMEOUT_MS = 45_000;       // 45 saniye timeout (TURN relay yavaş olabilir)
 const JOIN_RETRY_MAX = 2;            // 2 kez retry
+const DC_GRACE_MS = 5000;             // Data channel kapandıktan sonra 5s bekle (geçici kopma olabilir)
+const PONG_TIMEOUT_MS = 10_000;      // 10s pong gelmezse disconnect
 
 export class MultiplayerService {
     public role: MPRole = null;
@@ -92,7 +96,10 @@ export class MultiplayerService {
     private onStatus: StatusHandler | null = null;
     private pingInterval: number | null = null;
     private pingTs: number = 0;
+    private lastPongTs: number = 0;
     private myTeam: 'fire' | 'ice' = 'fire';
+    private reconnectTimer: number | null = null;
+    private dcGraceTimer: number | null = null;
 
     /** Callback'leri kaydet */
     init(onMessage: MessageHandler, onStatus: StatusHandler) {
@@ -167,10 +174,20 @@ export class MultiplayerService {
             });
 
             this.peer.on('disconnected', () => {
-                // PeerJS signaling koptu — yeniden bağlan
-                console.warn('[MP] Host signaling koptu, yeniden bağlanılıyor…');
+                // PeerJS signaling koptu — veri kanalı hâlâ açık olabilir
+                console.warn('[MP] Host signaling koptu');
+                if (this.conn?.open) {
+                    // Data channel açık — oyun devam ediyor, sadece signaling'i tekrar bağla
+                    console.log('[MP] Data channel hâlâ açık, sadece signaling reconnect yapılıyor');
+                }
                 if (this.peer && !this.peer.destroyed) {
-                    this.peer.reconnect();
+                    // Debounced reconnect
+                    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = window.setTimeout(() => {
+                        if (this.peer && !this.peer.destroyed) {
+                            this.peer.reconnect();
+                        }
+                    }, 2000);
                 }
             });
         });
@@ -249,9 +266,17 @@ export class MultiplayerService {
             });
 
             this.peer.on('disconnected', () => {
-                console.warn('[MP] Guest signaling koptu, yeniden bağlanılıyor…');
+                console.warn('[MP] Guest signaling koptu');
+                if (this.conn?.open) {
+                    console.log('[MP] Data channel hâlâ açık, sadece signaling reconnect yapılıyor');
+                }
                 if (this.peer && !this.peer.destroyed) {
-                    this.peer.reconnect();
+                    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+                    this.reconnectTimer = window.setTimeout(() => {
+                        if (this.peer && !this.peer.destroyed) {
+                            this.peer.reconnect();
+                        }
+                    }, 2000);
                 }
             });
 
@@ -274,29 +299,51 @@ export class MultiplayerService {
             this.startPing();
         });
 
-        conn.on('data', (data: MPMessage) => {
-            if (data.type === 'ready') {
-                this.opponentTeam = data.team;
-            } else if (data.type === 'loaded') {
-                // Rakip yüklemeyi bitirdi — host tarafında flag set et
-                this._opponentLoaded = true;
-            } else if (data.type === 'start') {
-                // Host start gönderdi — guest tarafında flag set et (race condition fix)
-                this._startReceived = true;
-            } else if (data.type === 'ping') {
-                this.send({ type: 'pong', ts: data.ts });
-                return;
-            } else if (data.type === 'pong') {
-                this.ping = Date.now() - data.ts;
+        const VALID_TYPES = new Set([
+            'ready', 'loaded', 'start', 'place', 'prompt', 'sync', 'unit_sync',
+            'ping', 'pong', 'surrender', 'start_game',
+            'bet_offer', 'bet_accept', 'bet_reject', 'bet_cancel', 'bet_counter', 'bet_claim',
+            'game_over', 'base_sync', 'chat',
+        ]);
+        conn.on('data', (data: any) => {
+            if (!data || typeof data !== 'object' || !VALID_TYPES.has(data.type)) {
+                console.warn('[MP] Geçersiz mesaj:', data?.type);
                 return;
             }
-            this.onMessage?.(data);
+            const msg = data as MPMessage;
+            if (msg.type === 'ready') {
+                this.opponentTeam = msg.team;
+            } else if (msg.type === 'loaded') {
+                this._opponentLoaded = true;
+            } else if (msg.type === 'start') {
+                if (msg.seed !== undefined) {
+                    GameRandom.setSeed(msg.seed);
+                    console.log(`[MP] Seed received from host: ${msg.seed}`);
+                }
+                this._startReceived = true;
+            } else if (msg.type === 'ping') {
+                this.send({ type: 'pong', ts: msg.ts });
+                return;
+            } else if (msg.type === 'pong') {
+                this.ping = Date.now() - msg.ts;
+                this.lastPongTs = Date.now();
+                return;
+            }
+            this.onMessage?.(msg);
         });
 
         conn.on('close', () => {
-            console.log('[MP] Bağlantı kapandı');
-            this.stopPing();
-            this.setStatus('disconnected');
+            console.log('[MP] Data channel kapandı, grace period başlatılıyor...');
+            // Data channel kapandı — hemen disconnect etme, belki geçicidir
+            if (this.dcGraceTimer) clearTimeout(this.dcGraceTimer);
+            this.dcGraceTimer = window.setTimeout(() => {
+                // Grace period doldu, hâlâ kapalıysa gerçekten disconnect
+                if (!this.conn?.open) {
+                    console.log('[MP] Grace period doldu → disconnect');
+                    this.stopPing();
+                    this.setStatus('disconnected');
+                }
+            }, DC_GRACE_MS);
         });
 
         conn.on('error', (err: any) => {
@@ -368,7 +415,20 @@ export class MultiplayerService {
     }
 
     private startPing() {
+        this.lastPongTs = Date.now();
         this.pingInterval = window.setInterval(() => {
+            // Pong timeout — sadece oyun basladiktan sonra kontrol et
+            // (loading sirasinda main thread mesgul, pong gelemeyebilir)
+            const ctx = (window as any).__a2ctx;
+            const gameActive = ctx?.mpGameStarted === true;
+            if (gameActive && this.lastPongTs > 0 && Date.now() - this.lastPongTs > PONG_TIMEOUT_MS) {
+                console.warn(`[MP] Pong timeout (${PONG_TIMEOUT_MS}ms) — disconnect`);
+                this.stopPing();
+                this.setStatus('disconnected');
+                return;
+            }
+            // Loading sirasinda lastPongTs'i guncelle (timeout sayma)
+            if (!gameActive) this.lastPongTs = Date.now();
             this.pingTs = Date.now();
             this.send({ type: 'ping', ts: this.pingTs });
         }, 3000);
@@ -384,12 +444,19 @@ export class MultiplayerService {
     /** Bağlantıyı kapat */
     disconnect() {
         this.stopPing();
+        if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+        if (this.dcGraceTimer)   { clearTimeout(this.dcGraceTimer);   this.dcGraceTimer = null; }
         // Backend'den lobiyi sil
         if (this.lobbyCode) {
             fetch(`/api/lobby/${this.lobbyCode}`, { method: 'DELETE' }).catch(() => {});
         }
+        // onMessage/onStatus'u temizle — close event'in gecikmeli callback'i triggerWin yapmasin
+        this.onMessage = null;
+        this.onStatus = null;
         this.conn?.close();
         this.peer?.destroy();
+        // close event grace timer yaratabilir — tekrar temizle
+        if (this.dcGraceTimer)   { clearTimeout(this.dcGraceTimer);   this.dcGraceTimer = null; }
         this.conn = null;
         this.peer = null;
         this.role = null;
@@ -399,7 +466,7 @@ export class MultiplayerService {
         this.opponentTeam = null;
         this._opponentLoaded = false;
         this._startReceived = false;
-        this.setStatus('idle');
+        this.status = 'idle';  // setStatus yerine direkt set (callback null'landı)
     }
 
     /** 6 haneli büyük harf kod */

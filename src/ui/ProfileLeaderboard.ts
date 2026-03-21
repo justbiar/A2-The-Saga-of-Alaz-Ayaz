@@ -9,6 +9,24 @@ import { leaderboardService } from '../chain/LeaderboardService';
 import { showWalletModal, lockGameUntilProfile, updateWalletAvatar } from './WalletUI';
 import { showToast } from './LobbyUI';
 
+const ethers = (globalThis as any).ethers;
+
+/** Avatar upload'a imza ekleyerek gonder */
+async function signedAvatarUpload(address: string, dataUrl: string): Promise<{ ok: boolean; url?: string }> {
+    const provider = (window as any).__activeProvider;
+    if (!provider || !ethers) return { ok: false };
+    const ethProvider = new ethers.BrowserProvider(provider);
+    const signer = await ethProvider.getSigner();
+    const msg = `A2 Avatar Upload: ${address.toLowerCase()}`;
+    const signature = await signer.signMessage(msg);
+    const res = await fetch('/api/avatar/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address, dataUrl, signature }),
+    });
+    return await res.json();
+}
+
 // ─── DOM REFS ──────────────────────────────────────────────────────
 const profileModal = document.getElementById('profile-modal')!;
 const profileCloseBtn = document.getElementById('profile-close')!;
@@ -676,13 +694,8 @@ export function renderProfileScreen(): void {
             let avatarVal = avatarInput.value.trim();
             if (pendingDataUrl) {
                 try {
-                    const upRes = await fetch('/api/avatar/upload', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ address: ctx.walletAddress, dataUrl: pendingDataUrl }),
-                    });
-                    const upData = await upRes.json();
-                    avatarVal = upData.ok ? upData.url : '';
+                    const upData = await signedAvatarUpload(ctx.walletAddress!, pendingDataUrl);
+                    avatarVal = upData.ok ? upData.url! : '';
                     if (!upData.ok) localStorage.setItem(`a2_avatar_${ctx.walletAddress!.toLowerCase()}`, pendingDataUrl);
                 } catch {
                     avatarVal = '';
@@ -798,13 +811,8 @@ export function renderProfileScreen(): void {
                 const dataUrl = ev.target?.result as string;
                 avatarImg.src = dataUrl; // geçici önizleme
                 try {
-                    const res = await fetch('/api/avatar/upload', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ address: ctx.walletAddress, dataUrl }),
-                    });
-                    const data = await res.json();
-                    const finalUrl = data.ok ? data.url : dataUrl;
+                    const data = await signedAvatarUpload(ctx.walletAddress!, dataUrl);
+                    const finalUrl = data.ok ? data.url! : dataUrl;
                     if (data.ok) localStorage.removeItem(`a2_avatar_${ctx.walletAddress!.toLowerCase()}`);
                     else localStorage.setItem(`a2_avatar_${ctx.walletAddress!.toLowerCase()}`, dataUrl);
                     await profileService.registerProfile(profile!.username, finalUrl);
