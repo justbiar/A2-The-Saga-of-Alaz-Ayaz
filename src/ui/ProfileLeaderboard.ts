@@ -8,6 +8,15 @@ import { profileService } from '../chain/ProfileService';
 import { leaderboardService } from '../chain/LeaderboardService';
 import { showWalletModal, lockGameUntilProfile, updateWalletAvatar } from './WalletUI';
 import { showToast } from './LobbyUI';
+import { escapeHtml } from '../utils/escapeHtml';
+
+/** Avatar URL sanitize — sadece https ve same-origin path'lere izin ver */
+function sanitizeAvatarUrl(url: string | null): string {
+    if (!url) return '/assets/images/logo.webp';
+    const trimmed = url.trim();
+    if (trimmed.startsWith('/') || trimmed.startsWith('https://')) return trimmed;
+    return '/assets/images/logo.webp';
+}
 
 const ethers = (globalThis as any).ethers;
 
@@ -178,7 +187,7 @@ export async function renderLocalLeaderboard(sortBy: 'wins' | 'weeklyWins' | 'be
         const gamesPlayed = (e.onlineWins ?? 0) + (e.onlineLosses ?? 0) + (e.onlineDraws ?? 0);
         tr.innerHTML = `
             <td class="lb-rank ${e.rank <= 3 ? 'lb-rank-' + e.rank : ''}">${e.rank}</td>
-            <td>${e.username}</td>
+            <td>${escapeHtml(String(e.username))}</td>
             <td>${sortBy === 'weeklyWins' ? e.weeklyWins : (e.onlineWins ?? e.wins)}</td>
             <td>${gamesPlayed}</td>
             <td class="lb-winrate">${e.winRate}%</td>
@@ -247,14 +256,14 @@ async function renderCampaignLeaderboard(campaignId: string): Promise<void> {
                 const rankLabel = i + 1;
                 const addrShort = e.address.slice(0, 6) + '...' + e.address.slice(-4);
                 // Fallback to logo if no avatar
-                const avatarSrc = e.avatarURI 
-                    || localStorage.getItem('a2_avatar_' + e.address.toLowerCase()) 
-                    || '/assets/images/logo.webp';
+                const avatarSrc = sanitizeAvatarUrl(e.avatarURI
+                    || localStorage.getItem('a2_avatar_' + e.address.toLowerCase())
+                    || '/assets/images/logo.webp');
 
                 return '<div class="lb-podium-card ' + cls + ' ' + (isMe ? 'lb-me' : '') + '">' +
                     '<div class="lb-podium-rank">' + rankLabel + '</div>' +
-                    '<img class="lb-podium-avatar" src="' + avatarSrc + '" alt="" onerror="this.src=\'/assets/images/logo.webp\'" />' +
-                    '<div class="lb-podium-name">' + (e.username || addrShort) + '</div>' +
+                    '<img class="lb-podium-avatar" src="' + escapeHtml(avatarSrc) + '" alt="" onerror="this.src=\'/assets/images/logo.webp\'" />' +
+                    '<div class="lb-podium-name">' + escapeHtml(String(e.username || addrShort)) + '</div>' +
                     '<div class="lb-podium-addr">' + addrShort + '</div>' +
                     '<div class="lb-podium-stats">' +
                         '<div class="lb-podium-stat">' +
@@ -284,17 +293,17 @@ async function renderCampaignLeaderboard(campaignId: string): Promise<void> {
                         const isMe = e.address.toLowerCase() === (ctx.walletAddress ?? '').toLowerCase();
                         const rankCls = i < 3 ? ['lb-rank-gold', 'lb-rank-silver', 'lb-rank-bronze'][i] : 'lb-rank-4up';
                         const addrShort = e.address.slice(0, 6) + '...' + e.address.slice(-4);
-                        const avatarSrc = e.avatarURI 
-                            || localStorage.getItem('a2_avatar_' + e.address.toLowerCase()) 
-                            || '/assets/images/logo.webp';
-                            
+                        const avatarSrc = sanitizeAvatarUrl(e.avatarURI
+                            || localStorage.getItem('a2_avatar_' + e.address.toLowerCase())
+                            || '/assets/images/logo.webp');
+
                         return '<tr class="' + (isMe ? 'lb-me' : '') + '">' +
                             '<td><span class="lb-rank-num ' + rankCls + '">' + (i + 1) + '</span></td>' +
                             '<td>' +
                                 '<div class="lb-player-cell">' +
-                                    '<img class="lb-player-avatar" src="' + avatarSrc + '" alt="" onerror="this.src=\'/assets/images/logo.webp\'" />' +
+                                    '<img class="lb-player-avatar" src="' + escapeHtml(avatarSrc) + '" alt="" onerror="this.src=\'/assets/images/logo.webp\'" />' +
                                     '<div>' +
-                                        '<div class="lb-player-name">' + (e.username || addrShort) + '</div>' +
+                                        '<div class="lb-player-name">' + escapeHtml(String(e.username || addrShort)) + '</div>' +
                                         '<div class="lb-player-addr">' + addrShort + '</div>' +
                                     '</div>' +
                                 '</div>' +
@@ -462,13 +471,13 @@ export async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'b
             </div>`;
             const card = document.createElement('div');
             card.className = `lb-podium-card ${pClass}`;
-            const avatarSrc = e.avatarURI
+            const avatarSrc = sanitizeAvatarUrl(e.avatarURI
                 || localStorage.getItem(`a2_avatar_${e.address.toLowerCase()}`)
-                || '/assets/images/logo.webp';
+                || '/assets/images/logo.webp');
             card.innerHTML = `
                 <div class="lb-podium-rank">${rankLabel}</div>
-                <img class="lb-podium-avatar" src="${avatarSrc}" alt="" onerror="this.src='/assets/images/logo.webp'" />
-                <div class="lb-podium-name">${e.username}</div>
+                <img class="lb-podium-avatar" src="${escapeHtml(avatarSrc)}" alt="" onerror="this.src='/assets/images/logo.webp'" />
+                <div class="lb-podium-name">${escapeHtml(String(e.username))}</div>
                 <div class="lb-podium-addr">${e.address.slice(0, 8)}…${e.address.slice(-4)}</div>
                 <div class="lb-podium-stats">
                     <div class="lb-podium-stat">
@@ -528,16 +537,16 @@ export async function renderLeaderboardScreen(sortBy: 'wins' | 'weeklyWins' | 'b
                 ? `<span class="lb-donate-cell">${donated.toFixed(3)}</span>`
                 : `<span class="lb-prize-empty">—</span>`;
 
-            const rowAvatar = e.avatarURI
+            const rowAvatar = sanitizeAvatarUrl(e.avatarURI
                 || localStorage.getItem(`a2_avatar_${e.address.toLowerCase()}`)
-                || '/assets/images/logo.webp';
+                || '/assets/images/logo.webp');
             tr.innerHTML = `
                 <td><span class="lb-rank-num ${e.rank <= 3 ? 'lb-rank-' + e.rank : 'lb-rank-4up'}">${e.rank}</span></td>
                 <td>
                   <div class="lb-player-cell">
-                    <img class="lb-player-avatar" src="${rowAvatar}" alt="" onerror="this.src='/assets/images/logo.webp'" />
+                    <img class="lb-player-avatar" src="${escapeHtml(rowAvatar)}" alt="" onerror="this.src='/assets/images/logo.webp'" />
                     <div>
-                      <div class="lb-player-name">${e.username}</div>
+                      <div class="lb-player-name">${escapeHtml(String(e.username))}</div>
                       <div class="lb-player-addr">${e.address.slice(0, 6)}…${e.address.slice(-4)}</div>
                     </div>
                   </div>
@@ -772,7 +781,7 @@ export function renderProfileScreen(): void {
                 const resClass = m.result === 'win' ? 'win' : m.result === 'loss' ? 'loss' : 'draw';
 
                 const opponent = m.opponentUsername
-                    ? m.opponentUsername
+                    ? escapeHtml(m.opponentUsername)
                     : m.opponentAddress
                         ? `${m.opponentAddress.slice(0, 6)}…${m.opponentAddress.slice(-4)}`
                         : t('pfsMatchOpponent' as TransKey);
@@ -1061,7 +1070,7 @@ function initFaucet(): void {
                 gasLimit: 21000,
             });
             // TX yayınlandı, onay bekleme — Fuji testnet yavaş olabilir
-            void fetch('/api/faucet/donate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, address: ctx.walletAddress }) });
+            void fetch('/api/faucet/donate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, address: ctx.walletAddress, txHash: tx.hash }) });
             setFaucetStatus('donate', `${t('askidaDepositOk' as any)} <a href="https://testnet.snowtrace.io/tx/${tx.hash}" target="_blank" style="color:#4af;word-break:break-all">${tx.hash.slice(0,18)}…</a>`, 'ok');
             amtInput.value = '';
             void refreshFaucetInfo();

@@ -22,6 +22,7 @@ const { ethers } = require('ethers');
 const { ExpressPeerServer } = require('peer');
 
 const app = express();
+app.set('trust proxy', 1); // nginx arkasinda gercek IP'yi al (rate limit icin)
 const PORT = process.env.PORT ?? 3001;
 
 // ── Config ────────────────────────────────────────────────────────────
@@ -93,6 +94,17 @@ function validateAddress(addr) {
     catch { return null; }
 }
 
+// ── TX Queue — nonce cakismasini onler (siralama) ────────────────────
+let txQueue = Promise.resolve();
+function queueTx(fn) {
+    const p = txQueue.then(fn, fn); // onceki basarisiz olsa da devam et
+    txQueue = p.then(() => {}, () => {}); // swallow errors for chain
+    return p;
+}
+
+// ── Match-level mutex — ayni match icin concurrent settle engelle ─────
+const matchLocks = new Set();
+
 /** Atomik dosya yazma — temp dosyaya yaz, sonra rename (crash-safe) */
 function atomicWriteSync(filePath, data) {
     const tmp = filePath + '.tmp';
@@ -104,6 +116,16 @@ function validateAmount(val) {
     const n = parseFloat(val);
     if (isNaN(n) || n <= 0 || n > 200) return null; // max pot = 2 * 100 AVAX
     return n;
+}
+
+/** Wei bazli fee/prize hesabi — floating-point hatasini onler */
+function calcFeeAndPrize(amountPerPlayer, feePercent) {
+    const totalPotWei = ethers.parseEther((amountPerPlayer * 2).toFixed(6));
+    const feeWei = totalPotWei * BigInt(feePercent) / 100n;
+    const prizeWei = totalPotWei - feeWei;
+    const feeAvax = parseFloat(ethers.formatEther(feeWei));
+    const prizeAvax = parseFloat(ethers.formatEther(prizeWei));
+    return { totalPotWei, feeWei, prizeWei, feeAvax, prizeAvax };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -174,7 +196,8 @@ async function verifyDepositTx(txHash, expectedFrom, expectedAmountAvax, expecte
 
         return { ok: true };
     } catch (e) {
-        return { ok: false, error: 'RPC hatası: ' + e.message };
+        console.error('[VerifyTX] RPC error:', e.message);
+        return { ok: false, error: 'TX doğrulama başarısız. Lütfen tekrar dene.' };
     }
 }
 
@@ -190,10 +213,10 @@ setInterval(() => {
             console.log(`[AutoRefund] Match ${matchId} timed out — refunding host`);
             match.status = 'refunded';
             const refundWei = ethers.parseEther(match.amount.toFixed(6));
-            houseSigner.sendTransaction({
+            queueTx(() => houseSigner.sendTransaction({
                 to: match.hostAddress,
                 value: refundWei,
-            }).then(tx => {
+            })).then(tx => {
                 match.settledAt = Date.now();
                 saveMatches();
                 console.log(`[AutoRefund] ${matchId} → ${match.hostAddress} TX: ${tx.hash}`);
@@ -210,19 +233,17 @@ setInterval(() => {
                 const reporterWon = (match.hostResult === 'win') || (match.guestResult === 'win');
                 if (reporterWon) {
                     const winnerAddr = match.hostResult === 'win' ? match.hostAddress : match.guestAddress;
-                    const totalPot = match.amount * 2;
-                    const fee = totalPot * (BET_FEE_PERCENT / 100);
-                    const prize = totalPot - fee;
+                    const { prizeWei, feeAvax } = calcFeeAndPrize(match.amount, BET_FEE_PERCENT);
                     console.log(`[AutoResolve] Match ${matchId} — one side reported win, settling`);
                     match.status = 'settling';
-                    houseSigner.sendTransaction({
+                    queueTx(() => houseSigner.sendTransaction({
                         to: winnerAddr,
-                        value: ethers.parseEther(prize.toFixed(6)),
-                    }).then(tx => {
+                        value: prizeWei,
+                    })).then(tx => {
                         match.status = 'settled';
                         match.settledAt = Date.now();
                         match.winnerAddress = winnerAddr;
-                        addFeeToPool(fee, matchId);
+                        addFeeToPool(feeAvax, matchId);
                         saveMatches();
                         console.log(`[AutoResolve] ✅ ${matchId} → ${winnerAddr.slice(0, 10)} ${prize} AVAX tx=${tx.hash}`);
                     }).catch(err => {
@@ -258,6 +279,14 @@ setInterval(() => {
     for (const [id, ts] of refundedMatches) {
         if (now - ts > 3_600_000) refundedMatches.delete(id);
     }
+    // Hard cap — matches Map 5000'i gecerse en eskileri sil (DoS engeli)
+    if (matches.size > 5000) {
+        const sorted = [...matches.entries()].sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+        const toDelete = sorted.slice(0, matches.size - 5000);
+        for (const [id] of toDelete) matches.delete(id);
+        saveMatches();
+        console.warn(`[Matches] Hard cap: ${toDelete.length} eski mac silindi, kalan: ${matches.size}`);
+    }
 }, 30_000);
 
 // ── Routes ────────────────────────────────────────────────────────────
@@ -273,7 +302,7 @@ app.get('/api/health', async (req, res) => {
             network: 'Avalanche Fuji Testnet',
         });
     } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+        res.status(500).json({ ok: false, error: 'Sunucu hatasi' });
     }
 });
 
@@ -300,7 +329,7 @@ app.post('/api/register-bet', rateLimit, async (req, res) => {
     const { matchId, role, address, txHash, amount } = req.body ?? {};
 
     // Validate inputs
-    if (!matchId || typeof matchId !== 'string' || matchId.length > 80) {
+    if (!matchId || typeof matchId !== 'string' || matchId.length > 80 || !/^[a-zA-Z0-9_\-]+$/.test(matchId)) {
         return res.status(400).json({ error: 'Geçersiz matchId' });
     }
     const addr = validateAddress(address);
@@ -386,7 +415,7 @@ app.post('/api/cancel-bet', rateLimit, async (req, res) => {
 
     const addr = validateAddress(address);
     if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
-    if (!matchId || typeof matchId !== 'string') {
+    if (!matchId || typeof matchId !== 'string' || matchId.length > 80 || !/^[a-zA-Z0-9_\-]+$/.test(matchId)) {
         return res.status(400).json({ error: 'Geçersiz matchId' });
     }
 
@@ -411,20 +440,20 @@ app.post('/api/cancel-bet', rateLimit, async (req, res) => {
     if (match.status === 'host_deposited') {
         try {
             const refundWei = ethers.parseEther(match.amount.toFixed(6));
-            const tx = await houseSigner.sendTransaction({
+            const tx = await queueTx(() => houseSigner.sendTransaction({
                 to: match.hostAddress,
                 value: refundWei,
-            });
+            }));
             await tx.wait(1);
 
             match.status = 'refunded';
             match.settledAt = Date.now();
             saveMatches();
-            console.log(`[CancelBet] ✅ ${matchId} → host refunded ${match.amount} AVAX tx=${tx.hash}`);
+            console.log(`[CancelBet] ${matchId} → host refunded ${match.amount} AVAX tx=${tx.hash}`);
             res.json({ ok: true, status: 'refunded', txHash: tx.hash, refundAVAX: match.amount });
         } catch (e) {
             console.error(`[CancelBet] ${matchId} refund failed:`, e.message);
-            res.status(500).json({ error: 'Refund başarısız: ' + e.message });
+            res.status(500).json({ error: 'Refund basarisiz' });
         }
     } else {
         res.status(409).json({ error: 'Beklenmeyen durum: ' + match.status });
@@ -443,7 +472,7 @@ app.post('/api/report-result', rateLimit, async (req, res) => {
     const addr = validateAddress(address);
     if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
 
-    if (!matchId || typeof matchId !== 'string') {
+    if (!matchId || typeof matchId !== 'string' || matchId.length > 80 || !/^[a-zA-Z0-9_\-]+$/.test(matchId)) {
         return res.status(400).json({ error: 'Geçersiz matchId' });
     }
     if (!['win', 'loss'].includes(result)) {
@@ -476,69 +505,69 @@ app.post('/api/report-result', rateLimit, async (req, res) => {
 
     // Both reported?
     if (match.hostResult && match.guestResult) {
-        // Settling kilidi — concurrent istekleri engelle
+        // Match-level mutex — ayni match icin concurrent settle engelle
+        if (matchLocks.has(matchId)) {
+            return res.status(409).json({ error: 'Mac zaten isleniyor, lutfen bekle' });
+        }
         if (match.status === 'settling') {
-            return res.status(409).json({ error: 'Maç zaten settle ediliyor, lütfen bekle' });
+            return res.status(409).json({ error: 'Mac zaten settle ediliyor, lutfen bekle' });
         }
-        // Determine winner
-        let winnerAddr = null;
-
-        if (match.hostResult === 'win' && match.guestResult === 'loss') {
-            winnerAddr = match.hostAddress;
-        } else if (match.guestResult === 'win' && match.hostResult === 'loss') {
-            winnerAddr = match.guestAddress;
-        } else if (match.hostResult === 'win' && match.guestResult === 'win') {
-            // Both claim win — dispute
-            match.status = 'disputed';
-            console.log(`[ReportResult] DISPUTE: ${matchId} — both claim win, refunding both`);
-            // Auto-resolve dispute: refund both players
-            await refundBothPlayers(matchId, match);
-            return res.json({ ok: true, status: 'disputed', message: 'İki taraf da kazandığını iddia etti — her iki tarafa iade yapılıyor' });
-        } else {
-            // Both claim loss (edge case) — refund both
-            match.status = 'disputed';
-            console.log(`[ReportResult] DISPUTE: ${matchId} — both claim loss, refunding both`);
-            await refundBothPlayers(matchId, match);
-            return res.json({ ok: true, status: 'disputed', message: 'İki taraf da kaybettiğini iddia etti — iade yapılıyor' });
-        }
-
-        // Consensus! Settle.
-        match.status = 'settling';
-        const totalPot = match.amount * 2;
-        const fee = totalPot * (BET_FEE_PERCENT / 100);
-        const prize = totalPot - fee;
-        const prizeWei = ethers.parseEther(prize.toFixed(6));
+        matchLocks.add(matchId);
 
         try {
+            // Determine winner
+            let winnerAddr = null;
+
+            if (match.hostResult === 'win' && match.guestResult === 'loss') {
+                winnerAddr = match.hostAddress;
+            } else if (match.guestResult === 'win' && match.hostResult === 'loss') {
+                winnerAddr = match.guestAddress;
+            } else if (match.hostResult === 'win' && match.guestResult === 'win') {
+                match.status = 'disputed';
+                console.log(`[ReportResult] DISPUTE: ${matchId} — both claim win, refunding both`);
+                await refundBothPlayers(matchId, match);
+                return res.json({ ok: true, status: 'disputed', message: 'Iki taraf da kazandigini iddia etti — iade yapiliyor' });
+            } else {
+                match.status = 'disputed';
+                console.log(`[ReportResult] DISPUTE: ${matchId} — both claim loss, refunding both`);
+                await refundBothPlayers(matchId, match);
+                return res.json({ ok: true, status: 'disputed', message: 'Iki taraf da kaybettigini iddia etti — iade yapiliyor' });
+            }
+
+            // Consensus! Settle.
+            match.status = 'settling';
+            const { prizeWei, prizeAvax, feeAvax } = calcFeeAndPrize(match.amount, BET_FEE_PERCENT);
+
             const bal = await provider.getBalance(houseSigner.address);
             if (bal < prizeWei) {
-                match.status = 'locked'; // revert
+                match.status = 'locked';
                 return res.status(503).json({ error: 'House wallet bakiyesi yetersiz' });
             }
 
-            const tx = await houseSigner.sendTransaction({
+            const tx = await queueTx(() => houseSigner.sendTransaction({
                 to: winnerAddr,
                 value: prizeWei,
-            });
+            }));
 
             match.status = 'settled';
             match.settledAt = Date.now();
             match.winnerAddress = winnerAddr;
             settledMatches.set(matchId, Date.now());
-            addFeeToPool(fee, matchId);
+            addFeeToPool(feeAvax, matchId);
             saveMatches();
-            console.log(`[Settle] ✅ ${matchId} → winner=${winnerAddr.slice(0, 10)} prize=${prize} AVAX fee=${fee.toFixed(4)} AVAX tx=${tx.hash}`);
+            console.log(`[Settle] ${matchId} → winner=${winnerAddr.slice(0, 10)} prize=${prizeAvax} AVAX fee=${feeAvax} AVAX tx=${tx.hash}`);
 
-            res.json({ ok: true, status: 'settled', winnerAddress: winnerAddr, prizeAVAX: prize, txHash: tx.hash });
+            res.json({ ok: true, status: 'settled', winnerAddress: winnerAddr, prizeAVAX: prizeAvax, txHash: tx.hash });
 
-            // Background confirm
             tx.wait(1).then(r => console.log(`[Settle] Confirmed block=${r.blockNumber}`))
-                .catch(e => console.error('[Settle] Confirm err:', e.message));
+                .catch(err => console.error('[Settle] Confirm err:', err.message));
 
         } catch (e) {
             match.status = 'locked';
             console.error('[Settle] TX failed:', e.message);
-            res.status(500).json({ error: 'Settle TX başarısız: ' + e.message });
+            res.status(500).json({ error: 'Odeme gonderilemedi' });
+        } finally {
+            matchLocks.delete(matchId);
         }
 
     } else {
@@ -553,10 +582,10 @@ async function refundBothPlayers(matchId, match) {
     const players = [match.hostAddress, match.guestAddress].filter(Boolean);
     for (const addr of players) {
         try {
-            const tx = await houseSigner.sendTransaction({
+            const tx = await queueTx(() => houseSigner.sendTransaction({
                 to: addr,
                 value: refundWei,
-            });
+            }));
             console.log(`[DisputeRefund] ${matchId} → ${addr.slice(0, 10)} TX: ${tx.hash}`);
         } catch (e) {
             console.error(`[DisputeRefund] ${matchId} → ${addr.slice(0, 10)} FAILED:`, e.message);
@@ -641,7 +670,7 @@ app.post('/api/refund', rateLimit, async (req, res) => {
     const host = validateAddress(hostAddress);
     if (!host) return res.status(400).json({ error: 'Geçersiz hostAddress' });
 
-    if (!matchId || typeof matchId !== 'string') {
+    if (!matchId || typeof matchId !== 'string' || matchId.length > 80 || !/^[a-zA-Z0-9_\-]+$/.test(matchId)) {
         return res.status(400).json({ error: 'Geçersiz matchId' });
     }
 
@@ -669,10 +698,10 @@ app.post('/api/refund', rateLimit, async (req, res) => {
     const refundWei = ethers.parseEther(amount.toFixed(6));
 
     try {
-        const tx = await houseSigner.sendTransaction({
+        const tx = await queueTx(() => houseSigner.sendTransaction({
             to: host,
             value: refundWei,
-        });
+        }));
 
         match.status = 'refunded';
         match.settledAt = Date.now();
@@ -683,7 +712,7 @@ app.post('/api/refund', rateLimit, async (req, res) => {
 
     } catch (e) {
         console.error('[Refund] TX failed:', e.message);
-        res.status(500).json({ error: 'TX gönderilemedi: ' + e.message });
+        res.status(500).json({ error: 'TX gonderilemedi' });
     }
 });
 
@@ -693,7 +722,7 @@ app.post('/api/refund', rateLimit, async (req, res) => {
  * → Distributes weekly prize pool to top players
  * adminKey = process.env.ADMIN_KEY (basit auth)
  */
-app.post('/api/distribute', async (req, res) => {
+app.post('/api/distribute', rateLimit, async (req, res) => {
     const { adminKey, recipients } = req.body ?? {};
 
     if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
@@ -711,10 +740,10 @@ app.post('/api/distribute', async (req, res) => {
         if (!addr || !amt) { results.push({ address: r.address, error: 'Geçersiz' }); continue; }
 
         try {
-            const tx = await houseSigner.sendTransaction({
+            const tx = await queueTx(() => houseSigner.sendTransaction({
                 to: addr,
                 value: ethers.parseEther(amt.toFixed(6)),
-            });
+            }));
             await tx.wait(1);
             results.push({ address: addr, avax: amt, txHash: tx.hash });
             console.log(`[Distribute] ${addr} ← ${amt} AVAX tx=${tx.hash}`);
@@ -856,13 +885,24 @@ app.post('/api/avatar/upload', rateLimit, async (req, res) => {
     }
 });
 
-/** POST /api/leaderboard/upsert — Oyuncu kayıt / isim güncelle */
+/** POST /api/leaderboard/upsert — Oyuncu kayıt / isim güncelle (imza dogrulamali) */
 app.post('/api/leaderboard/upsert', rateLimit, (req, res) => {
-    const { address, username, avatarURI } = req.body ?? {};
+    const { address, username, avatarURI, signature } = req.body ?? {};
     const addr = validateAddress(address);
     if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
     if (!username || typeof username !== 'string' || username.length > 32) {
         return res.status(400).json({ error: 'Geçersiz username' });
+    }
+    // Imza dogrulamasi — sadece kendi profilini guncelleyebilir
+    if (!signature) return res.status(401).json({ error: 'Imza gerekli' });
+    try {
+        const msg = `A2 Profile: ${addr.toLowerCase()}`;
+        const recovered = ethers.verifyMessage(msg, signature);
+        if (recovered.toLowerCase() !== addr.toLowerCase()) {
+            return res.status(403).json({ error: 'Imza dogrulanamadi' });
+        }
+    } catch {
+        return res.status(403).json({ error: 'Gecersiz imza' });
     }
     // avatarURI: sadece http/https URL kabul et, base64 reddet
     const safeAvatar = (typeof avatarURI === 'string' &&
@@ -906,13 +946,29 @@ setInterval(() => {
     }
 }, 120_000);
 app.post('/api/leaderboard/result', rateLimit, (req, res) => {
-    const { address, result, betWon, betLost, mode, opponentAddress, opponentUsername, matchId } = req.body ?? {};
+    const { address, result, betWon, betLost, mode, opponentAddress, opponentUsername, matchId, signature } = req.body ?? {};
     const addr = validateAddress(address);
     if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
     if (!['win', 'loss', 'draw'].includes(result)) {
         return res.status(400).json({ error: 'Geçersiz result' });
     }
     const isOnline = mode === 'online' || mode === 'multiplayer';
+
+    // Imza dogrulamasi — sadece kendi sonucunu kaydedebilir
+    if (signature) {
+        try {
+            const msg = `A2 Result: ${addr.toLowerCase()}`;
+            const recovered = ethers.verifyMessage(msg, signature);
+            if (recovered.toLowerCase() !== addr.toLowerCase()) {
+                return res.status(403).json({ error: 'Imza dogrulanamadi' });
+            }
+        } catch {
+            return res.status(403).json({ error: 'Gecersiz imza' });
+        }
+    } else if (!isOnline) {
+        // Local modda imza zorunlu — sahte skor engelle
+        return res.status(401).json({ error: 'Local sonuclar icin imza gerekli' });
+    }
 
     // Local sonuclar icin per-address rate limit — saatte max 10
     if (!isOnline) {
@@ -988,16 +1044,21 @@ app.post('/api/leaderboard/result', rateLimit, (req, res) => {
     p.lastUpdated = Date.now();
     saveLbData();
 
-    // Aktif kampanya leaderboard'larini guncelle
-    if (isOnline) {
+    // Aktif kampanya leaderboard'larini guncelle (matchId ile dedup)
+    if (isOnline && matchId) {
         for (const camp of campaignsData) {
             if (camp.status !== 'active') continue;
             if (!camp.participants?.[key]) continue;
             if (!camp.campaignLeaderboard) camp.campaignLeaderboard = {};
             if (!camp.campaignLeaderboard[key]) {
-                camp.campaignLeaderboard[key] = { points: 0, tasksCompleted: 0, username: p.username || key.slice(0, 10) };
+                camp.campaignLeaderboard[key] = { points: 0, tasksCompleted: 0, username: p.username || key.slice(0, 10), _matchIds: [] };
             }
             const ce = camp.campaignLeaderboard[key];
+            if (!ce._matchIds) ce._matchIds = [];
+            // Aynı maç tekrar puan eklemesin
+            if (ce._matchIds.includes(matchId)) continue;
+            ce._matchIds.push(matchId);
+            if (ce._matchIds.length > 200) ce._matchIds = ce._matchIds.slice(-200);
             if (result === 'win') ce.points += 10;
             if (bw > 0) ce.points += Math.floor(bw * 100);
         }
@@ -1124,10 +1185,10 @@ async function runWeeklyDistribution() {
         if (amount < 0.001) continue;
         const addr = sorted[i].address;
         try {
-            const tx = await houseSigner.sendTransaction({
+            const tx = await queueTx(() => houseSigner.sendTransaction({
                 to: addr,
                 value: ethers.parseEther(String(amount)),
-            });
+            }));
             await tx.wait(1);
             distributedAmounts.push({ rank: i + 1, address: addr, amount, txHash: tx.hash });
             console.log(`[WeeklyPrize] ${i + 1}. sıra: ${addr.slice(0, 10)} ← ${amount} AVAX | TX: ${tx.hash}`);
@@ -1208,10 +1269,10 @@ async function runCampaignDistributions() {
                 if (amt < 0.0001) continue;
 
                 try {
-                    const tx = await signer.sendTransaction({
+                    const tx = await queueTx(() => signer.sendTransaction({
                         to: sorted[i].address,
                         value: ethers.parseEther(String(amt)),
-                    });
+                    }));
                     await tx.wait(1);
                     results.push({ address: sorted[i].address, avax: amt, txHash: tx.hash, ok: true });
                     console.log(`[CampaignDist:${camp.id}] ${i + 1}. ${sorted[i].address.slice(0, 10)} ← ${amt} AVAX TX=${tx.hash}`);
@@ -1275,11 +1336,20 @@ app.post('/api/lobby', rateLimit, (req, res) => {
     res.json({ ok: true });
 });
 
-/** DELETE /api/lobby/:code — Lobi sil */
+/** DELETE /api/lobby/:code — Lobi sil (sadece lobi sahibi veya admin) */
 app.delete('/api/lobby/:code', (req, res) => {
     const code = req.params.code.toUpperCase();
+    const lobby = lobbies.get(code);
+    if (!lobby) return res.json({ ok: true }); // zaten yok
+    // Wallet query param ile sahiplik kontrolu
+    const wallet = req.query.wallet ? String(req.query.wallet).toLowerCase() : null;
+    if (wallet && lobby.wallet) {
+        if (wallet !== lobby.wallet.toLowerCase()) {
+            return res.status(403).json({ error: 'Bu lobiyi sadece sahibi silebilir' });
+        }
+    }
     lobbies.delete(code);
-    console.log(`[Lobby] Removed: ${code}`);
+    console.log(`[Lobby] Removed: ${code}${wallet ? ' by ' + wallet.slice(0, 10) : ''}`);
     res.json({ ok: true });
 });
 
@@ -1438,12 +1508,13 @@ app.get('/api/lobbies', (req, res) => {
                 nickname: lobby.nickname,
                 lobbyName: lobby.lobbyName || '',
                 age: Math.floor((Date.now() - lobby.createdAt) / 1000),
-                isFake: false
+                playerCount: '1/2',
+                joinable: true,
             });
         }
     }
-    
-    // Fake lobileri ekle (isFake: true ile)
+
+    // Fake lobileri ekle (client isFake gormez, sadece dolu gosterilir)
     for (const [code, fLobby] of fakeLobbies) {
         publicLobbies.push({
             code,
@@ -1452,8 +1523,8 @@ app.get('/api/lobbies', (req, res) => {
             nickname: fLobby.nickname,
             lobbyName: fLobby.lobbyName,
             age: Math.floor((Date.now() - fLobby.createdAt) / 1000),
-            isFake: true,
-            playerCount: fLobby.playerCount
+            playerCount: fLobby.playerCount || '2/2',
+            joinable: false,
         });
     }
 
@@ -1486,6 +1557,9 @@ app.post('/api/quickmatch/join', rateLimit, (req, res) => {
     if (!wallet || !team || !code) {
         return res.status(400).json({ error: 'wallet, team ve code gerekli' });
     }
+    // Wallet adres dogrulamasi
+    const validWallet = validateAddress(wallet);
+    if (!validWallet) return res.status(400).json({ error: 'Gecersiz wallet adresi' });
 
     // Zaten kuyrukta mı?
     const existing = quickMatchQueue.findIndex(q => q.wallet === wallet);
@@ -1517,8 +1591,8 @@ app.post('/api/quickmatch/join', rateLimit, (req, res) => {
 
 /** GET /api/quickmatch/poll?wallet=0x... — Eşleşme kontrol */
 app.get('/api/quickmatch/poll', (req, res) => {
-    const wallet = req.query.wallet;
-    if (!wallet) return res.status(400).json({ error: 'wallet gerekli' });
+    const wallet = validateAddress(req.query.wallet);
+    if (!wallet) return res.status(400).json({ error: 'Geçersiz wallet' });
 
     const pair = quickMatchPairs.get(wallet);
     if (pair) {
@@ -1583,6 +1657,24 @@ app.post('/api/win-report', rateLimit, (req, res) => {
     const lbKey = addr.toLowerCase();
     if (!lbData[lbKey]) {
         return res.status(403).json({ error: 'Kayitli bir oyuncu degilsin' });
+    }
+
+    // Lobi oyuncusu kontrolu — lobideki veya match registry'deki oyunculardan biri mi?
+    const lobby = lobbies.get(code);
+    const isLobbyOwner = lobby && lobby.wallet && lobby.wallet.toLowerCase() === addr.toLowerCase();
+    // matchId ile match registry kontrolu
+    const matchId = req.body.matchId;
+    let isMatchPlayer = false;
+    if (matchId) {
+        const match = matches.get(matchId);
+        if (match) {
+            isMatchPlayer = addr.toLowerCase() === match.hostAddress?.toLowerCase() ||
+                            addr.toLowerCase() === match.guestAddress?.toLowerCase();
+        }
+    }
+    if (!isLobbyOwner && !isMatchPlayer) {
+        console.warn(`[WinReport] REDDEDILDI: ${code} — ${addr.slice(0, 10)} lobi/match oyuncusu degil`);
+        return res.status(403).json({ error: 'Bu lobinin oyuncusu degilsin' });
     }
 
     if (!winReports.has(code)) {
@@ -1829,7 +1921,7 @@ app.get('/api/faucet/info', async (req, res) => {
         claimAmount: FAUCET_AMOUNT,
         minGames: FAUCET_MIN_GAMES,
         cooldownHours: 24,
-        houseWallet: process.env.HOUSE_WALLET_PK ? (() => { try { return new ethers.Wallet(process.env.HOUSE_WALLET_PK).address; } catch { return null; } })() : null,
+        houseWallet: houseSigner.address,
     };
     const addr = validateAddress(req.query.address);
     if (addr) {
@@ -1854,7 +1946,7 @@ app.post('/api/faucet/claim', rateLimit, async (req, res) => {
 
     try {
         const amountWei = ethers.parseEther(FAUCET_AMOUNT.toFixed(6));
-        const tx = await houseSigner.sendTransaction({ to: addr, value: amountWei });
+        const tx = await queueTx(() => houseSigner.sendTransaction({ to: addr, value: amountWei }));
         faucetData.claims[addr.toLowerCase()] = Date.now();
         faucetData.totalClaimed = (faucetData.totalClaimed || 0) + FAUCET_AMOUNT;
         saveFaucetData();
@@ -1862,23 +1954,39 @@ app.post('/api/faucet/claim', rateLimit, async (req, res) => {
         res.json({ ok: true, txHash: tx.hash, amount: FAUCET_AMOUNT });
     } catch (e) {
         console.error('[Faucet] Claim failed:', e.message);
-        res.status(500).json({ error: 'Gönderim başarısız: ' + e.message });
+        res.status(500).json({ error: 'Gonderim basarisiz' });
     }
 });
 
-/** POST /api/faucet/donate — { amount, address } (bağış kaydı) */
-app.post('/api/faucet/donate', rateLimit, (req, res) => {
-    const amount = parseFloat(req.body?.amount);
+/** POST /api/faucet/donate — { amount, address, txHash } (on-chain dogrulamali bagis kaydi) */
+app.post('/api/faucet/donate', rateLimit, async (req, res) => {
+    const { amount: rawAmount, address, txHash } = req.body ?? {};
+    const amount = parseFloat(rawAmount);
     if (!amount || amount <= 0 || amount > 1000) return res.status(400).json({ error: 'Geçersiz miktar' });
-    faucetData.totalDonated = (faucetData.totalDonated || 0) + amount;
-    const addr = validateAddress(req.body?.address);
-    if (addr) {
-        if (!faucetData.donations) faucetData.donations = {};
-        const key = addr.toLowerCase();
-        faucetData.donations[key] = (faucetData.donations[key] || 0) + amount;
+    const addr = validateAddress(address);
+    if (!addr) return res.status(400).json({ error: 'Geçersiz address' });
+    if (!txHash || typeof txHash !== 'string' || !txHash.startsWith('0x')) {
+        return res.status(400).json({ error: 'txHash gerekli' });
     }
+    // Ayni TX tekrar kullanilmasin
+    if (faucetData._usedTxHashes && faucetData._usedTxHashes.includes(txHash)) {
+        return res.status(409).json({ error: 'Bu TX zaten kaydedilmis' });
+    }
+    // On-chain dogrulama — house wallet'a gonderilmis mi?
+    const verify = await verifyDepositTx(txHash, addr, amount, 'faucet-donate');
+    if (!verify.ok) {
+        return res.status(400).json({ error: 'TX dogrulanamadi: ' + verify.error });
+    }
+    faucetData.totalDonated = (faucetData.totalDonated || 0) + amount;
+    if (!faucetData.donations) faucetData.donations = {};
+    const key = addr.toLowerCase();
+    faucetData.donations[key] = (faucetData.donations[key] || 0) + amount;
+    if (!faucetData._usedTxHashes) faucetData._usedTxHashes = [];
+    faucetData._usedTxHashes.push(txHash);
+    // Son 1000 TX tut
+    if (faucetData._usedTxHashes.length > 1000) faucetData._usedTxHashes = faucetData._usedTxHashes.slice(-1000);
     saveFaucetData();
-    console.log(`[Faucet] Donate recorded: ${amount} AVAX${addr ? ' from ' + addr.slice(0,8) : ''} — total: ${faucetData.totalDonated.toFixed(4)}`);
+    console.log(`[Faucet] Donate verified: ${amount} AVAX from ${addr.slice(0,8)} TX=${txHash.slice(0,12)} — total: ${faucetData.totalDonated.toFixed(4)}`);
     res.json({ ok: true, totalDonated: faucetData.totalDonated });
 });
 
@@ -1888,7 +1996,7 @@ app.post('/api/faucet/donate', rateLimit, (req, res) => {
 
 const ADMIN_WALLETS = (process.env.ADMIN_WALLETS || '')
     .split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
-console.log(`[Admin] Admin cüzdanlar: ${ADMIN_WALLETS.length} adet`, ADMIN_WALLETS);
+console.log(`[Admin] Admin cüzdan sayısı: ${ADMIN_WALLETS.length}`);
 const ADMIN_SESSIONS = new Map(); // token → { address, expiresAt }
 
 // Süresi dolan session'ları temizle
@@ -1948,32 +2056,61 @@ function requireAdmin(req, res, next) {
     next();
 }
 
-/** POST /api/admin/auth — Cüzdan imzasıyla oturum aç */
+// ── Admin auth rate limit (IP basina dk 5) + challenge replay engelleme ──
+const adminAuthLimits = new Map(); // ip → timestamp[]
+const usedChallenges = new Set();  // replay engeli
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, arr] of adminAuthLimits) {
+        if (arr.every(t => now - t > 60_000)) adminAuthLimits.delete(ip);
+    }
+    // 10dk'dan eski challenge'lari temizle
+    // (Set icinde timestamp var, ama basit tutmak icin periyodik temizlik)
+    if (usedChallenges.size > 10000) usedChallenges.clear();
+}, 120_000);
+
+/** POST /api/admin/auth — Cüzdan imzasıyla oturum aç (rate limited) */
 app.post('/api/admin/auth', async (req, res) => {
+    // Admin auth icin siki rate limit — dk 5 deneme
+    const ip = req.ip ?? req.socket?.remoteAddress ?? 'unknown';
+    const now = Date.now();
+    const attempts = (adminAuthLimits.get(ip) ?? []).filter(t => now - t < 60_000);
+    if (attempts.length >= 5) {
+        return res.status(429).json({ error: 'Cok fazla deneme. 1 dakika bekle.' });
+    }
+    attempts.push(now);
+    adminAuthLimits.set(ip, attempts);
+
     const { address, signature, challenge } = req.body ?? {};
     const addr = validateAddress(address);
     if (!addr || !signature || !challenge) {
         return res.status(400).json({ error: 'address, signature, challenge gerekli' });
     }
     const m = challenge.match(/^A2 Admin: (\d+)$/);
-    if (!m) return res.status(400).json({ error: 'Geçersiz challenge formatı' });
-    if (Math.abs(Date.now() - parseInt(m[1])) > 5 * 60 * 1000) {
-        return res.status(400).json({ error: 'Challenge süresi dolmuş (5dk)' });
+    if (!m) return res.status(400).json({ error: 'Gecersiz challenge formati' });
+    // Challenge suresi: 60 saniye (eskiden 5dk idi — daraltildi)
+    if (Math.abs(Date.now() - parseInt(m[1])) > 60 * 1000) {
+        return res.status(400).json({ error: 'Challenge suresi dolmus (60sn)' });
+    }
+    // Replay engeli — ayni challenge tekrar kullanilamaz
+    if (usedChallenges.has(challenge)) {
+        return res.status(400).json({ error: 'Bu challenge zaten kullanildi' });
     }
     try {
         const recovered = ethers.verifyMessage(challenge, signature);
         if (recovered.toLowerCase() !== addr.toLowerCase()) {
-            return res.status(401).json({ error: 'İmza doğrulanamadı' });
+            return res.status(401).json({ error: 'Imza dogrulanamadi' });
         }
         if (!ADMIN_WALLETS.includes(addr.toLowerCase())) {
-            return res.status(403).json({ error: 'Bu cüzdan admin değil' });
+            return res.status(403).json({ error: 'Bu cuzdan admin degil' });
         }
+        usedChallenges.add(challenge);
         const token = crypto.randomBytes(32).toString('hex');
         ADMIN_SESSIONS.set(token, { address: addr, expiresAt: Date.now() + 60 * 60 * 1000 });
         console.log(`[Admin] Auth: ${addr.slice(0, 10)} → token verildi`);
         res.json({ ok: true, token });
     } catch (e) {
-        res.status(401).json({ error: 'İmza hatası: ' + e.message });
+        res.status(401).json({ error: 'Imza dogrulanamadi' });
     }
 });
 
@@ -2290,9 +2427,9 @@ app.post('/api/admin/campaign/:id/distribute', requireAdmin, async (req, res) =>
         if (!addr || !amt) { results.push({ address: r.address, error: 'Geçersiz' }); continue; }
         try {
             const signer = getSignerForNetwork(campaign.distribution?.network || campaign.network);
-            const tx = await signer.sendTransaction({
+            const tx = await queueTx(() => signer.sendTransaction({
                 to: addr, value: ethers.parseEther(amt.toFixed(6)),
-            });
+            }));
             await tx.wait(1);
             results.push({ address: addr, avax: amt, txHash: tx.hash, ok: true });
             console.log(`[Campaign:${campaign.id}] ${addr.slice(0, 10)} ← ${amt} AVAX TX=${tx.hash}`);
@@ -2485,7 +2622,7 @@ app.post('/api/campaign/:id/sponsor', rateLimit, async (req, res) => {
         res.json({ ok: true });
     } catch (e) {
         console.error('[Sponsor] Verify failed:', e.message);
-        res.status(500).json({ error: 'TX dogrulama hatasi: ' + e.message });
+        res.status(500).json({ error: 'TX dogrulama hatasi' });
     }
 });
 
@@ -2620,7 +2757,563 @@ app.delete('/api/admin/maintenance/whitelist/:address', requireAdmin, (req, res)
     res.json({ ok: true, whitelist: maintenanceData.whitelist });
 });
 
-// ── PeerJS Signaling Server ────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+//  AI AGENT SİSTEMİ — Bot oyuncular, admin panel, izleme
+// ══════════════════════════════════════════════════════════════════════
+
+const agentMgr = require('./agents/agentManager');
+
+// Server context — agent'ların leaderboard'a kayıt ve sonuç bildirimi için
+const agentServerContext = {
+    upsertProfile: (address, username, signature) => {
+        const addr = validateAddress(address);
+        if (!addr) return;
+        const key = addr.toLowerCase();
+        if (!lbData[key]) {
+            lbData[key] = {
+                address: addr, username,
+                wins: 0, losses: 0, draws: 0,
+                onlineWins: 0, onlineLosses: 0, onlineDraws: 0,
+                localWins: 0, localLosses: 0, localDraws: 0,
+                totalBetWon: 0, totalBetLost: 0,
+                weeklyWins: 0, weeklyBetWon: 0,
+                lastWeek: getISOWeek(), lastUpdated: Date.now(),
+                avatarURI: '',
+            };
+        } else {
+            lbData[key].username = username;
+            lbData[key].lastUpdated = Date.now();
+        }
+        saveLbData();
+    },
+    recordResult: (address, result, mode, opponentAddress, opponentUsername, matchId) => {
+        const addr = validateAddress(address);
+        if (!addr) return;
+        const key = addr.toLowerCase();
+        if (!lbData[key]) {
+            lbData[key] = {
+                address: addr, username: addr.slice(0, 6) + '...' + addr.slice(-4),
+                wins: 0, losses: 0, draws: 0,
+                onlineWins: 0, onlineLosses: 0, onlineDraws: 0,
+                localWins: 0, localLosses: 0, localDraws: 0,
+                totalBetWon: 0, totalBetLost: 0,
+                weeklyWins: 0, weeklyBetWon: 0,
+                lastWeek: getISOWeek(), lastUpdated: Date.now(),
+            };
+        }
+        const p = lbData[key];
+        if (p.onlineWins === undefined) { p.onlineWins = 0; p.onlineLosses = 0; p.onlineDraws = 0; p.localWins = 0; p.localLosses = 0; p.localDraws = 0; }
+        maybeResetWeekly(p);
+        if (result === 'win') { p.wins++; p.weeklyWins++; p.onlineWins++; }
+        else if (result === 'loss') { p.losses++; p.onlineLosses++; }
+        else { p.draws++; p.onlineDraws++; }
+        if (!p.matchHistory) p.matchHistory = [];
+        p.matchHistory.push({ result, betWon: 0, betLost: 0, ts: Date.now(), opponentAddress, opponentUsername });
+        if (p.matchHistory.length > 50) p.matchHistory = p.matchHistory.slice(-50);
+        p.lastUpdated = Date.now();
+        saveLbData();
+    },
+};
+
+// Agent sistemini başlat
+agentMgr.initAgentSystem(agentServerContext);
+
+// ── Agent Admin API Route'ları ────────────────────────────────────────
+
+/** GET /api/admin/agents — Tüm agent'lar */
+app.get('/api/admin/agents', requireAdmin, async (req, res) => {
+    const agents = agentMgr.getAllAgents();
+    const result = [];
+    for (const a of agents) {
+        result.push({
+            id: a.id,
+            name: a.name,
+            walletAddress: a.walletAddress,
+            enabled: a.enabled,
+            maxBet: a.maxBet,
+            preferredTeam: a.preferredTeam,
+            status: a.status,
+            stats: a.stats,
+            lastGameAt: a.lastGameAt,
+            createdAt: a.createdAt,
+            registered: a.registered,
+        });
+    }
+    res.json({ ok: true, agents: result, globalConfig: agentMgr.getGlobalConfig() });
+});
+
+/** POST /api/admin/agents — Yeni agent oluştur */
+app.post('/api/admin/agents', requireAdmin, (req, res) => {
+    const { name, preferredTeam } = req.body ?? {};
+    const agent = agentMgr.createAgent(name, preferredTeam);
+    res.json({ ok: true, agent: { id: agent.id, name: agent.name, walletAddress: agent.walletAddress } });
+});
+
+/** PUT /api/admin/agents/:id — Agent güncelle */
+app.put('/api/admin/agents/:id', requireAdmin, (req, res) => {
+    const agent = agentMgr.updateAgent(req.params.id, req.body ?? {});
+    if (!agent) return res.status(404).json({ error: 'Agent bulunamadı' });
+    res.json({ ok: true });
+});
+
+/** DELETE /api/admin/agents/:id — Agent sil */
+app.delete('/api/admin/agents/:id', requireAdmin, (req, res) => {
+    const ok = agentMgr.deleteAgent(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Agent bulunamadı' });
+    res.json({ ok: true });
+});
+
+/** POST /api/admin/agents/:id/toggle — Agent aç/kapat */
+app.post('/api/admin/agents/:id/toggle', requireAdmin, (req, res) => {
+    const agent = agentMgr.toggleAgent(req.params.id);
+    if (!agent) return res.status(404).json({ error: 'Agent bulunamadı' });
+    // Aktif ediliyorsa döngüyü başlat
+    if (agent.enabled) {
+        agentMgr.startAgentLoop(agent.id, agentServerContext);
+    }
+    res.json({ ok: true, enabled: agent.enabled });
+});
+
+/** GET /api/admin/agents/:id/balance — Cüzdan bakiyesi */
+app.get('/api/admin/agents/:id/balance', requireAdmin, async (req, res) => {
+    const balance = await agentMgr.getAgentBalance(req.params.id);
+    if (balance === null) return res.status(404).json({ error: 'Agent bulunamadı veya bakiye okunamadı' });
+    res.json({ ok: true, balance });
+});
+
+/** POST /api/admin/agents/global-config — Global ayarlar */
+app.post('/api/admin/agents/global-config', requireAdmin, (req, res) => {
+    const config = agentMgr.updateGlobalConfig(req.body ?? {});
+    // Sistem aktif/pasif değiştiyse agent'ları güncelle
+    if (config.enabled) {
+        for (const agent of agentMgr.getAllAgents()) {
+            if (agent.enabled) agentMgr.startAgentLoop(agent.id, agentServerContext);
+        }
+    } else {
+        for (const agent of agentMgr.getAllAgents()) {
+            agentMgr.stopAgentLoop(agent.id);
+        }
+    }
+    res.json({ ok: true, config });
+});
+
+/** POST /api/admin/agents/chat — Agent ile sohbet */
+app.post('/api/admin/agents/chat', requireAdmin, async (req, res) => {
+    const { agentId, message } = req.body ?? {};
+    if (!agentId || !message) return res.status(400).json({ error: 'agentId ve message gerekli' });
+    const result = await agentMgr.sendChatMessage(agentId, message);
+    res.json({ ok: true, ...result });
+});
+
+/** GET /api/admin/agents/chat-history — Chat geçmişi */
+app.get('/api/admin/agents/chat-history', requireAdmin, (req, res) => {
+    const agentId = req.query.agentId || null;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    res.json({ ok: true, messages: agentMgr.getChatHistory(agentId, limit) });
+});
+
+// ── İzleme Endpoint'leri ──────────────────────────────────────────────
+
+/** GET /api/spectate/matches — Aktif izlenebilir maçlar */
+app.get('/api/spectate/matches', (req, res) => {
+    const matches = agentMgr.getAllSpectateMatches();
+    // İzleme listesinde agent olduğu belli olmaz — normal oyuncu gibi görünür
+    res.json({
+        ok: true,
+        matches: matches.map(m => ({
+            matchId: m.matchId,
+            player1: { nickname: m.agent1.name, team: m.agent1.team },
+            player2: { nickname: m.agent2.name, team: m.agent2.team },
+            startedAt: m.startedAt,
+            gameState: m.spectateState,
+        })),
+    });
+});
+
+/** GET /api/spectate/:matchId — Canlı maç durumu */
+app.get('/api/spectate/:matchId', (req, res) => {
+    const data = agentMgr.getMatchSpectateData(req.params.matchId);
+    if (!data) return res.status(404).json({ error: 'Maç bulunamadı veya bitti' });
+    res.json({ ok: true, state: data });
+});
+
+// ── Admin Panel HTML — /admin/agents ──────────────────────────────────
+
+app.get('/admin/agents', (req, res) => {
+    res.send(AGENT_ADMIN_HTML);
+});
+
+const AGENT_ADMIN_HTML = `<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A2 Agent Yönetim Paneli</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a12;color:#e0e0e0;font-family:'Inter','Segoe UI',sans-serif;min-height:100vh}
+.container{max-width:1200px;margin:0 auto;padding:20px}
+h1{font-size:24px;font-weight:700;color:#ffc94d;margin-bottom:8px;letter-spacing:1px}
+.subtitle{color:rgba(255,255,255,0.4);font-size:12px;margin-bottom:24px}
+.auth-section{text-align:center;padding:60px 20px}
+.auth-section h2{color:#ffc94d;margin-bottom:16px}
+.auth-section button{padding:14px 32px;background:linear-gradient(135deg,#ffc94d,#ff8800);border:none;border-radius:10px;color:#0a0a12;font-weight:700;font-size:14px;cursor:pointer;letter-spacing:1px}
+.auth-section button:hover{transform:scale(1.02)}
+.panel{display:none}
+.panel.active{display:block}
+.card{background:rgba(20,18,35,0.95);border:1px solid rgba(255,200,50,0.1);border-radius:12px;padding:20px;margin-bottom:16px}
+.card h3{color:#ffc94d;font-size:14px;margin-bottom:12px;text-transform:uppercase;letter-spacing:1.5px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:16px}
+.stat-box{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:14px;text-align:center}
+.stat-box .val{font-size:22px;font-weight:700;color:#fff}
+.stat-box .label{font-size:10px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+.agent-card{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.agent-info{flex:1;min-width:200px}
+.agent-name{font-weight:700;color:#fff;font-size:15px}
+.agent-wallet{font-family:monospace;font-size:11px;color:rgba(255,200,50,0.6);cursor:pointer}
+.agent-stats{font-size:11px;color:rgba(255,255,255,0.5);margin-top:6px}
+.agent-status{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.status-idle{background:rgba(100,100,100,0.2);color:#888}
+.status-in_game{background:rgba(50,200,100,0.15);color:#55ff99}
+.status-searching{background:rgba(255,200,50,0.15);color:#ffc94d}
+.agent-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{padding:8px 14px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);border-radius:6px;color:#e0e0e0;font-size:11px;cursor:pointer;transition:all 0.15s}
+.btn:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,200,50,0.3)}
+.btn-primary{background:rgba(255,200,50,0.1);border-color:rgba(255,200,50,0.3);color:#ffc94d}
+.btn-danger{background:rgba(255,50,50,0.1);border-color:rgba(255,50,50,0.3);color:#ff5555}
+.btn-success{background:rgba(50,200,100,0.1);border-color:rgba(50,200,100,0.3);color:#55ff99}
+input,select{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:8px 12px;color:#e0e0e0;font-size:12px;outline:none}
+input:focus,select:focus{border-color:rgba(255,200,50,0.4)}
+.form-row{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.form-row label{font-size:11px;color:rgba(255,255,255,0.5);min-width:100px}
+.toggle{position:relative;width:42px;height:22px;cursor:pointer}
+.toggle input{opacity:0;width:0;height:0}
+.toggle .slider{position:absolute;inset:0;background:rgba(255,255,255,0.1);border-radius:11px;transition:0.2s}
+.toggle .slider:before{content:'';position:absolute;width:16px;height:16px;left:3px;bottom:3px;background:#666;border-radius:50%;transition:0.2s}
+.toggle input:checked+.slider{background:rgba(50,200,100,0.3)}
+.toggle input:checked+.slider:before{transform:translateX(20px);background:#55ff99}
+.chat-container{border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;margin-top:12px}
+.chat-messages{height:300px;overflow-y:auto;padding:12px;background:rgba(0,0,0,0.3)}
+.chat-msg{margin-bottom:8px;font-size:12px;line-height:1.5}
+.chat-msg.user{color:#ffc94d}
+.chat-msg.assistant{color:rgba(255,255,255,0.7)}
+.chat-msg .sender{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px}
+.chat-input-row{display:flex;border-top:1px solid rgba(255,255,255,0.08)}
+.chat-input-row input{flex:1;border:none;border-radius:0;padding:12px}
+.chat-input-row button{padding:12px 20px;background:rgba(255,200,50,0.1);border:none;color:#ffc94d;cursor:pointer;font-weight:700}
+.tabs{display:flex;gap:4px;margin-bottom:20px}
+.tab{padding:10px 20px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px 8px 0 0;cursor:pointer;color:rgba(255,255,255,0.5);font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase}
+.tab.active{background:rgba(255,200,50,0.08);border-color:rgba(255,200,50,0.2);color:#ffc94d}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.spectate-match{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:14px;margin-bottom:10px}
+.spectate-match .teams{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.spectate-match .team-name{font-weight:700;font-size:13px}
+.spectate-match .team-fire{color:#ff6633}
+.spectate-match .team-ice{color:#66ccff}
+.hp-bar{height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin-top:4px}
+.hp-fill{height:100%;border-radius:3px;transition:width 0.3s}
+.hp-fire{background:linear-gradient(90deg,#ff4400,#ff8800)}
+.hp-ice{background:linear-gradient(90deg,#0088ff,#66ccff)}
+.toast{position:fixed;top:20px;right:20px;padding:12px 20px;background:rgba(50,200,100,0.9);color:#fff;border-radius:8px;font-size:12px;font-weight:600;z-index:9999;opacity:0;transition:opacity 0.3s;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🤖 A2 Agent Yönetim Paneli</h1>
+<p class="subtitle">AI Bot Oyuncu Sistemi — Sadece admin erişimi</p>
+
+<!-- Auth -->
+<div id="auth-section" class="auth-section">
+<h2>Admin Girişi</h2>
+<p style="color:rgba(255,255,255,0.4);margin-bottom:20px;font-size:13px">MetaMask ile admin cüzdanınızı bağlayın</p>
+<button onclick="connectWallet()">🔐 MetaMask ile Giriş</button>
+<p id="auth-error" style="color:#ff5555;margin-top:12px;font-size:12px"></p>
+</div>
+
+<!-- Panel -->
+<div id="main-panel" class="panel">
+<div class="tabs">
+<div class="tab active" onclick="switchTab('agents')">Agent'lar</div>
+<div class="tab" onclick="switchTab('config')">Ayarlar</div>
+<div class="tab" onclick="switchTab('chat')">Chat</div>
+<div class="tab" onclick="switchTab('spectate')">İzleme</div>
+</div>
+
+<!-- Agents Tab -->
+<div id="tab-agents" class="tab-content active">
+<div class="card">
+<h3>Agent Oluştur</h3>
+<div class="form-row">
+<input id="new-agent-name" placeholder="Agent adı" style="flex:1">
+<select id="new-agent-team">
+<option value="random">Rastgele Takım</option>
+<option value="fire">Ateş (Alaz)</option>
+<option value="ice">Buz (Ayaz)</option>
+</select>
+<button class="btn btn-primary" onclick="createAgent()">+ Oluştur</button>
+</div>
+</div>
+<div id="agents-list"></div>
+</div>
+
+<!-- Config Tab -->
+<div id="tab-config" class="tab-content">
+<div class="card">
+<h3>Global Ayarlar</h3>
+<div class="form-row">
+<label>Sistem Durumu</label>
+<label class="toggle"><input type="checkbox" id="cfg-enabled" onchange="saveConfig()"><span class="slider"></span></label>
+</div>
+<div class="form-row">
+<label>Eşzamanlı Oyun</label>
+<input type="number" id="cfg-maxGames" min="1" max="10" value="3" style="width:80px" onchange="saveConfig()">
+</div>
+<div class="form-row">
+<label>Varsayılan Max Bet</label>
+<input type="number" id="cfg-maxBet" min="0" max="100" step="0.1" value="1" style="width:100px" onchange="saveConfig()">
+</div>
+<div class="form-row">
+<label>Maç Aralığı (sn)</label>
+<input type="number" id="cfg-interval" min="10" max="600" value="60" style="width:100px" onchange="saveConfig()">
+</div>
+<div class="form-row">
+<label>OpenRouter API Key</label>
+<input type="password" id="cfg-apiKey" placeholder="sk-or-..." style="flex:1" onchange="saveConfig()">
+</div>
+</div>
+</div>
+
+<!-- Chat Tab -->
+<div id="tab-chat" class="tab-content">
+<div class="card">
+<h3>Agent ile Sohbet</h3>
+<div class="form-row">
+<label>Agent Seç</label>
+<select id="chat-agent" style="flex:1"></select>
+</div>
+<div class="chat-container">
+<div id="chat-messages" class="chat-messages"></div>
+<div class="chat-input-row">
+<input id="chat-input" placeholder="Mesajını yaz..." onkeydown="if(event.key==='Enter')sendChat()">
+<button onclick="sendChat()">Gönder</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Spectate Tab -->
+<div id="tab-spectate" class="tab-content">
+<div class="card">
+<h3>Canlı Maçlar</h3>
+<div id="spectate-list"><p style="color:rgba(255,255,255,0.4);font-size:12px">Aktif maç yok</p></div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+let adminToken = null;
+const API = '';
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+async function connectWallet() {
+    try {
+        if (!window.ethereum) { document.getElementById('auth-error').textContent = 'MetaMask bulunamadı'; return; }
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const address = accounts[0];
+        const challenge = 'A2 Admin: ' + Date.now();
+        const signature = await window.ethereum.request({ method: 'personal_sign', params: [challenge, address] });
+        const res = await fetch(API + '/api/admin/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address, signature, challenge }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+            adminToken = data.token;
+            document.getElementById('auth-section').style.display = 'none';
+            document.getElementById('main-panel').classList.add('active');
+            loadAll();
+        } else {
+            document.getElementById('auth-error').textContent = data.error || 'Giriş başarısız';
+        }
+    } catch (e) {
+        document.getElementById('auth-error').textContent = e.message;
+    }
+}
+
+function headers() { return { 'Content-Type': 'application/json', 'x-admin-token': adminToken }; }
+
+function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+    if (name === 'spectate') loadSpectate();
+}
+
+async function loadAll() {
+    await loadAgents();
+    await loadConfig();
+    loadChatAgents();
+}
+
+async function loadAgents() {
+    const res = await fetch(API + '/api/admin/agents', { headers: headers() });
+    const data = await res.json();
+    if (!data.ok) return;
+    const list = document.getElementById('agents-list');
+    if (data.agents.length === 0) {
+        list.innerHTML = '<p style="color:rgba(255,255,255,0.4);font-size:12px;padding:20px">Henüz agent yok. Yukarıdan oluştur.</p>';
+        return;
+    }
+    list.innerHTML = data.agents.map(a => {
+        const statusClass = 'status-' + a.status;
+        return '<div class="agent-card">' +
+            '<div class="agent-info">' +
+                '<div class="agent-name">' + esc(a.name) + ' <span class="agent-status ' + statusClass + '">' + a.status + '</span></div>' +
+                '<div class="agent-wallet" onclick="navigator.clipboard.writeText(\\'' + a.walletAddress + '\\');showToast(\\'Kopyalandı\\')" title="Kopyalamak için tıkla">' + a.walletAddress + '</div>' +
+                '<div class="agent-stats">🎮 ' + a.stats.gamesPlayed + ' maç · ✅ ' + a.stats.wins + 'W · ❌ ' + a.stats.losses + 'L · 🎯 ' + a.preferredTeam + ' · 💰 Max ' + a.maxBet + ' AVAX</div>' +
+            '</div>' +
+            '<div class="agent-actions">' +
+                '<button class="btn ' + (a.enabled ? 'btn-danger' : 'btn-success') + '" onclick="toggleAgent(\\'' + a.id + '\\')">' + (a.enabled ? '⏸ Durdur' : '▶ Başlat') + '</button>' +
+                '<button class="btn" onclick="checkBalance(\\'' + a.id + '\\')">💰 Bakiye</button>' +
+                '<button class="btn btn-danger" onclick="deleteAgent(\\'' + a.id + '\\')">🗑</button>' +
+            '</div>' +
+        '</div>';
+    }).join('');
+}
+
+async function createAgent() {
+    const name = document.getElementById('new-agent-name').value.trim();
+    const team = document.getElementById('new-agent-team').value;
+    if (!name) { showToast('İsim gir'); return; }
+    const res = await fetch(API + '/api/admin/agents', { method: 'POST', headers: headers(), body: JSON.stringify({ name, preferredTeam: team }) });
+    const data = await res.json();
+    if (data.ok) { showToast('Agent oluşturuldu: ' + data.agent.name); document.getElementById('new-agent-name').value = ''; loadAll(); }
+    else showToast(data.error);
+}
+
+async function toggleAgent(id) {
+    await fetch(API + '/api/admin/agents/' + id + '/toggle', { method: 'POST', headers: headers() });
+    loadAgents();
+}
+
+async function deleteAgent(id) {
+    if (!confirm('Bu agent silinecek. Emin misin?')) return;
+    await fetch(API + '/api/admin/agents/' + id, { method: 'DELETE', headers: headers() });
+    loadAgents();
+    showToast('Agent silindi');
+}
+
+async function checkBalance(id) {
+    const res = await fetch(API + '/api/admin/agents/' + id + '/balance', { headers: headers() });
+    const data = await res.json();
+    if (data.ok) showToast('Bakiye: ' + data.balance.toFixed(4) + ' AVAX');
+    else showToast(data.error);
+}
+
+async function loadConfig() {
+    const res = await fetch(API + '/api/admin/agents', { headers: headers() });
+    const data = await res.json();
+    if (!data.ok) return;
+    const c = data.globalConfig;
+    document.getElementById('cfg-enabled').checked = c.enabled;
+    document.getElementById('cfg-maxGames').value = c.maxConcurrentGames;
+    document.getElementById('cfg-maxBet').value = c.defaultMaxBet;
+    document.getElementById('cfg-interval').value = (c.matchInterval || 60000) / 1000;
+    document.getElementById('cfg-apiKey').value = c.openRouterApiKey || '';
+}
+
+async function saveConfig() {
+    const cfg = {
+        enabled: document.getElementById('cfg-enabled').checked,
+        maxConcurrentGames: parseInt(document.getElementById('cfg-maxGames').value) || 3,
+        defaultMaxBet: parseFloat(document.getElementById('cfg-maxBet').value) || 1,
+        matchInterval: (parseInt(document.getElementById('cfg-interval').value) || 60) * 1000,
+        openRouterApiKey: document.getElementById('cfg-apiKey').value.trim(),
+    };
+    await fetch(API + '/api/admin/agents/global-config', { method: 'POST', headers: headers(), body: JSON.stringify(cfg) });
+    showToast('Ayarlar kaydedildi');
+}
+
+function loadChatAgents() {
+    const sel = document.getElementById('chat-agent');
+    const res = fetch(API + '/api/admin/agents', { headers: headers() })
+        .then(r => r.json()).then(data => {
+            if (!data.ok) return;
+            sel.innerHTML = data.agents.map(a => '<option value="' + a.id + '">' + esc(a.name) + '</option>').join('');
+        });
+}
+
+async function sendChat() {
+    const agentId = document.getElementById('chat-agent').value;
+    const input = document.getElementById('chat-input');
+    const msg = input.value.trim();
+    if (!msg || !agentId) return;
+    input.value = '';
+    appendChatMsg('Sen', msg, 'user');
+    const res = await fetch(API + '/api/admin/agents/chat', { method: 'POST', headers: headers(), body: JSON.stringify({ agentId, message: msg }) });
+    const data = await res.json();
+    const agentName = document.getElementById('chat-agent').selectedOptions[0]?.textContent || 'Agent';
+    appendChatMsg(agentName, data.reply || data.error, data.error ? 'user' : 'assistant');
+}
+
+function appendChatMsg(sender, text, role) {
+    const div = document.getElementById('chat-messages');
+    div.innerHTML += '<div class="chat-msg ' + role + '"><div class="sender">' + esc(sender) + '</div>' + esc(text) + '</div>';
+    div.scrollTop = div.scrollHeight;
+}
+
+async function loadSpectate() {
+    const res = await fetch(API + '/api/spectate/matches');
+    const data = await res.json();
+    const list = document.getElementById('spectate-list');
+    if (!data.ok || data.matches.length === 0) {
+        list.innerHTML = '<p style="color:rgba(255,255,255,0.4);font-size:12px">Aktif maç yok</p>';
+        return;
+    }
+    list.innerHTML = data.matches.map(m => {
+        const gs = m.gameState;
+        if (!gs) return '<div class="spectate-match"><p>Yükleniyor...</p></div>';
+        const fireHp = gs.bases?.fire?.hp ?? 2000;
+        const iceHp = gs.bases?.ice?.hp ?? 2000;
+        return '<div class="spectate-match">' +
+            '<div class="teams"><span class="team-name team-fire">🔥 ' + esc(m.player1.nickname) + '</span><span style="color:rgba(255,255,255,0.3)">VS</span><span class="team-name team-ice">❄️ ' + esc(m.player2.nickname) + '</span></div>' +
+            '<div class="hp-bar"><div class="hp-fill hp-fire" style="width:' + ((fireHp/2000)*100) + '%"></div></div>' +
+            '<div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,0.4);margin-top:2px"><span>' + fireHp + ' HP</span><span>' + iceHp + ' HP</span></div>' +
+            '<div class="hp-bar" style="margin-top:4px"><div class="hp-fill hp-ice" style="width:' + ((iceHp/2000)*100) + '%"></div></div>' +
+            '<div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:6px">⏱ ' + (gs.elapsedSeconds || 0) + 's</div>' +
+        '</div>';
+    }).join('');
+}
+
+// 10 saniyede bir izleme güncelle
+setInterval(() => {
+    if (document.getElementById('tab-spectate').classList.contains('active')) loadSpectate();
+}, 10000);
+
+// 15 saniyede bir agent listesini güncelle
+setInterval(() => {
+    if (document.getElementById('tab-agents').classList.contains('active') && adminToken) loadAgents();
+}, 15000);
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+</script>
+</body>
+</html>`;
+
+
 const httpServer = http.createServer(app);
 
 const peerServer = ExpressPeerServer(httpServer, {

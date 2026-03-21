@@ -8,6 +8,7 @@ import { t } from '../i18n';
 import { mpService } from '../multiplayer/MultiplayerService';
 import { betService, BET_FEE_PERCENT, MIN_BET, MAX_BET } from '../chain/BetService';
 import { leaderboardService } from '../chain/LeaderboardService';
+import { escapeHtml } from '../utils/escapeHtml';
 import { profileService } from '../chain/ProfileService';
 import { showWalletModal } from './WalletUI';
 import { PLAYER_CARDS, AI_CARDS, type UnitType } from '../ecs/Unit';
@@ -212,6 +213,7 @@ function initChatPanel(): void {
     const tabRoom = document.getElementById('chat-tab-room')!;
     const msgs = document.getElementById('chat-msgs')!;
     const input = document.getElementById('chat-input') as HTMLInputElement;
+    input.maxLength = 200;
     const sendBtn = document.getElementById('chat-send-btn')!;
 
     tabLobby.onclick = () => {
@@ -234,7 +236,7 @@ function initChatPanel(): void {
     };
 
     const sendMsg = async () => {
-        const text = input.value.trim();
+        const text = input.value.trim().slice(0, 200);
         if (!text) return;
         input.value = '';
         const nick = getChatNick();
@@ -284,20 +286,25 @@ async function fetchPublicLobbies(): Promise<void> {
             listEl.innerHTML = `<div class="lb-empty">${t('betNoLobbies')}</div>`;
             return;
         }
-        listEl.innerHTML = data.lobbies.map((l: any, i: number) => `
-            <tr class="ko-row" data-code="${l.code}">
+        listEl.innerHTML = data.lobbies.map((l: any, i: number) => {
+            const safeName = escapeHtml(l.lobbyName || l.nickname || 'Adsiz Oda');
+            const safeCode = escapeHtml(String(l.code));
+            const safeTeam = l.team === 'fire' ? 'fire' : 'ice';
+            const canJoin = l.joinable !== false;
+            return `
+            <tr class="ko-row" data-code="${safeCode}">
                 <td>${String(i + 1).padStart(2, '0')}</td>
-                <td>${l.lobbyName ? l.lobbyName : (l.nickname || 'Adsız Oda')}</td>
-                <td><span class="${l.isFake ? 'ko-status-closed' : 'ko-status-open'}">${l.isFake ? t('lobbyStatusOpen') /* Fake lobi ama dolu göstereceğiz */ : t('lobbyStatusOpen')}</span></td>
-                <td>${l.isFake ? (l.playerCount || '2/2') : '1/2'}</td>
-                <td>${l.betAmount > 0 ? l.betAmount + ' A' : '—'}</td>
-                <td class="${l.team === 'fire' ? 'ko-team-fire' : 'ko-team-ice'}">${l.team === 'fire' ? 'ALAZ' : 'AYAZ'}</td>
-                <td><button class="ko-row-join lb-item-join ${l.isFake ? 'lb-btn-disabled' : ''}" data-code="${l.code}" data-team="${l.team}" data-fake="${l.isFake ? 'true' : 'false'}">${l.isFake ? 'DOLU' : 'KATIL'}</button></td>
-            </tr>
-        `).join('');
+                <td>${safeName}</td>
+                <td><span class="${canJoin ? 'ko-status-open' : 'ko-status-closed'}">${t('lobbyStatusOpen')}</span></td>
+                <td>${escapeHtml(String(l.playerCount || '1/2'))}</td>
+                <td>${l.betAmount > 0 ? parseFloat(l.betAmount).toFixed(2) + ' A' : '\u2014'}</td>
+                <td class="${safeTeam === 'fire' ? 'ko-team-fire' : 'ko-team-ice'}">${safeTeam === 'fire' ? 'ALAZ' : 'AYAZ'}</td>
+                <td><button class="ko-row-join lb-item-join ${!canJoin ? 'lb-btn-disabled' : ''}" data-code="${safeCode}" data-team="${safeTeam}" data-joinable="${canJoin ? 'true' : 'false'}">${!canJoin ? 'DOLU' : 'KATIL'}</button></td>
+            </tr>`;
+        }).join('');
         listEl.querySelectorAll('.lb-item-join').forEach((btn: Element) => {
             (btn as HTMLButtonElement).onclick = () => {
-                if (btn.getAttribute('data-fake') === 'true') {
+                if (btn.getAttribute('data-joinable') === 'false') {
                     showLobbyError(t('lobbyRoomFull'));
                     return;
                 }

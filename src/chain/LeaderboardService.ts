@@ -117,20 +117,41 @@ class LeaderboardService {
 
     private async _serverResult(address: string, result: string, betWon: number, betLost: number, mode: string = 'local') {
         try {
+            let signature: string | undefined;
+            // Local modda imza zorunlu — sahte skor engelle
+            if (mode === 'local') {
+                const provider = (window as any).__activeProvider;
+                if (!provider) return;
+                const msg = `A2 Result: ${address.toLowerCase()}`;
+                signature = await provider.request({
+                    method: 'personal_sign',
+                    params: [msg, address],
+                });
+            }
             await fetch('/api/leaderboard/result', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address, result, betWon, betLost, mode }),
+                body: JSON.stringify({ address, result, betWon, betLost, mode, ...(signature ? { signature } : {}) }),
             });
         } catch { /* ignore */ }
     }
 
     private async _serverUpsert(address: string, username: string, avatarURI?: string) {
         try {
+            // Sadece kendi adresimiz icin imza iste — baskalarinin profilini sync ederken popup acma
+            const connectedAddr = (window as any).__walletAddress;
+            if (!connectedAddr || connectedAddr.toLowerCase() !== address.toLowerCase()) return;
+            const provider = (window as any).__activeProvider;
+            if (!provider) return;
+            const msg = `A2 Profile: ${address.toLowerCase()}`;
+            const signature = await provider.request({
+                method: 'personal_sign',
+                params: [msg, address],
+            });
             await fetch('/api/leaderboard/upsert', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address, username, ...(avatarURI ? { avatarURI } : {}) }),
+                body: JSON.stringify({ address, username, signature, ...(avatarURI ? { avatarURI } : {}) }),
             });
         } catch { /* ignore */ }
     }

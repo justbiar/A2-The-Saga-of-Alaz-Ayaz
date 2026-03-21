@@ -20,7 +20,7 @@ import { GameRandom } from '../utils/Random';
 
 export type MPRole = 'host' | 'guest' | null;
 export type MPMessage =
-    | { type: 'ready'; team: 'fire' | 'ice' }
+    | { type: 'ready'; team: 'fire' | 'ice'; wallet?: string }
     | { type: 'loaded' }
     | { type: 'start'; seed?: number }
     | { type: 'place'; cardId: string; lane: 'left' | 'mid' | 'right'; unitId?: string }
@@ -293,7 +293,7 @@ export class MultiplayerService {
             this.setStatus('connected');
 
             // Kendi takımını karşıya bildir
-            this.send({ type: 'ready', team: this.myTeam });
+            this.send({ type: 'ready', team: this.myTeam, wallet: (window as any).__walletAddress || '' });
 
             // Ping başlat
             this.startPing();
@@ -310,9 +310,63 @@ export class MultiplayerService {
                 console.warn('[MP] Geçersiz mesaj:', data?.type);
                 return;
             }
+
+            // Payload dogrulama — tip ve uzunluk kontrolleri
+            if (data.type === 'chat') {
+                if (typeof data.text !== 'string' || typeof data.nickname !== 'string') return;
+                data.text = data.text.slice(0, 200);
+                data.nickname = data.nickname.slice(0, 20);
+            }
+            if (data.type === 'ready') {
+                if (data.team !== 'fire' && data.team !== 'ice') return;
+                if (data.wallet && typeof data.wallet !== 'string') return;
+                if (data.wallet) data.wallet = data.wallet.slice(0, 42);
+            }
+            if (data.type === 'place') {
+                if (typeof data.cardId !== 'string' || !['left', 'mid', 'right'].includes(data.lane)) return;
+                data.cardId = data.cardId.slice(0, 30);
+                if (data.unitId) data.unitId = String(data.unitId).slice(0, 60);
+            }
+            if (data.type === 'prompt') {
+                if (typeof data.promptId !== 'string') return;
+                data.promptId = data.promptId.slice(0, 30);
+            }
+            if (data.type === 'sync') {
+                if (typeof data.mana !== 'number' || typeof data.avx !== 'number' || typeof data.turn !== 'number') return;
+            }
+            if (data.type === 'ping' || data.type === 'pong') {
+                if (typeof data.ts !== 'number') return;
+            }
+            if (data.type === 'bet_offer') {
+                if (typeof data.amountAvax !== 'number' || typeof data.matchId !== 'string' || typeof data.hostAddress !== 'string') return;
+                data.matchId = data.matchId.slice(0, 80);
+                data.hostAddress = data.hostAddress.slice(0, 42);
+            }
+            if (data.type === 'bet_accept') {
+                if (typeof data.txHash !== 'string' || typeof data.guestAddress !== 'string') return;
+                data.txHash = data.txHash.replace(/[^a-fA-F0-9x]/g, '').slice(0, 66);
+                data.guestAddress = data.guestAddress.slice(0, 42);
+            }
+            if (data.type === 'game_over') {
+                if (data.winner !== 'fire' && data.winner !== 'ice') return;
+                if (typeof data.reason !== 'string') return;
+                data.reason = data.reason.slice(0, 100);
+            }
+            if (data.type === 'base_sync') {
+                if (typeof data.fireHp !== 'number' || typeof data.iceHp !== 'number') return;
+            }
+            if (data.type === 'bet_claim') {
+                if (typeof data.winnerAddress !== 'string') return;
+                data.winnerAddress = data.winnerAddress.slice(0, 42);
+            }
+            if (data.type === 'start' && data.seed !== undefined) {
+                if (typeof data.seed !== 'number') return;
+            }
+
             const msg = data as MPMessage;
             if (msg.type === 'ready') {
                 this.opponentTeam = msg.team;
+                if (msg.wallet) this.opponentWallet = msg.wallet;
             } else if (msg.type === 'loaded') {
                 this._opponentLoaded = true;
             } else if (msg.type === 'start') {
@@ -446,9 +500,10 @@ export class MultiplayerService {
         this.stopPing();
         if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
         if (this.dcGraceTimer)   { clearTimeout(this.dcGraceTimer);   this.dcGraceTimer = null; }
-        // Backend'den lobiyi sil
+        // Backend'den lobiyi sil (wallet ile sahiplik kontrolu)
         if (this.lobbyCode) {
-            fetch(`/api/lobby/${this.lobbyCode}`, { method: 'DELETE' }).catch(() => {});
+            const w = (window as any).__walletAddress || '';
+            fetch(`/api/lobby/${this.lobbyCode}?wallet=${encodeURIComponent(w)}`, { method: 'DELETE' }).catch(() => {});
         }
         // onMessage/onStatus'u temizle — close event'in gecikmeli callback'i triggerWin yapmasin
         this.onMessage = null;
@@ -464,17 +519,19 @@ export class MultiplayerService {
         this.lobbyAmount = 0;
         this.lobbyIsPublic = true;
         this.opponentTeam = null;
+        this.opponentWallet = null;
         this._opponentLoaded = false;
         this._startReceived = false;
         this.status = 'idle';  // setStatus yerine direkt set (callback null'landı)
     }
 
-    /** 6 haneli büyük harf kod */
+    /** 6 haneli büyük harf kod (crypto-safe) */
     private generateCode(): string {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        const arr = crypto.getRandomValues(new Uint8Array(6));
         let code = '';
         for (let i = 0; i < 6; i++) {
-            code += chars[Math.floor(Math.random() * chars.length)];
+            code += chars[arr[i] % chars.length];
         }
         return code;
     }
